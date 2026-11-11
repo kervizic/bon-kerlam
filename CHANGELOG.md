@@ -4,6 +4,56 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.4] — 2026-11-11
+
+### Charte finale (validée Manu)
+- Palette **définitive** : orange **#FD8008**, gris de marque **#808080**,
+  gris texte **#595959** (dérivé AA ~7:1 pour le texte secondaire sur blanc),
+  anthracite #2B2B2B, orange foncé #D46B06 (hover). Remplace #4C4C4C/#5E5E5E.
+  `#808080` **jamais** utilisé pour du texte courant (contraste insuffisant),
+  réservé logo/filets/accents non textuels. Mode sombre inchangé (suit le
+  réglage du téléphone). Appliquée partout : front, **PDF** (worker/lv.html),
+  **e-mail OTP**, `theme_color` du manifest.
+- **Logo** : « KER » exactement **#808080**, « LAM » exactement **#FD8008**,
+  identiques en clair et en sombre. Police **Sarpanch 900 (Black)** auto-hébergée
+  (woff2 + OFL), remplace la graisse 800.
+
+### Icônes (validées Manu)
+- Jeu d'icônes définitif : `favicon.svg` (+ png 16/32), `apple-touch-icon.png`,
+  `icon-192/512.png` et `icon-maskable-512.png`. `<link rel="icon"
+  type="image/svg+xml">` + png + apple-touch ; manifest 192/512 « any » + 512
+  « maskable ». **Fin de la génération au build** (Dockerfile + CI nettoyés ;
+  `scripts/gen-icons.py` et `build-assets/Sarpanch.ttf` supprimés). Cache du
+  service worker bumpé. Licence **ISC** (Lucide `clipboard-list`) + **OFL**
+  (Sarpanch) dans `front/LICENSES-THIRD-PARTY.txt`.
+
+### Installation de la PWA
+- Bouton **« Installer l'appli »** sur l'écran de connexion (pied de page) et
+  dans l'app (Réglages) ; **masqué si déjà installée** (`display-mode:
+  standalone` / `navigator.standalone`).
+  - Android/Chrome/Edge : capture de `beforeinstallprompt` → invite native ;
+    sinon instructions manuelles (menu ⋮).
+  - iOS/iPadOS : fiche d'aide FR (Safari → Partager → Sur l'écran d'accueil →
+    Ajouter) avec pictos **SVG inline** ; message dédié si navigateur intégré
+    (Gmail, Chrome iOS, Facebook, Instagram…) → « ouvrir dans Safari ».
+- Page autonome **`/installer/`** (iOS + Android + ordinateur), liée en pied de
+  page.
+
+### Pages légales
+- **`/confidentialite/`** et **`/conditions/`** intégrées au front (mêmes
+  adresses), liens en pied de page.
+
+### Connexion
+- Google **OU** code e-mail à 6 chiffres (liste blanche) : documenté de bout en
+  bout dans `deploy/README.md` (client OAuth générique « KERLAM web », redirect
+  `https://api.kerlam.fr/auth/v1/callback`, secrets Bitwarden, SMTP Documenso,
+  expéditeur `bon@kerlam.fr`).
+
+### Correctifs / technique
+- `worker` : alias **`/worker/health`** (= `/worker/healthz`).
+- CSP stricte respectée : suppression des derniers `style=`/`onclick=` inline
+  (Planning, sélecteur de site, documents chauffeur) → classes CSS + listeners.
+
 ## [0.1.0-beta.3] — 2026-11-11
 
 ### Charte & logo

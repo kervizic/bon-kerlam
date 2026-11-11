@@ -640,3 +640,79 @@ input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
 body.has-bureau .side-nav { display: block; }
 /* Rôle chauffeur absent : pas de barre mobile chauffeur (rien à y faire). */
 body:not(.has-chauffeur) .bottom-bar { display: none; }
+
+/* ======================================== Pied de page auth + liens utiles == */
+.auth-wrap {
+  display: flex; flex-direction: column; align-items: center;
+  width: 100%; max-width: 380px;
+}
+.auth-wrap .auth-card { max-width: none; }
+.auth-footer {
+  width: 100%;
+  margin-top: 20px;
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+}
+.install-cta { width: 100%; }
+.footer-links {
+  display: flex; flex-wrap: wrap; gap: 6px 16px; justify-content: center;
+  margin: 0; font-size: 13px;
+}
+.footer-links a { color: var(--text-muted); text-decoration: none; }
+.footer-links a:hover, .footer-links a:focus-visible { color: var(--text); text-decoration: underline; }
+.reglages-links { margin-top: 20px; }
+
+/* ====================================== Fiche d'aide à l'installation (PWA) == */
+.install-help-block { font-size: 15px; }
+.install-help-block > p { margin-bottom: 12px; }
+.install-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.install-step { display: flex; gap: 12px; align-items: flex-start; }
+.install-step-icon {
+  flex-shrink: 0; width: 40px; height: 40px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border); border-radius: 10px;
+  background: var(--bg); color: var(--c-orange);
+}
+.install-step-icon svg { width: 22px; height: 22px; }
+.install-step-num { color: var(--c-orange-dark); margin-right: 2px; }
+.install-step-body { flex: 1; min-width: 0; }
+.install-step-body strong { display: block; }
+.install-step-body span { color: var(--text-muted); font-size: 14px; }
+
+/* ================================= Pages autonomes (installer, mentions légales) */
+.doc-page { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
+.doc-back {
+  display: inline-flex; align-items: center; gap: 6px; margin-bottom: 16px;
+  color: var(--text-muted); text-decoration: none; font-size: 14px;
+}
+.doc-back:hover, .doc-back:focus-visible { color: var(--text); text-decoration: underline; }
+.doc-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 24px; margin-bottom: 20px;
+}
+.doc-card h1 { font-size: 26px; line-height: 1.25; margin-bottom: 4px; }
+.doc-card h2 { font-size: 19px; margin: 24px 0 8px; }
+.doc-card p, .doc-card li { margin: 0 0 10px; }
+.doc-card ul { padding-left: 20px; margin: 0 0 10px; }
+.doc-date { color: var(--text-muted); margin-bottom: 20px; }
+.doc-card table { border-collapse: collapse; width: 100%; font-size: 15px; margin: 6px 0 10px; }
+.doc-card th, .doc-card td { text-align: left; vertical-align: top; padding: 8px; border-top: 1px solid var(--border); }
+.doc-card th { font-weight: 600; }
+.doc-platforms { display: flex; flex-direction: column; gap: 16px; }
+.doc-platform-title { display: flex; align-items: center; gap: 10px; }
+.doc-platform-title .install-step-icon { width: 36px; height: 36px; }
+@media (min-width: 900px) {
+  .doc-card table { table-layout: auto; }
+}
+@media (max-width: 560px) {
+  .doc-card table, .doc-card thead, .doc-card tbody, .doc-card tr, .doc-card th, .doc-card td { display: block; }
+  .doc-card thead { display: none; }
+  .doc-card td { border-top: none; padding: 2px 0; }
+  .doc-card tr { border-top: 1px solid var(--border); padding: 8px 0; }
+  .doc-card td:first-child { font-weight: 600; }
+}
+
+/* Utilitaires remplaçant d'anciens styles inline (CSP : pas de style= inline) */
+.planning-check { margin: 0; }
+.sheet-section-title.is-spaced { margin-top: 18px; }
+.btn.is-spaced { margin-top: 14px; }

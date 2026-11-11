@@ -1,0 +1,43 @@
+LICENCES TIERCES — bon.kerlam.fr
+================================
+
+Cette application réutilise les ressources tierces suivantes. Leurs auteurs et
+licences respectives sont reproduits ci-dessous.
+
+
+1. Lucide (icônes)
+------------------
+Icône « clipboard-list » (et dérivés) utilisée pour l'icône de l'application
+et certains pictogrammes d'interface.
+
+Projet : https://lucide.dev
+Licence : ISC
+Copyright (c) Lucide Contributors
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+PERFORMANCE OF THIS SOFTWARE.
+
+
+2. Sarpanch (police du logo « KERLAM »)
+---------------------------------------
+Police auto-hébergée (assets/fonts/sarpanch-900.woff2), réservée au logo.
+
+Projet : Indian Type Foundry
+Licence : SIL Open Font License, Version 1.1
+Copyright (c) 2014 Indian Type Foundry (info@indiantypefoundry.com)
+
+Texte complet de la licence : assets/fonts/OFL.txt
+FAQ : http://scripts.sil.org/OFL
+
+« This Font Software is licensed under the SIL Open Font License, Version 1.1.
+The OFL allows the licensed fonts to be used, studied, modified and
+redistributed freely as long as they are not sold by themselves. »

@@ -33,6 +33,7 @@
 
   <!-- ===================================================== Écran de connexion -->
   <section id="screen-login" class="screen screen-auth" hidden>
+    <div class="auth-wrap">
     <div class="auth-card">
       <div class="logo logo-lg" aria-hidden="true"><span class="logo-ker">KER</span><span class="logo-lam">LAM</span></div>
       <p class="auth-tagline">Lettres de voiture</p>
@@ -78,6 +79,21 @@
       </form>
 
       <p id="auth-error" class="auth-error" role="alert" hidden></p>
+    </div>
+
+    <footer class="auth-footer">
+      <div class="js-install-zone install-cta">
+        <button type="button" class="btn btn-secondary btn-block js-install-btn">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>
+          Installer l'appli
+        </button>
+      </div>
+      <nav class="footer-links" aria-label="Liens utiles">
+        <a href="/installer/">Installer l'appli</a>
+        <a href="/confidentialite/">Confidentialité</a>
+        <a href="/conditions/">Conditions</a>
+      </nav>
+    </footer>
     </div>
   </section>
 
@@ -275,7 +291,23 @@
             </div>
           </fieldset>
 
+          <fieldset class="field-group js-install-zone">
+            <legend>Installer l'application</legend>
+            <p class="muted">Ajoutez bon.kerlam.fr à votre écran d'accueil pour un accès rapide, en plein écran.</p>
+            <button type="button" class="btn btn-secondary btn-block js-install-btn">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>
+              Installer l'appli
+            </button>
+          </fieldset>
+
           <button type="button" id="btn-logout" class="btn btn-secondary btn-block">Se déconnecter</button>
+
+          <nav class="footer-links reglages-links" aria-label="Liens utiles">
+            <a href="/installer/">Guide d'installation</a>
+            <a href="/confidentialite/">Confidentialité</a>
+            <a href="/conditions/">Conditions</a>
+            <a href="/LICENSES-THIRD-PARTY.txt">Licences</a>
+          </nav>
         </section>
 
         <!-- ------------------------------------------------------------------- LV -->
@@ -393,7 +425,73 @@
       </div>
       <input type="search" id="site-picker-search" class="filter-input" placeholder="Rechercher un site…">
       <div id="site-picker-list" class="sheet-list"></div>
-      <button type="button" class="btn btn-secondary btn-block" id="btn-site-picker-new" style="margin-top:14px;">+ Nouveau site</button>
+      <button type="button" class="btn btn-secondary btn-block is-spaced" id="btn-site-picker-new">+ Nouveau site</button>
+    </div>
+  </div>
+
+  <!-- ============================================ Feuille « aide à l'installation » -->
+  <div id="install-help-sheet" class="sheet-overlay" hidden>
+    <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="install-help-title">
+      <div class="sheet-header">
+        <h2 id="install-help-title">Installer l'application</h2>
+        <button type="button" class="icon-btn" id="btn-install-help-close" aria-label="Fermer">✕</button>
+      </div>
+
+      <!-- iOS / iPadOS depuis Safari -->
+      <div id="install-help-ios" class="install-help-block" hidden>
+        <p>Sur iPhone ou iPad, depuis <strong>Safari</strong> :</p>
+        <ol class="install-steps">
+          <li class="install-step">
+            <span class="install-step-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.7 2.6 15.3 0 18M12 3c-2.6 2.7-2.6 15.3 0 18"/></svg>
+            </span>
+            <span class="install-step-body"><strong><span class="install-step-num">1.</span> Ouvrir bon.kerlam.fr dans Safari</strong><span>Dans la barre d'adresse de Safari.</span></span>
+          </li>
+          <li class="install-step">
+            <span class="install-step-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M6 11H5a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7a1 1 0 0 0-1-1h-1"/></svg>
+            </span>
+            <span class="install-step-body"><strong><span class="install-step-num">2.</span> Toucher le bouton Partager</strong><span>Le carré avec une flèche vers le haut, en bas (ou en haut) de l'écran.</span></span>
+          </li>
+          <li class="install-step">
+            <span class="install-step-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M12 8v8M8 12h8"/></svg>
+            </span>
+            <span class="install-step-body"><strong><span class="install-step-num">3.</span> Choisir « Sur l'écran d'accueil »</strong><span>Faites défiler la liste si besoin.</span></span>
+          </li>
+          <li class="install-step">
+            <span class="install-step-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+            </span>
+            <span class="install-step-body"><strong><span class="install-step-num">4.</span> Toucher « Ajouter »</strong><span>L'icône KERLAM apparaît sur votre écran d'accueil.</span></span>
+          </li>
+        </ol>
+      </div>
+
+      <!-- iOS mais navigateur intégré (pas Safari) -->
+      <div id="install-help-ios-inapp" class="install-help-block" hidden>
+        <p><strong>Ouvrez d'abord bon.kerlam.fr dans Safari.</strong></p>
+        <p class="muted">L'ajout à l'écran d'accueil n'est possible que depuis Safari, pas depuis ce navigateur intégré (Gmail, Chrome, Facebook, Instagram…). Copiez l'adresse <strong>bon.kerlam.fr</strong>, ouvrez Safari, puis collez-la.</p>
+      </div>
+
+      <!-- Android / autres : instructions manuelles -->
+      <div id="install-help-android" class="install-help-block" hidden>
+        <p>Pour installer l'application :</p>
+        <ol class="install-steps">
+          <li class="install-step">
+            <span class="install-step-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
+            </span>
+            <span class="install-step-body"><strong><span class="install-step-num">1.</span> Ouvrir le menu du navigateur</strong><span>L'icône ⋮ (Chrome / Edge), en haut à droite.</span></span>
+          </li>
+          <li class="install-step">
+            <span class="install-step-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>
+            </span>
+            <span class="install-step-body"><strong><span class="install-step-num">2.</span> Choisir « Installer l'application »</strong><span>Ou « Ajouter à l'écran d'accueil ».</span></span>
+          </li>
+        </ol>
+      </div>
     </div>
   </div>
 

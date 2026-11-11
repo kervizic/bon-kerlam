@@ -118,6 +118,8 @@ import {
   todayIso,
 } from "./data.js";
 
+import { initInstall } from "./install.js";
+
 /* ============================================================== IndexedDB == */
 /* Deux object stores :
  *  - "cache" (clé/valeur) : dernier instantané connu (LV du jour) pour l'écran
@@ -1260,7 +1262,7 @@ function renderPlanningCard(lv) {
   return createAccordionCard({
     title: lv.numero || `LV préparée — ${formatDateFr(lv.date_etablissement)}`,
     subtitle: clientNom || "Client non défini",
-    metaHtml: `<label class="field-checkbox" style="margin:0;" onclick="event.stopPropagation()">
+    metaHtml: `<label class="field-checkbox planning-check">
       <input type="checkbox" class="planning-select" data-lv-id="${lv.id}"> Envoyer
     </label>`,
     bodyBuilder: (body) => {
@@ -1290,6 +1292,9 @@ function renderPlanningCard(lv) {
 
 function wirePlanningCard(card, lv) {
   const checkbox = card.querySelector(".planning-select");
+  // La case et son libellé ne doivent pas replier/déplier l'accordéon parent.
+  const label = card.querySelector(".planning-check");
+  if (label) label.addEventListener("click", (e) => e.stopPropagation());
   checkbox.addEventListener("click", (e) => e.stopPropagation());
   checkbox.addEventListener("change", () => {
     if (checkbox.checked) state.planningSelection.add(String(lv.id));
@@ -2002,7 +2007,7 @@ function renderChauffeurCard(c, startOpen = false) {
 /* --------------------------------------------- Documents réglementaires (bureau) */
 function buildChauffeurDocsPanel(container, chauffeur) {
   const wrap = document.createElement("div");
-  wrap.innerHTML = '<div class="sheet-section-title" style="margin-top:18px;">Documents réglementaires (bureau)</div>';
+  wrap.innerHTML = '<div class="sheet-section-title is-spaced">Documents réglementaires (bureau)</div>';
   container.appendChild(wrap);
 
   const panel = document.createElement("div");
@@ -2687,6 +2692,7 @@ function wireStaticUI() {
 
   wireEmailOtpLogin();
   wireReglagesBureauFields();
+  initInstall();
 
   // -------------------------------------------------------- Feuille « choix de site »
   document.getElementById("btn-site-picker-close").addEventListener("click", closeSitePicker);
