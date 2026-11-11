@@ -104,13 +104,27 @@ jobs:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
           CI: "true"
         run: python supabase/apply.py --apply --no-backup
-      - name: Mots de passe des rôles techniques (fiabilise auth/rest/worker en CI)
+      - name: Rôles techniques + propriété du schéma auth (avant GoTrue)
         run: |
-          docker exec bon-db psql -U postgres -v ON_ERROR_STOP=1 -c "
-            ALTER ROLE bon_worker LOGIN PASSWORD 'postgres';
-            ALTER ROLE authenticator WITH PASSWORD 'postgres';
-            ALTER ROLE supabase_auth_admin WITH PASSWORD 'postgres';
-            ALTER ROLE supabase_storage_admin WITH PASSWORD 'postgres';"
+          docker exec -i bon-db psql -U postgres -v ON_ERROR_STOP=1 <<'SQL'
+          ALTER ROLE bon_worker LOGIN PASSWORD 'postgres';
+          ALTER ROLE authenticator WITH PASSWORD 'postgres';
+          ALTER ROLE supabase_auth_admin WITH PASSWORD 'postgres';
+          ALTER ROLE supabase_storage_admin WITH PASSWORD 'postgres';
+          -- GoTrue doit pouvoir rejouer ses migrations : le schéma auth et ses
+          -- objets doivent appartenir à supabase_auth_admin.
+          ALTER SCHEMA auth OWNER TO supabase_auth_admin;
+          DO $$ DECLARE r record; BEGIN
+            FOR r IN SELECT format('ALTER TABLE auth.%I OWNER TO supabase_auth_admin', tablename) s
+                       FROM pg_tables WHERE schemaname='auth'
+            LOOP EXECUTE r.s; END LOOP;
+            FOR r IN SELECT format('ALTER FUNCTION auth.%I(%s) OWNER TO supabase_auth_admin',
+                                   p.proname, pg_get_function_identity_arguments(p.oid)) s
+                       FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+                      WHERE n.nspname='auth'
+            LOOP EXECUTE r.s; END LOOP;
+          END $$;
+          SQL
       - name: Vérification du seed (articles + sites communs)
         run: |
           docker exec bon-db psql -U postgres -tAc "SELECT count(*) FROM bon.articles" | grep -qx 9
