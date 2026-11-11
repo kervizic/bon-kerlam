@@ -67,6 +67,7 @@ def version() -> dict:
 
 
 @router.get("/healthz")
+@router.get("/health")
 def healthz() -> dict:
     return {"status": "ok"}
 
