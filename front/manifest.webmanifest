@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "KERLAM — Lettres de voiture",
-  "short_name": "bon KERLAM",
+  "name": "Lettre de Voiture KERLAM",
+  "short_name": "LV KERLAM",
   "description": "Lettres de voiture dématérialisées KERLAM : saisie chauffeur, contrôle bureau, signature.",
   "lang": "fr-FR",
   "dir": "ltr",

@@ -1,10 +1,17 @@
-/* install.js — bouton « Installer » du shell + fiche d'aide adaptée à l'appareil.
+/* install.js — bouton « Installer » + fiche d'aide PWA, pilotés par la détection
+ * OS/navigateur/version de install-detect.js. CSP-safe (module ES same-origin,
+ * aucun style ni handler inline). Importé/initialisé par app.js (wireStaticUI).
  *
- * CSP-safe : module ES same-origin, aucun style ni handler inline. La logique de
- * détection et le contenu des guides vivent dans install-detect.js (pur, testé).
- * Importé et initialisé par app.js (wireStaticUI).
+ *  - Invite native (beforeinstallprompt) quand elle existe (Android/Chrome/Edge,
+ *    ordinateur Chrome/Edge) : le bouton dit « Installer l'appli » et déclenche
+ *    l'invite du navigateur.
+ *  - Sinon : le bouton dit « Comment installer » (ou « Ouvrir dans Safari » pour
+ *    un navigateur intégré iOS) et ouvre une fiche avec les étapes EXACTES du cas
+ *    courant + un dépliant « Autres appareils ».
+ *  - Masqué si l'app tourne déjà en mode installé (standalone).
  */
-import { detectEnv, buildGuide, guideByCaseId, ALL_CASES, ICONS } from "./install-detect.js?v=5";
+
+import { detectEnv, buildGuide, ALL_CASES, guideByCaseId, ICONS } from "./install-detect.js";
 
 let deferredPrompt = null;
 
@@ -23,107 +30,135 @@ function currentEnv() {
   });
 }
 
-function esc(s) {
-  return String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+function hideInstallZones() {
+  document.querySelectorAll(".js-install-zone").forEach((el) => { el.hidden = true; });
 }
 
-function stepsHtml(guide) {
-  const li = guide.steps
+function iconHtml(key) {
+  return ICONS[key] || ICONS.install || "";
+}
+
+function stepsHtml(steps) {
+  return steps
     .map(
-      (s, i) =>
-        `<li class="install-step"><span class="install-step-icon" aria-hidden="true">${ICONS[s.icon] || ""}</span>` +
-        `<span class="install-step-body"><strong><span class="install-step-num">${i + 1}.</span> ${esc(s.title)}</strong>` +
-        (s.detail ? `<span>${esc(s.detail)}</span>` : "") +
-        `</span></li>`
+      (s, i) => `
+      <li class="install-step">
+        <span class="install-step-icon" aria-hidden="true">${iconHtml(s.icon)}</span>
+        <span class="install-step-body"><strong><span class="install-step-num">${i + 1}.</span> ${escapeHtml(s.title)}</strong><span>${escapeHtml(s.detail)}</span></span>
+      </li>`
     )
     .join("");
-  return `<ol class="install-steps">${li}</ol>`;
 }
 
-function guideHtml(guide) {
+function guideHtml(guide, { withOthers } = {}) {
   let html = "";
-  if (guide.intro) html += `<p>${esc(guide.intro)}</p>`;
-  html += stepsHtml(guide);
-  if (guide.note) html += `<p class="muted install-note">${esc(guide.note)}</p>`;
-  if (guide.recommend) html += `<p class="muted install-note">${esc(guide.recommend)}</p>`;
+  if (guide.intro) html += `<p>${escapeHtml(guide.intro)}</p>`;
+  html += `<ol class="install-steps">${stepsHtml(guide.steps)}</ol>`;
+  if (guide.note) html += `<p class="muted install-note">${escapeHtml(guide.note)}</p>`;
+  if (guide.recommend) html += `<p class="muted install-note">${escapeHtml(guide.recommend)}</p>`;
+  if (guide.inApp) {
+    html += `<div class="install-actions"><button type="button" class="btn btn-secondary btn-sm js-copy-link">Copier le lien</button></div>`;
+  }
+  if (withOthers) {
+    const items = ALL_CASES.map(
+      (c) => `<li><button type="button" class="install-other-link" data-case="${c.caseId}">${escapeHtml(c.device)}</button></li>`
+    ).join("");
+    html += `
+      <details class="install-others">
+        <summary>Autres appareils</summary>
+        <ul class="install-other-list">${items}</ul>
+        <div class="install-other-detail" id="install-other-detail" hidden></div>
+      </details>`;
+  }
   return html;
 }
 
-function buildSheet(env) {
+function renderHelp(guide) {
+  const title = document.getElementById("install-help-title");
+  const content = document.getElementById("install-help-body");
+  if (title) title.textContent = guide.inApp ? "Ouvrir dans Safari" : "Installer l'application";
+  if (!content) return;
+  content.innerHTML = `<div class="install-help-block"><p class="install-device">${escapeHtml(guide.device)}</p>${guideHtml(guide, { withOthers: true })}</div>`;
+  content.querySelectorAll(".install-other-link").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const g = guideByCaseId(btn.dataset.case);
+      const box = document.getElementById("install-other-detail");
+      if (box) {
+        box.innerHTML = `<p class="install-device">${escapeHtml(g.device)}</p>${guideHtml(g, { withOthers: false })}`;
+        box.hidden = false;
+        wireCopyLink(box);
+      }
+    });
+  });
+  wireCopyLink(content);
+}
+
+function wireCopyLink(scope) {
+  scope.querySelectorAll(".js-copy-link").forEach((btn) => {
+    if (btn.dataset.wired) return;
+    btn.dataset.wired = "1";
+    btn.addEventListener("click", async () => {
+      const url = "https://bon.kerlam.fr/";
+      try {
+        await navigator.clipboard.writeText(url);
+        btn.textContent = "Lien copié ✓";
+      } catch (e) {
+        btn.textContent = url;
+      }
+    });
+  });
+}
+
+function openHelp() {
   const sheet = document.getElementById("install-help-sheet");
   if (!sheet) return;
-  const guide = buildGuide(env);
-  document.getElementById("install-help-title").textContent = "Installer l'application";
-  const body = document.getElementById("install-help-body");
-  body.innerHTML =
-    `<p class="install-device">${esc(guide.device)}</p>` +
-    guideHtml(guide) +
-    (env.isInApp
-      ? `<div class="install-actions"><button type="button" class="btn btn-secondary btn-sm js-install-copy">Copier le lien</button></div>`
-      : "");
-
-  // « Autres appareils » : liste repliable de tous les cas.
-  const all = ALL_CASES.filter((c) => c.caseId !== env.caseId)
-    .map(
-      (c) =>
-        `<details class="install-other"><summary>${esc(c.device)}</summary>${guideHtml(guideByCaseId(c.caseId))}</details>`
-    )
-    .join("");
-  const allWrap = document.getElementById("install-help-all");
-  allWrap.innerHTML = `<details class="install-others-toggle"><summary>Autres appareils</summary>${all}</details>`;
-
-  const copyBtn = body.querySelector(".js-install-copy");
-  if (copyBtn) copyBtn.addEventListener("click", copyLink);
+  renderHelp(buildGuide(currentEnv()));
+  sheet.hidden = false;
 }
 
-async function copyLink() {
-  const url = "https://bon.kerlam.fr/";
-  try {
-    await navigator.clipboard.writeText(url);
-    const b = document.querySelector(".js-install-copy");
-    if (b) b.textContent = "Lien copié ✓";
-  } catch (e) {
-    /* clipboard indisponible : l'utilisateur copiera l'adresse manuellement */
-  }
-}
-
-function openSheet() {
-  buildSheet(currentEnv());
-  const sheet = document.getElementById("install-help-sheet");
-  if (sheet) sheet.hidden = false;
-}
-function closeSheet() {
+function closeHelp() {
   const sheet = document.getElementById("install-help-sheet");
   if (sheet) sheet.hidden = true;
 }
 
 async function handleInstallClick() {
   if (deferredPrompt) {
-    deferredPrompt.prompt();
-    try { await deferredPrompt.userChoice; } catch (e) { /* invite fermée */ }
+    const p = deferredPrompt;
     deferredPrompt = null;
+    p.prompt();
+    try { await p.userChoice; } catch (e) { /* invite fermée */ }
+    updateButtons();
     return;
   }
-  openSheet();
+  openHelp();
 }
 
-function refreshButtonLabels() {
+function updateButtons() {
   const guide = buildGuide(currentEnv());
+  document.querySelectorAll(".js-install-btn .js-install-label").forEach((el) => {
+    el.textContent = guide.buttonLabel;
+  });
+  // Repli : boutons sans <span> de libellé dédié (on ne touche pas à l'icône).
   document.querySelectorAll(".js-install-btn").forEach((btn) => {
-    // Ne jamais promettre une invite native qui ne viendra pas.
-    btn.textContent = deferredPrompt ? "Installer l'appli" : guide.buttonLabel;
+    if (!btn.querySelector(".js-install-label")) {
+      const node = [...btn.childNodes].reverse().find((n) => n.nodeType === 3 && n.textContent.trim());
+      if (node) node.textContent = " " + guide.buttonLabel;
+    }
   });
 }
 
-function hideInstallZones() {
-  document.querySelectorAll(".js-install-zone").forEach((el) => { el.hidden = true; });
+function escapeHtml(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
 window.addEventListener("beforeinstallprompt", (e) => {
   e.preventDefault();
   deferredPrompt = e;
-  refreshButtonLabels();
+  updateButtons();
 });
+
 window.addEventListener("appinstalled", () => {
   deferredPrompt = null;
   hideInstallZones();
@@ -134,10 +169,16 @@ export function initInstall() {
     hideInstallZones();
     return;
   }
-  refreshButtonLabels();
-  document.querySelectorAll(".js-install-btn").forEach((btn) => btn.addEventListener("click", handleInstallClick));
+  updateButtons();
+  document.querySelectorAll(".js-install-btn").forEach((btn) => {
+    btn.addEventListener("click", handleInstallClick);
+  });
   const closeBtn = document.getElementById("btn-install-help-close");
-  if (closeBtn) closeBtn.addEventListener("click", closeSheet);
+  if (closeBtn) closeBtn.addEventListener("click", closeHelp);
   const sheet = document.getElementById("install-help-sheet");
-  if (sheet) sheet.addEventListener("click", (e) => { if (e.target.id === "install-help-sheet") closeSheet(); });
+  if (sheet) {
+    sheet.addEventListener("click", (e) => {
+      if (e.target.id === "install-help-sheet") closeHelp();
+    });
+  }
 }
