@@ -84,9 +84,23 @@ services:
       GOTRUE_SMTP_PASS: ${GOTRUE_SMTP_PASS}
       GOTRUE_SMTP_ADMIN_EMAIL: ${GOTRUE_SMTP_ADMIN_EMAIL:-bon@kerlam.fr}
       GOTRUE_SMTP_SENDER_NAME: ${GOTRUE_SMTP_SENDER_NAME:-KERLAM}
+      # Sujets FR de TOUS les mails transactionnels (sinon GoTrue applique ses
+      # sujets anglais par défaut). « confirmation » = 1er code d'un nouvel
+      # utilisateur ; on le traite comme le magic link (même code à 6 chiffres).
       GOTRUE_MAILER_SUBJECTS_MAGIC_LINK: "Votre code de connexion KERLAM"
-      # Modèle FR du code (monté sur le serveur ; vide = modèle intégré en CI).
+      GOTRUE_MAILER_SUBJECTS_CONFIRMATION: "Votre code de connexion KERLAM"
+      GOTRUE_MAILER_SUBJECTS_RECOVERY: "Réinitialisation de votre accès KERLAM"
+      GOTRUE_MAILER_SUBJECTS_INVITE: "Invitation à l'application KERLAM"
+      GOTRUE_MAILER_SUBJECTS_EMAIL_CHANGE: "Confirmation du changement d'e-mail KERLAM"
+      # Modèles FR montés sur le serveur (vide = modèle anglais intégré, à éviter).
+      # confirmation -> même modèle « code » que magic_link (pas de lien à cliquer).
+      # recovery/invite/email_change -> modèle générique FR (code + lien de secours
+      # /auth/v1/verify correct grâce à API_EXTERNAL_URL).
       GOTRUE_MAILER_TEMPLATES_MAGIC_LINK: ${GOTRUE_MAILER_TEMPLATES_MAGIC_LINK}
+      GOTRUE_MAILER_TEMPLATES_CONFIRMATION: ${GOTRUE_MAILER_TEMPLATES_CONFIRMATION}
+      GOTRUE_MAILER_TEMPLATES_RECOVERY: ${GOTRUE_MAILER_TEMPLATES_RECOVERY}
+      GOTRUE_MAILER_TEMPLATES_INVITE: ${GOTRUE_MAILER_TEMPLATES_INVITE}
+      GOTRUE_MAILER_TEMPLATES_EMAIL_CHANGE: ${GOTRUE_MAILER_TEMPLATES_EMAIL_CHANGE}
       # Hook « before user created » (refus des e-mails non listés) si disponible.
       GOTRUE_HOOK_BEFORE_USER_CREATED_ENABLED: ${GOTRUE_HOOK_BEFORE_USER_CREATED_ENABLED:-false}
       GOTRUE_HOOK_BEFORE_USER_CREATED_URI: ${GOTRUE_HOOK_BEFORE_USER_CREATED_URI}
@@ -95,16 +109,18 @@ services:
       GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
       GOTRUE_JWT_EXP: ${JWT_EXPIRY}
       GOTRUE_JWT_SECRET: ${JWT_SECRET}
-      GOTRUE_JWT_ISSUER: ${API_EXTERNAL_URL}/auth/v1
+      # API_EXTERNAL_URL inclut déjà /auth/v1 : ne PAS le re-concaténer ici.
+      GOTRUE_JWT_ISSUER: ${API_EXTERNAL_URL}
       # Google uniquement.
       GOTRUE_EXTERNAL_GOOGLE_ENABLED: ${GOOGLE_ENABLED}
       GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOTRUE_EXTERNAL_GOOGLE_SECRET: ${GOOGLE_SECRET}
-      GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI: ${API_EXTERNAL_URL}/auth/v1/callback
+      GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI: ${API_EXTERNAL_URL}/callback
       # Restriction de domaine (hd) optionnelle, désactivée par défaut.
       GOTRUE_EXTERNAL_GOOGLE_HD: ${GOOGLE_HD}
     volumes:
       - ./email/otp_fr.html:/etc/gotrue/otp_fr.html:ro
+      - ./email/action_fr.html:/etc/gotrue/action_fr.html:ro
 
   rest:
     container_name: bon-rest

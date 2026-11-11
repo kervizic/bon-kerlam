@@ -71,6 +71,34 @@ def shoot(ctx, prefix, route, theme, label, *, role="", drawer=False, check=True
         page.close()
 
 
+def shoot_lv_modif(ctx, prefix: str) -> None:
+    """LV ouverte AVANT (bouton Annuler masqué) puis APRÈS une modification
+    (bouton Annuler visible)."""
+    page = ctx.new_page()
+    try:
+        page.goto(f"{BASE}?demo=1&screen=today&role=bureau&theme=clair", wait_until="networkidle")
+        page.wait_for_timeout(600)
+        undo_before = page.locator("#btn-undo").is_hidden()
+        page.screenshot(path=str(OUT / f"{prefix}-lv-avant-modif-clair.png"), full_page=False)
+        print("   lv-avant-modif (undo masqué:", undo_before, ")")
+        field = page.locator(
+            "#view-today input[type='time'], #view-today input[type='text'], "
+            "#view-today input[type='number']"
+        ).first
+        field.scroll_into_view_if_needed()
+        field.click()
+        field.fill("08:30")
+        page.locator("h1").first.click()  # blur -> empile l'annulation
+        page.wait_for_timeout(300)
+        undo_after = page.locator("#btn-undo").is_visible()
+        page.screenshot(path=str(OUT / f"{prefix}-lv-apres-modif-clair.png"), full_page=False)
+        print("   lv-apres-modif (undo visible:", undo_after, ")")
+    except Exception as exc:  # noqa: BLE001
+        print(f"   !! lv-modif: {exc}")
+    finally:
+        page.close()
+
+
 def main() -> int:
     with sync_playwright() as p:
         browser = p.chromium.launch()
@@ -85,6 +113,7 @@ def main() -> int:
         shoot(iphone, "iphone-bureau", "today", "sombre", "lv-ouverte", role="bureau")
         shoot(iphone, "iphone-bureau", "dashboard", "clair", "menu-plus", role="bureau", drawer=True)
         shoot(iphone, "iphone-bureau", "dashboard", "sombre", "menu-plus", role="bureau", drawer=True)
+        shoot_lv_modif(iphone, "iphone-bureau")
         # Chauffeur.
         for route, label in CHAUFFEUR_SCREENS:
             shoot(iphone, "iphone-chauffeur", route, "clair", label, role="chauffeur")

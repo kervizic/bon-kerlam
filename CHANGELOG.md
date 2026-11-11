@@ -4,6 +4,27 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.6] — 2026-11-11
+
+### Retours iPhone de Manu
+- **Annulation** : un seul bouton **« Annuler »** (icône Lucide rotate-ccw), plus
+  de bouton « Refaire » (ni `Ctrl+Maj+Z`/`Ctrl+Y`). Le bouton n'apparaît QUE dans
+  un formulaire et SEULEMENT après une modification, et se masque quand la pile
+  est vide. La pile est **remise à zéro à chaque sortie de formulaire** (changement
+  d'écran/onglet). Logique extraite dans `assets/undo-stack.js` (**testée**, 7 cas).
+- **En-tête mobile** : pastille « Enregistré » remplacée par une **icône d'état
+  compacte** (coche verte / spinner bleu / nuage barré orange, `aria-label`), texte
+  complet seulement sur ordinateur. Nom « … · bureau » remplacé par un **avatar
+  rond** (initiale) qui ouvre les Réglages. Bouton thème **déplacé dans Réglages**
+  sur mobile.
+- **Barre d'onglets** : émojis remplacés par des **icônes Lucide** (trait 2) —
+  Tableau=layout-dashboard, LV=clipboard-list, Planning=calendar-days, Plus=ellipsis,
+  Aujourd'hui=truck, Mes LV=list, Contrôle=check-circle, Réglages=settings. Gris
+  **#595959** inactif, orange **#FD8008** actif. Plus aucun émoji comme icône
+  (corbeille, liste de sites, navigation, position → Lucide).
+- Job CI captures exécuté dans l'image **Playwright officielle** (fiabilise le test
+  « pas de scroll horizontal », supprime la dépendance apt).
+
 ## [0.1.0-beta.5] — 2026-11-11
 
 ### Mobile — interface repensée (bug : illisible sur iPhone)

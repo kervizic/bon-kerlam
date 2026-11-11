@@ -186,6 +186,7 @@ a { color: var(--c-blue); }
 }
 .icon-btn:hover, .icon-btn:focus-visible { background: var(--bg); }
 .icon-btn:disabled { opacity: .35; cursor: default; }
+.icon-btn svg { width: 20px; height: 20px; }
 
 /* ------------------------------------------------------------- Écrans d'auth */
 .screen-auth {
@@ -318,8 +319,26 @@ a { color: var(--c-blue); }
   color: var(--text-muted);
   font-size: 12px;
 }
-.bottom-bar-item.is-active { color: var(--c-orange-dark); font-weight: 700; }
-.bb-icon { font-size: 22px; }
+.bottom-bar-item.is-active { color: var(--c-orange); font-weight: 700; }
+.bb-icon { display: inline-flex; }
+.bb-icon svg { width: 24px; height: 24px; }
+.bb-label { font-size: 11px; }
+
+/* Indicateur de synchro : icône compacte (mobile) + texte (ordinateur). */
+.sync-icon { display: none; align-items: center; }
+.sync-icon .ic { display: none; align-items: center; }
+.sync-saved .ic-saved { display: inline-flex; color: var(--c-green); }
+.sync-sending .ic-sending { display: inline-flex; color: var(--c-blue); }
+.sync-offline .ic-offline { display: inline-flex; color: var(--c-orange-dark); }
+.sync-sending .ic-sending svg { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Avatar profil (mobile) : pastille ronde avec l'initiale, ouvre les réglages. */
+.avatar-btn {
+  display: none; align-items: center; justify-content: center;
+  width: 36px; height: 36px; border-radius: 999px; border: none; cursor: pointer;
+  background: var(--c-orange); color: var(--c-anthracite); font-weight: 800; font-size: 15px;
+}
 
 /* --------------------------------------------------------------- Dashboard */
 .dashboard-welcome { margin-bottom: 16px; }
@@ -649,8 +668,13 @@ input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
   .view-header h1 { font-size: 23px; line-height: 1.2; }
   .view-header { flex-wrap: wrap; }
   h1 { font-size: 23px; line-height: 1.2; }
-  /* Topbar compacte : le badge profil passe dans le tiroir, pas dans la barre. */
+  /* Topbar compacte : icône de synchro + avatar ; pas de texte ni de bouton thème
+     (le thème est dans Réglages). */
   .profil-badge { display: none; }
+  .sync-text { display: none; }
+  .sync-icon { display: inline-flex; }
+  .topbar-theme { display: none; }
+  .avatar-btn { display: inline-flex; }
   .topbar { padding-left: 12px; padding-right: 12px; }
 }
 

@@ -23,15 +23,15 @@ jobs:
         run: pytest worker/tests -q
 
   front-tests:
-    name: tests JS (détection installation)
+    name: tests JS (détection installation + pile d'annulation)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - name: Tests de détection OS/navigateur
-        run: node --test front/assets/install-detect.test.mjs
+      - name: Tests JS (détection + undo)
+        run: node --test front/assets/*.test.mjs
 
   db-tests:
     name: tests SQL (fonctions + RLS + migrations)
@@ -96,7 +96,7 @@ jobs:
           S3_ENDPOINT=https://s3.eu-west-par.io.cloud.ovh.net
           S3_ACCESS_KEY=
           S3_SECRET_KEY=
-          APP_VERSION=0.1.0-beta.5
+          APP_VERSION=0.1.0-beta.6
           GIT_SHA=${{ github.sha }}
           GEOCODE_ON_START=false
           KERLAM_SIREN=
@@ -163,7 +163,7 @@ jobs:
         run: |
           body=$(curl -fsS http://127.0.0.1:8099/worker/version)
           echo "$body"
-          echo "$body" | python -c "import sys,json; d=json.load(sys.stdin); assert d['version']=='0.1.0-beta.5', d; assert d['schema_version'], d; print('version ok, schema', d['schema_version'])"
+          echo "$body" | python -c "import sys,json; d=json.load(sys.stdin); assert d['version']=='0.1.0-beta.6', d; assert d['schema_version'], d; print('version ok, schema', d['schema_version'])"
       - name: Attente de GoTrue (auth)
         run: |
           for i in $(seq 1 30); do
@@ -183,15 +183,12 @@ jobs:
   screenshots:
     name: captures responsive (Playwright)
     runs-on: ubuntu-latest
+    # Image officielle Playwright : Chromium + dépendances préinstallés (pas d'apt,
+    # évite les pannes réseau transitoires des miroirs Ubuntu).
+    container:
+      image: mcr.microsoft.com/playwright/python:v1.55.0-noble
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Dépendances
-        run: |
-          pip install playwright
-          playwright install --with-deps chromium
       - name: Service du front
         run: |
           python -m http.server 8080 --directory front &

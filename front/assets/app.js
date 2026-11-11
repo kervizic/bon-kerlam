@@ -118,7 +118,8 @@ import {
   todayIso,
 } from "./data.js";
 
-import { initInstall } from "./install.js?v=5";
+import { initInstall } from "./install.js?v=6";
+import { UndoStack } from "./undo-stack.js?v=6";
 
 /* ============================================================== IndexedDB == */
 /* Deux object stores :
@@ -273,16 +274,13 @@ setInterval(flushQueue, 30000);
 const syncIndicatorEl = document.getElementById("sync-indicator");
 function setSyncState(state) {
   syncIndicatorEl.classList.remove("sync-saved", "sync-sending", "sync-offline");
-  if (state === "sending") {
-    syncIndicatorEl.classList.add("sync-sending");
-    syncIndicatorEl.textContent = "Envoi en cours";
-  } else if (state === "offline") {
-    syncIndicatorEl.classList.add("sync-offline");
-    syncIndicatorEl.textContent = "Hors ligne, sera envoyé";
-  } else {
-    syncIndicatorEl.classList.add("sync-saved");
-    syncIndicatorEl.textContent = "Enregistré";
-  }
+  const label =
+    state === "sending" ? "Envoi en cours" :
+    state === "offline" ? "Hors ligne, sera envoyé" : "Enregistré";
+  syncIndicatorEl.classList.add("sync-" + (state === "sending" ? "sending" : state === "offline" ? "offline" : "saved"));
+  const txt = syncIndicatorEl.querySelector(".sync-text");
+  if (txt) txt.textContent = label; else syncIndicatorEl.textContent = label;
+  syncIndicatorEl.setAttribute("aria-label", label);
 }
 
 async function patchRemote(table, id, patch) {
@@ -378,34 +376,25 @@ function timeToIso(timeStr) {
   return isNaN(d.getTime()) ? null : d.toISOString();
 }
 
-/* ------------------------------------------------------------------ Undo/redo */
-const undoStack = [];
-const redoStack = [];
+/* --------------------------------------------------------------------- Undo */
+/* Annulation uniquement (pas de « refaire »). Le bouton « Annuler » n'apparaît
+ * QUE dans un formulaire et SEULEMENT après une modification (masqué si la pile
+ * est vide). La pile est remise à zéro quand on quitte le formulaire
+ * (changement d'écran/onglet, cf. navigate()). Raccourci : Ctrl/Cmd+Z. */
 const btnUndo = document.getElementById("btn-undo");
-const btnRedo = document.getElementById("btn-redo");
+function refreshUndoButtons() {
+  if (btnUndo) btnUndo.hidden = undoStack.isEmpty;
+}
+const undoStack = new UndoStack(refreshUndoButtons);
 
 function pushUndo(entry) {
-  undoStack.push(entry);
-  redoStack.length = 0;
-  refreshUndoButtons();
+  undoStack.push(entry.undo);
 }
-function refreshUndoButtons() {
-  btnUndo.disabled = undoStack.length === 0;
-  btnRedo.disabled = redoStack.length === 0;
+function resetUndo() {
+  undoStack.reset();
 }
 async function undo() {
-  const entry = undoStack.pop();
-  if (!entry) return;
-  await entry.undo();
-  redoStack.push(entry);
-  refreshUndoButtons();
-}
-async function redo() {
-  const entry = redoStack.pop();
-  if (!entry) return;
-  await entry.redo();
-  undoStack.push(entry);
-  refreshUndoButtons();
+  await undoStack.undo();
 }
 function pushServerUndo() {
   const lvId = state.lv && state.lv.id;
@@ -414,9 +403,6 @@ function pushServerUndo() {
     kind: "server",
     undo: async () => {
       await rpcLvUndo(lvId);
-      await loadToursFor(state.lv);
-    },
-    redo: async () => {
       await loadToursFor(state.lv);
     },
   });
@@ -1578,7 +1564,7 @@ function renderContactRow(contact, client, onDeleted) {
       const delBtn = document.createElement("button");
       delBtn.type = "button";
       delBtn.className = "btn btn-secondary btn-sm";
-      delBtn.textContent = "🗑 Supprimer ce contact";
+      delBtn.textContent = "Supprimer ce contact";
       delBtn.addEventListener("click", async () => {
         if (!confirm(`Supprimer le contact ${contact.nom} ?`)) return;
         try {
@@ -1701,7 +1687,7 @@ function renderSiteCard(s, startOpen = false) {
       const geolocBtn = document.createElement("button");
       geolocBtn.type = "button";
       geolocBtn.className = "btn btn-secondary btn-sm";
-      geolocBtn.textContent = "📍 ma position";
+      geolocBtn.textContent = "Ma position";
       geolocBtn.addEventListener("click", () => handleGeolocateSite(latInput, lonInput, addrInput));
       geolocRow.appendChild(geolocBtn);
       grid.appendChild(geolocRow);
@@ -2626,6 +2612,7 @@ function closeNavDrawer() {
 
 async function navigate(route) {
   if (!ROUTES.includes(route)) route = "dashboard";
+  resetUndo(); // on quitte le formulaire courant : la pile d'annulation repart de zéro
   state.route = route;
   document.querySelectorAll(".view").forEach((el) => {
     el.hidden = el.dataset.view !== route;
@@ -2677,14 +2664,13 @@ function wireStaticUI() {
     });
   }
 
-  btnUndo.addEventListener("click", undo);
-  btnRedo.addEventListener("click", redo);
+  if (btnUndo) btnUndo.addEventListener("click", undo);
   document.addEventListener("keydown", (e) => {
     if (!(e.ctrlKey || e.metaKey)) return;
     if (e.key.toLowerCase() !== "z") return;
+    if (e.shiftKey) return; // pas de « refaire »
     e.preventDefault();
-    if (e.shiftKey) redo();
-    else undo();
+    undo();
   });
 
   document.querySelectorAll('input[name="theme"]').forEach((r) => {
@@ -2973,6 +2959,13 @@ async function handleSessionChange(session) {
   document.body.classList.toggle("has-chauffeur", hasRole("chauffeur"));
 
   document.getElementById("profil-badge").textContent = `${profil.nom || profil.email} · ${state.roles.join(" + ") || profil.role}`;
+  const initialEl = document.getElementById("profil-initial");
+  if (initialEl) initialEl.textContent = (profil.nom || profil.email || "?").trim().charAt(0).toUpperCase();
+  const btnProfil = document.getElementById("btn-profil");
+  if (btnProfil && !btnProfil.dataset.wired) {
+    btnProfil.dataset.wired = "1";
+    btnProfil.addEventListener("click", () => navigate("reglages"));
+  }
   showScreen("app");
 
   await loadRefs();

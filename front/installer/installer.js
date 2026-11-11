@@ -1,6 +1,6 @@
 /* installer.js — page autonome /installer/. Détecte l'appareil, affiche le cas
  * courant en premier puis la liste complète. Module ES (import du moteur partagé). */
-import { detectEnv, buildGuide, guideByCaseId, ALL_CASES, ICONS } from "/assets/install-detect.js?v=5";
+import { detectEnv, buildGuide, guideByCaseId, ALL_CASES, ICONS } from "/assets/install-detect.js?v=6";
 
 let deferredPrompt = null;
 
