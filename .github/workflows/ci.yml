@@ -206,7 +206,13 @@ jobs:
         run: pip install --break-system-packages playwright==1.55.0
       - name: Service du front
         run: |
-          python -m http.server 8080 --directory front &
+          # Serveur HTTP MULTI-THREADÉ : le http.server mono-thread sature sous
+          # les contextes Playwright concurrents (ERR_EMPTY_RESPONSE, captures
+          # manquantes). ThreadingHTTPServer sert chaque requête en parallèle.
+          python -c "import http.server,functools; \
+            Srv=type('S',(http.server.ThreadingHTTPServer,),{'allow_reuse_address':True}); \
+            H=functools.partial(http.server.SimpleHTTPRequestHandler,directory='front'); \
+            Srv(('127.0.0.1',8080),H).serve_forever()" &
           for i in $(seq 1 20); do
             curl -fsS http://127.0.0.1:8080/index.html >/dev/null 2>&1 && break || sleep 1
           done
