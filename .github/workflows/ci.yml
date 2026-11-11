@@ -104,8 +104,13 @@ jobs:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
           CI: "true"
         run: python supabase/apply.py --apply --no-backup
-      - name: Connexion du rôle worker
-        run: docker exec bon-db psql -U postgres -c "ALTER ROLE bon_worker LOGIN PASSWORD 'postgres';"
+      - name: Mots de passe des rôles techniques (fiabilise auth/rest/worker en CI)
+        run: |
+          docker exec bon-db psql -U postgres -v ON_ERROR_STOP=1 -c "
+            ALTER ROLE bon_worker LOGIN PASSWORD 'postgres';
+            ALTER ROLE authenticator WITH PASSWORD 'postgres';
+            ALTER ROLE supabase_auth_admin WITH PASSWORD 'postgres';
+            ALTER ROLE supabase_storage_admin WITH PASSWORD 'postgres';"
       - name: Vérification du seed (articles + sites communs)
         run: |
           docker exec bon-db psql -U postgres -tAc "SELECT count(*) FROM bon.articles" | grep -qx 9

@@ -31,19 +31,21 @@ GRANT anon, authenticated, service_role TO authenticator;
 CREATE SCHEMA IF NOT EXISTS auth;
 GRANT USAGE ON SCHEMA auth TO anon, authenticated, service_role;
 
+-- NULLIF(..., '') protège contre un GUC à chaîne vide (set_config(..., NULL)) :
+-- ''::jsonb lèverait « invalid input syntax for type json ».
 CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid
   LANGUAGE sql STABLE AS $$
-  SELECT NULLIF(current_setting('request.jwt.claims', true)::jsonb ->> 'sub', '')::uuid
+  SELECT NULLIF(NULLIF(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub', '')::uuid
 $$;
 
 CREATE OR REPLACE FUNCTION auth.role() RETURNS text
   LANGUAGE sql STABLE AS $$
-  SELECT current_setting('request.jwt.claims', true)::jsonb ->> 'role'
+  SELECT NULLIF(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role'
 $$;
 
 CREATE OR REPLACE FUNCTION auth.email() RETURNS text
   LANGUAGE sql STABLE AS $$
-  SELECT current_setting('request.jwt.claims', true)::jsonb ->> 'email'
+  SELECT NULLIF(current_setting('request.jwt.claims', true), '')::jsonb ->> 'email'
 $$;
 
 GRANT EXECUTE ON FUNCTION auth.uid(), auth.role(), auth.email()

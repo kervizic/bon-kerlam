@@ -10,7 +10,7 @@
 CREATE OR REPLACE FUNCTION bon.current_actor() RETURNS text
   LANGUAGE sql STABLE AS $$
   SELECT COALESCE(
-    NULLIF(current_setting('request.jwt.claims', true)::jsonb ->> 'email', ''),
+    NULLIF(NULLIF(current_setting('request.jwt.claims', true), '')::jsonb ->> 'email', ''),
     NULLIF(current_setting('bon.actor', true), ''))
 $$;
 
