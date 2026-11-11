@@ -204,20 +204,22 @@ jobs:
       - uses: actions/checkout@v4
       - name: Dépendance playwright (alignée sur les navigateurs de l'image)
         run: pip install --break-system-packages playwright==1.55.0
-      - name: Service du front
+      - name: Captures (mobile clair/sombre + bureau)
         run: |
-          # Serveur HTTP MULTI-THREADÉ : le http.server mono-thread sature sous
-          # les contextes Playwright concurrents (ERR_EMPTY_RESPONSE, captures
-          # manquantes). ThreadingHTTPServer sert chaque requête en parallèle.
+          # Serveur ET captures dans LE MÊME step : un serveur lancé dans un step
+          # séparé était tué par le runner en plein milieu du run de captures
+          # (ERR_EMPTY_RESPONSE sur les écrans chauffeur/ipad/installer). Threadé
+          # pour servir les contextes Playwright concurrents.
           python -c "import http.server,functools; \
-            Srv=type('S',(http.server.ThreadingHTTPServer,),{'allow_reuse_address':True}); \
+            Srv=type('S',(http.server.ThreadingHTTPServer,),{'allow_reuse_address':True,'daemon_threads':True}); \
             H=functools.partial(http.server.SimpleHTTPRequestHandler,directory='front'); \
             Srv(('127.0.0.1',8080),H).serve_forever()" &
+          SRV=$!
           for i in $(seq 1 20); do
             curl -fsS http://127.0.0.1:8080/index.html >/dev/null 2>&1 && break || sleep 1
           done
-      - name: Captures (mobile clair/sombre + bureau)
-        run: python scripts/screenshots.py http://127.0.0.1:8080/index.html
+          python scripts/screenshots.py http://127.0.0.1:8080/index.html
+          kill $SRV 2>/dev/null || true
       - name: Publication des captures
         if: always()
         uses: actions/upload-artifact@v4
