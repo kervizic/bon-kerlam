@@ -197,3 +197,55 @@ l'étape 2 avec la dernière sauvegarde.
 `GOTRUE_SMTP_USER`, `GOTRUE_SMTP_PASS`, `GOTRUE_SMTP_ADMIN_EMAIL`,
 `GOTRUE_SMTP_SENDER_NAME`, `GOTRUE_MAILER_TEMPLATES_MAGIC_LINK`,
 `GOTRUE_HOOK_BEFORE_USER_CREATED_ENABLED`, `GOTRUE_HOOK_BEFORE_USER_CREATED_URI`.
+
+## 8. Déploiement réel bêta — bon.kerlam.fr (2026-11-11, v0.1.0-beta.4)
+
+Pile déployée sur le VPS KERLAM (Ubuntu 18.04, nginx hôte 1.14). Points réels
+rencontrés et procédure effectivement appliquée :
+
+- **Images ghcr publiques** : `ghcr.io/kervizic/bon-kerlam-{front,worker}` sont
+  tirables anonymement (pas de `docker login` nécessaire).
+- **Port Postgres hôte** : `127.0.0.1:5432` déjà pris par un autre service →
+  bon-db publié sur **`127.0.0.1:5434:5432`** (interne inchangé, `db:5432`).
+- **Secrets** : `POSTGRES_PASSWORD`/`WORKER_DB_PASSWORD`/`JWT_SECRET` générés par
+  `openssl` sur le serveur ; `ANON_KEY`/`SERVICE_ROLE_KEY` mintés via un conteneur
+  `python:3.12` + PyJWT (l'hôte est en Python 3.6, incompatible avec `gen-jwt.py`).
+  Google OAuth injecté depuis Bitwarden (Mac) par stdin. SMTP importé de Documenso.
+  **S3 OVH non fourni** → `storage` non démarré, `PGRST_DB_SCHEMAS=api,svc`
+  (documents chauffeur à activer plus tard, cf. §5ter).
+- **Migrations** : `apply.py` lancé dans un conteneur `python:3.12` + `psycopg`
+  sur le réseau `bon-kerlam_default` (`DATABASE_URL=postgres://postgres:…@db:5432`).
+- **Propriété schéma `auth`** : le script d'init `zz-fix.sql` (sous-dossier
+  `init-scripts/`) n'étant pas rejoué par l'image, GoTrue échouait
+  (`must be owner of function uid`). Corrigé à la main :
+  `ALTER SCHEMA auth OWNER TO supabase_auth_admin` + tables/fonctions/séquences,
+  puis `docker restart bon-auth`.
+- **nginx** : les vhosts du dépôt déclaraient `ssl_session_cache shared:SSL:10m`,
+  en conflit avec `snippets/ssl.conf` (`shared:SSL:50m`, global). Lignes
+  `ssl_session_cache`/`ssl_protocols` **retirées** des vhosts (le snippet global
+  gère). `nginx -t` OK → `nginx -s reload` (jamais `restart`).
+- **Front** : fichiers statiques extraits de l'image front (`docker cp`) vers
+  `/opt/bon-kerlam/front` (option A du vhost), bascule atomique (`front.old`).
+
+### Rollback complet (exact)
+
+```bash
+# 1. Arrêter/retirer la pile bon (conserve le volume db pour debug)
+cd /opt/bon-kerlam/deploy && docker compose down
+#    purge totale (supprime aussi les données) : docker compose down -v
+
+# 2. Restaurer nginx (vhosts bon/api) tels qu'avant
+cp /root/vhost-bon-before-*.conf /etc/nginx/sites-available/bon.kerlam.fr
+cp /root/vhost-api-before-*.conf /etc/nginx/sites-available/api.kerlam.fr
+#    ou l'archive complète : tar xzf /root/backup-nginx-20261111-143433.tgz -C /etc
+nginx -t && nginx -s reload
+
+# 3. Restaurer la page statique publique si besoin
+tar xzf /root/backup-bon-public-20261111-143433.tgz -C /var/www
+
+# 4. Retour à une image antérieure : éditer APP_VERSION dans .env puis
+cd /opt/bon-kerlam/deploy && docker compose up -d
+```
+
+Sauvegardes présentes : `/root/backup-nginx-20261111-143433.tgz`,
+`/root/backup-bon-public-20261111-143433.tgz`, copies `vhost-{bon,api}-before-*.conf`.
