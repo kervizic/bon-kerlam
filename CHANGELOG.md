@@ -4,6 +4,38 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.10] — 2026-11-11
+
+Lot 2 — (f) accueil chauffeur + signature électronique Documenso.
+
+### Accueil chauffeur = lettres non signées
+- L'**accueil du chauffeur** est désormais la **liste de ses lettres de voiture
+  non signées** (la plus récente en haut) : numéro / brouillon, date, statut
+  (brouillon / à signer / en attente de signature).
+- **Gros bouton « Nouvelle lettre de voiture »** (Lucide plus) en haut.
+- **Case à cocher par ligne** + **« Tout sélectionner »**. Toucher une ligne
+  ouvre la lettre. Filtre **« Signées »** (les signées sortent de la liste).
+- **Groupage** limité aux lettres d'un **même contact signataire** (message clair
+  sinon). Logique pure testée (`assets/signature-group.js`).
+- **Barre « Signer (N) »** collée en bas dès qu'une case est cochée → choix
+  **« Sur place (sur ce téléphone) »** / **« Par mail »** (Lucide pen-line / mail).
+
+### Signature Documenso (sign.kerlam.fr)
+- **Sur place** : une enveloppe Documenso par lettre (sans e-mail) ; le front
+  enchaîne les liens de signature sur le téléphone.
+- **Par mail** : **une seule enveloppe groupée** (PDF des N lettres fusionné)
+  envoyée au contact signataire ; les lettres passent **« en attente de
+  signature »** jusqu'au retour, détecté par **polling worker** (toutes les 3 min),
+  puis le **PDF signé est archivé** (bucket privé) et les lettres **marquées
+  signées**.
+- **Clé API Documenso UNIQUEMENT côté worker** (`DOCUMENSO_API_KEY`, `.env` VPS
+  chmod 600) : jamais exposée au front, ni en base, ni committée. Client v1
+  (`worker/app/documenso.py`), orchestration (`worker/app/signature.py`),
+  endpoints `POST /worker/signature/{sur-place,par-mail,poll}` authentifiés par le
+  jeton de session Supabase, contrôle d'accès bureau/chauffeur. Migration 0013
+  (suivi `documenso_document_id`, `signature_mode`, `signed_pdf_path`). Tests
+  (client mocké, groupage, états).
+
 ## [0.1.0-beta.9] — 2026-11-11
 
 Lot 1b (finitions des retours beta.8). CI verte, images publiées, déployé.

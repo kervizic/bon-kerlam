@@ -199,6 +199,11 @@ services:
       DOCS_BUCKET: chauffeur-docs
       # Valide le jeton de session Supabase (génération PDF par le chauffeur, g).
       JWT_SECRET: ${JWT_SECRET}
+      # Identité KERLAM sur le PDF (SIREN du Kbis) + signature Documenso (f).
+      KERLAM_SIREN: ${KERLAM_SIREN}
+      DOCUMENSO_URL: ${DOCUMENSO_URL:-https://sign.kerlam.fr}
+      DOCUMENSO_API_KEY: ${DOCUMENSO_API_KEY}
+      SIGNED_BUCKET: ${SIGNED_BUCKET:-lettres-signees}
 
   front:
     container_name: bon-front

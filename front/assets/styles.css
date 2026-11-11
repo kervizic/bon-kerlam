@@ -299,6 +299,27 @@ body.mode-bureau .side-nav li.nav-bureau { display: block; }
 .btn-pdf { color: var(--c-orange-dark); }
 .lv-row-pdf { margin-left: auto; }
 
+/* Accueil chauffeur : nouvelle lettre + sélection/signature (f). */
+.btn-new-lv { display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: 16px; padding: 14px; margin-bottom: 14px; }
+.mes-lv-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.check-inline { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text); cursor: pointer; }
+.check-inline input { width: 18px; height: 18px; }
+.lv-row-check { display: inline-flex; align-items: center; padding-right: 4px; }
+.lv-row-check input { width: 20px; height: 20px; }
+.lv-row.is-selected { border-color: var(--c-orange); box-shadow: 0 0 0 1px var(--c-orange) inset; }
+
+.signer-bar {
+  position: fixed; left: 0; right: 0; z-index: 35;
+  bottom: calc(72px + env(safe-area-inset-bottom)); /* au-dessus de la barre d'onglets */
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  background: var(--surface); border-top: 1px solid var(--border);
+}
+.signer-bar[hidden] { display: none; }
+.signer-bar .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+@media (min-width: 900px) {
+  .signer-bar { bottom: 0; left: 220px; } /* pas de bottom-bar sur ordinateur, place pour le menu latéral */
+}
+
 .app-body { flex: 1; display: flex; min-height: 0; }
 
 .side-nav {

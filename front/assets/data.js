@@ -512,6 +512,19 @@ export async function workerDocumentSignedUrl(key) {
   if (DEMO) return { signed_url: "about:blank#demo-" + encodeURIComponent(key) };
   return live.workerDocumentSignedUrl(key);
 }
+export async function workerSignatureSurPlace(lvIds) {
+  if (DEMO) {
+    return { mode: "sur_place", lettres: lvIds.map((id) => ({ lv_id: id, numero: "KER-DEMO", signing_url: "about:blank#demo-sign-" + id })) };
+  }
+  return live.workerSignatureSurPlace(lvIds);
+}
+export async function workerSignatureParMail(lvIds) {
+  if (DEMO) {
+    const first = byId(demoDb.lettres_voiture, lvIds[0]) || {};
+    return { mode: "par_mail", document_id: 1234, contact_email: "contact@demo.test", lv_ids: lvIds, _demo: first };
+  }
+  return live.workerSignatureParMail(lvIds);
+}
 export async function workerLvPdf(lvId) {
   if (DEMO) {
     // En démo (captures), pas de worker : on fabrique un PDF minimal valide.

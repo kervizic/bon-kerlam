@@ -155,7 +155,7 @@ export const LETTRES_VOITURE = [
   {
     id: 2, numero: "KER-03042", date_etablissement: todayIso(), date_prise_en_charge: todayIso(),
     expediteur: "KERLAM", destinataire: "KERLAM", dest_identique: true,
-    camion_id: 2, chauffeur_id: 2, projet_id: 2, contact_id: 2, heures_regie: "6h45 - 15h15",
+    camion_id: 2, chauffeur_id: 2, projet_id: 1, contact_id: 1, heures_regie: "6h45 - 15h15",
     statut: "a_signer", preparee: false, owner_email: "fatou.diallo@kerlam.fr", deleted_at: null,
   },
   {

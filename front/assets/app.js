@@ -109,6 +109,8 @@ import {
   workerEnvoiGroupe,
   workerChauffeurDepart,
   workerLvPdf,
+  workerSignatureSurPlace,
+  workerSignatureParMail,
   searchAddress,
   reverseAddress,
   rpcLvPoids,
@@ -119,10 +121,11 @@ import {
   todayIso,
 } from "./data.js";
 
-import { initInstall } from "./install.js?v=9";
-import { UndoStack } from "./undo-stack.js?v=9";
-import { PdfCache, shouldCachePdf, formatGeneratedAt } from "./pdf-cache.js?v=9";
-import { statutLabel } from "./status-labels.js?v=9";
+import { initInstall } from "./install.js?v=10";
+import { UndoStack } from "./undo-stack.js?v=10";
+import { PdfCache, shouldCachePdf, formatGeneratedAt } from "./pdf-cache.js?v=10";
+import { statutLabel } from "./status-labels.js?v=10";
+import { canGroupForSignature } from "./signature-group.js?v=10";
 
 /* ============================================================== IndexedDB == */
 /* Deux object stores :
@@ -540,7 +543,8 @@ function persistMode(mode) {
   } catch (e) { /* noop */ }
 }
 function defaultRouteForMode(mode = state.mode) {
-  return mode === "bureau" ? "dashboard" : "today";
+  // Accueil chauffeur (f) = liste des lettres non signées ; bureau = tableau.
+  return mode === "bureau" ? "dashboard" : "mes-lv";
 }
 function applyModeUi() {
   const mode = state.mode;
@@ -1277,24 +1281,149 @@ async function logout() {
   await signOut();
 }
 
-/* ===================================================================== Mes LV == */
+/* ======================================= Accueil chauffeur (non signées) (f) == */
+// Sélection courante : map id -> lv (pour le groupage et la signature).
+const signSelection = new Map();
+
+function isSignable(lv) {
+  // Une lettre « en attente de signature » (envoyee) est déjà partie : on ne la
+  // re-sélectionne pas. Sélectionnables : brouillon / en cours / à signer.
+  return lv.statut !== "signee" && lv.statut !== "envoyee";
+}
+
+function refreshSignerBar() {
+  const bar = document.getElementById("signer-bar");
+  const countEl = document.getElementById("signer-count");
+  const n = signSelection.size;
+  if (countEl) countEl.textContent = String(n);
+  if (bar) bar.hidden = !(n > 0 && state.route === "mes-lv");
+}
+
+function clearSignSelection() {
+  signSelection.clear();
+  refreshSignerBar();
+}
+
 async function loadMesLv() {
   const listEl = document.getElementById("mes-lv-list");
+  const showSignees = !!(document.getElementById("mes-lv-show-signees") || {}).checked;
+  const selectAll = document.getElementById("mes-lv-select-all");
+  if (selectAll) selectAll.checked = false;
+  clearSignSelection();
   listEl.innerHTML = '<p class="muted">Chargement…</p>';
   try {
     const data = await listLettresVoiture();
-    if (!data || !data.length) {
-      listEl.innerHTML = '<p class="muted">Aucune lettre de voiture.</p>';
+    // Non signées en haut (la plus récente d'abord, déjà trié par la requête) ;
+    // les signées n'apparaissent que sous le filtre « Signées ».
+    const rows = (data || []).filter((lv) => (showSignees ? lv.statut === "signee" : lv.statut !== "signee"));
+    if (!rows.length) {
+      listEl.innerHTML = `<p class="entity-empty">${showSignees ? "Aucune lettre signée." : "Aucune lettre de voiture à signer."}</p>`;
       return;
     }
     listEl.innerHTML = "";
-    for (const lv of data.slice(0, 30)) {
-      listEl.appendChild(buildLvRow(lv));
+    for (const lv of rows.slice(0, 60)) {
+      listEl.appendChild(buildSignableRow(lv, showSignees));
     }
   } catch (err) {
     reportIfVersionMismatch(err);
     listEl.innerHTML = `<p class="muted">Impossible de charger (hors ligne ?) : ${escapeHtml(err.message || String(err))}</p>`;
   }
+}
+
+// Ligne de l'accueil chauffeur : case à cocher (si signable) + ligne lettre.
+function buildSignableRow(lv, isSigned) {
+  const row = buildLvRow(lv);
+  if (isSigned || !isSignable(lv)) return row;
+  const check = document.createElement("label");
+  check.className = "lv-row-check";
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.setAttribute("aria-label", `Sélectionner ${lv.numero || "la lettre"}`);
+  input.checked = signSelection.has(lv.id);
+  input.addEventListener("change", () => {
+    if (input.checked) signSelection.set(lv.id, lv);
+    else signSelection.delete(lv.id);
+    row.classList.toggle("is-selected", input.checked);
+    refreshSignerBar();
+    syncSelectAllCheckbox();
+  });
+  check.appendChild(input);
+  row.insertBefore(check, row.firstChild);
+  return row;
+}
+
+function syncSelectAllCheckbox() {
+  const selectAll = document.getElementById("mes-lv-select-all");
+  if (!selectAll) return;
+  const boxes = [...document.querySelectorAll("#mes-lv-list .lv-row-check input")];
+  selectAll.checked = boxes.length > 0 && boxes.every((b) => b.checked);
+}
+
+function onSelectAllChange(checked) {
+  document.querySelectorAll("#mes-lv-list .lv-row-check input").forEach((b) => {
+    if (b.checked !== checked) { b.checked = checked; b.dispatchEvent(new Event("change")); }
+  });
+}
+
+// « Signer (N) » : valide le groupage puis ouvre le choix sur place / par mail.
+function openSignerChoice() {
+  const lvs = [...signSelection.values()];
+  const grp = canGroupForSignature(lvs);
+  const msgEl = document.getElementById("signer-choice-msg");
+  const sheet = document.getElementById("signer-choice-sheet");
+  document.getElementById("signer-choice-count").textContent = `(${lvs.length})`;
+  if (!grp.ok) {
+    alert(grp.reason);
+    return;
+  }
+  if (msgEl) msgEl.textContent = `${lvs.length} lettre(s) de voiture, même contact signataire.`;
+  if (sheet) sheet.hidden = false;
+}
+
+function closeSignerChoice() {
+  const sheet = document.getElementById("signer-choice-sheet");
+  if (sheet) sheet.hidden = true;
+}
+
+async function doSignSurPlace() {
+  const ids = [...signSelection.keys()];
+  if (!ids.length) return;
+  closeSignerChoice();
+  try {
+    const res = await workerSignatureSurPlace(ids);
+    const urls = (res.lettres || []).map((l) => l.signing_url).filter(Boolean);
+    clearSignSelection();
+    await loadMesLv();
+    // On enchaîne les signatures sur ce téléphone : on ouvre la première ; chaque
+    // retour ramène l'utilisateur ici pour la suivante (liste des liens affichée).
+    if (urls.length) {
+      alert(`${urls.length} lettre(s) prête(s) à signer sur ce téléphone. Ouverture de la première.`);
+      window.location.href = urls[0];
+    }
+  } catch (err) {
+    alert("Échec de la préparation sur place : " + (err.message || err));
+  }
+}
+
+async function doSignParMail() {
+  const ids = [...signSelection.keys()];
+  if (!ids.length) return;
+  closeSignerChoice();
+  try {
+    const res = await workerSignatureParMail(ids);
+    clearSignSelection();
+    await loadMesLv();
+    alert(`Enveloppe envoyée à ${res.contact_email || "le contact"}. ${ids.length} lettre(s) en attente de signature.`);
+  } catch (err) {
+    alert("Échec de l'envoi par mail : " + (err.message || err));
+  }
+}
+
+// « Nouvelle lettre de voiture » : ouvre l'éditeur du jour (la lettre est créée
+// à la première saisie, cf. ensureLv/autosave — modèle « une lettre par jour »).
+async function createNewLvAndOpen() {
+  state.lv = null;
+  await navigate("today");
 }
 
 async function openLvInToday(lv) {
@@ -2764,6 +2893,7 @@ async function navigate(route) {
   if (!ROUTES.includes(route)) route = defaultRouteForMode();
   maybeSwitchModeForRoute(route); // cohérence mode <-> contenu (utilisateurs bureau)
   resetUndo(); // on quitte le formulaire courant : la pile d'annulation repart de zéro
+  if (route !== "mes-lv") clearSignSelection(); // on quitte l'accueil : plus de sélection
   state.route = route;
   document.querySelectorAll(".view").forEach((el) => {
     el.hidden = el.dataset.view !== route;
@@ -2800,6 +2930,24 @@ function wireStaticUI() {
   // Bouton d'export PDF de la lettre ouverte (g).
   const btnPdfToday = document.getElementById("btn-pdf-today");
   if (btnPdfToday) btnPdfToday.addEventListener("click", () => exportLvPdf(state.lv));
+
+  // Accueil chauffeur : nouvelle lettre, sélection, signature (f).
+  const btnNewLv = document.getElementById("btn-new-lv-chauffeur");
+  if (btnNewLv) btnNewLv.addEventListener("click", createNewLvAndOpen);
+  const selectAll = document.getElementById("mes-lv-select-all");
+  if (selectAll) selectAll.addEventListener("change", () => onSelectAllChange(selectAll.checked));
+  const showSignees = document.getElementById("mes-lv-show-signees");
+  if (showSignees) showSignees.addEventListener("change", () => loadMesLv());
+  const btnSigner = document.getElementById("btn-signer");
+  if (btnSigner) btnSigner.addEventListener("click", openSignerChoice);
+  const btnSignerClose = document.getElementById("btn-signer-choice-close");
+  if (btnSignerClose) btnSignerClose.addEventListener("click", closeSignerChoice);
+  const signerSheet = document.getElementById("signer-choice-sheet");
+  if (signerSheet) signerSheet.addEventListener("click", (e) => { if (e.target.id === "signer-choice-sheet") closeSignerChoice(); });
+  const btnSurPlace = document.getElementById("btn-sign-sur-place");
+  if (btnSurPlace) btnSurPlace.addEventListener("click", doSignSurPlace);
+  const btnParMail = document.getElementById("btn-sign-par-mail");
+  if (btnParMail) btnParMail.addEventListener("click", doSignParMail);
 
   document.querySelectorAll("[data-route]").forEach((el) => {
     el.addEventListener("click", (e) => {

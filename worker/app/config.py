@@ -41,6 +41,12 @@ class Settings:
     kerlam_adresse: str = os.environ.get(
         "KERLAM_ADRESSE", "13 allée des Marguerites, 77410 Claye-Souilly"
     )
+    # Signature électronique Documenso (sign.kerlam.fr) : clé API UNIQUEMENT ici
+    # (jamais côté front ni en base), lue depuis l'environnement du worker.
+    documenso_url: str = os.environ.get("DOCUMENSO_URL", "https://sign.kerlam.fr")
+    documenso_api_key: str = os.environ.get("DOCUMENSO_API_KEY", "")
+    # Bucket d'archivage des PDF signés (API Storage Supabase, privé).
+    signed_bucket: str = os.environ.get("SIGNED_BUCKET", "lettres-signees")
 
 
 settings = Settings()

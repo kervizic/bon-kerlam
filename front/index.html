@@ -10,8 +10,8 @@
   <!-- Empreinte de version du shell (cf. assets/app-version.js). Bumper `app-rev`
        à chaque déploiement backend devant forcer un refresh (sinon le bump d'un
        `?v=` d'asset suffit). -->
-  <meta name="app-version" content="0.1.0-beta.9">
-  <meta name="app-rev" content="9">
+  <meta name="app-version" content="0.1.0-beta.10">
+  <meta name="app-rev" content="10">
 
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
@@ -26,8 +26,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="mobile-web-app-capable" content="yes">
 
-  <link rel="stylesheet" href="/assets/styles.css?v=9">
-  <script src="/assets/app-version.js?v=9" defer></script>
+  <link rel="stylesheet" href="/assets/styles.css?v=10">
+  <script src="/assets/app-version.js?v=10" defer></script>
 </head>
 <body>
   <a href="#main" class="skip-link">Aller au contenu</a>
@@ -256,6 +256,14 @@
         <!-- -------------------------------------------------------------- Mes LV -->
         <section id="view-mes-lv" class="view" data-view="mes-lv" hidden>
           <div class="view-header"><h1>Mes lettres de voiture</h1></div>
+          <button type="button" id="btn-new-lv-chauffeur" class="btn btn-primary btn-block btn-new-lv">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+            Nouvelle lettre de voiture
+          </button>
+          <div class="mes-lv-toolbar">
+            <label class="check-inline"><input type="checkbox" id="mes-lv-select-all"> Tout sélectionner</label>
+            <label class="check-inline mes-lv-filter"><input type="checkbox" id="mes-lv-show-signees"> Signées</label>
+          </div>
           <div id="mes-lv-list" class="mes-lv-list">
             <p class="muted">Chargement…</p>
           </div>
@@ -412,6 +420,14 @@
       </main>
     </div>
 
+    <!-- Barre d'action signature (apparaît dès qu'une lettre est cochée, f). -->
+    <div id="signer-bar" class="signer-bar" hidden>
+      <button type="button" id="btn-signer" class="btn btn-primary btn-block">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+        Signer (<span id="signer-count">0</span>)
+      </button>
+    </div>
+
     <nav class="bottom-bar" aria-label="Navigation">
       <!-- Chauffeur -->
       <button type="button" class="bottom-bar-item bb-chauffeur" data-route="today">
@@ -484,6 +500,25 @@
       <input type="search" id="site-picker-search" class="filter-input" placeholder="Rechercher un site…">
       <div id="site-picker-list" class="sheet-list"></div>
       <button type="button" class="btn btn-secondary btn-block is-spaced" id="btn-site-picker-new">+ Nouveau site</button>
+    </div>
+  </div>
+
+  <!-- ===================================== Feuille « choix du mode de signature » -->
+  <div id="signer-choice-sheet" class="sheet-overlay" hidden>
+    <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="signer-choice-title">
+      <div class="sheet-header">
+        <h2 id="signer-choice-title">Signer <span id="signer-choice-count"></span></h2>
+        <button type="button" class="icon-btn" id="btn-signer-choice-close" aria-label="Fermer"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      </div>
+      <p id="signer-choice-msg" class="muted"></p>
+      <button type="button" id="btn-sign-sur-place" class="btn btn-primary btn-block is-spaced">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+        Sur place (sur ce téléphone)
+      </button>
+      <button type="button" id="btn-sign-par-mail" class="btn btn-secondary btn-block is-spaced">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+        Par mail au contact
+      </button>
     </div>
   </div>
 
@@ -562,8 +597,8 @@
   </template>
 
   <!-- ================================================================== Scripts -->
-  <script src="/assets/config.js?v=9"></script>
+  <script src="/assets/config.js?v=10"></script>
   <script src="/assets/vendor/supabase/supabase.js"></script>
-  <script type="module" src="/assets/app.js?v=9"></script>
+  <script type="module" src="/assets/app.js?v=10"></script>
 </body>
 </html>

@@ -117,6 +117,31 @@ def shoot_lv_modif(ctx, prefix: str) -> None:
         page.close()
 
 
+def shoot_signer(ctx, prefix: str) -> None:
+    """Accueil chauffeur : 2 lettres cochées -> « Signer (2) » -> choix Sur place /
+    Par mail (f)."""
+    for theme in ("clair", "sombre"):
+        page = ctx.new_page()
+        try:
+            page.goto(f"{BASE}?demo=1&screen=mes-lv&role=chauffeur&theme={theme}", wait_until="networkidle")
+            page.wait_for_timeout(600)
+            boxes = page.locator("#mes-lv-list .lv-row-check input")
+            # Deux lettres du même contact (démo : KER-03041 + KER-03042).
+            boxes.nth(1).check()
+            boxes.nth(2).check()
+            page.wait_for_timeout(200)
+            page.screenshot(path=str(OUT / f"{prefix}-accueil-signer-{theme}.png"), full_page=False)
+            print(f"   accueil-signer-{theme}")
+            page.click("#btn-signer")
+            page.wait_for_timeout(300)
+            page.screenshot(path=str(OUT / f"{prefix}-choix-signature-{theme}.png"), full_page=False)
+            print(f"   choix-signature-{theme}")
+        except Exception as exc:  # noqa: BLE001
+            print(f"   !! signer/{theme}: {exc}")
+        finally:
+            page.close()
+
+
 def main() -> int:
     with sync_playwright() as p:
         browser = p.chromium.launch()
@@ -136,6 +161,7 @@ def main() -> int:
         for route, label in CHAUFFEUR_SCREENS:
             shoot(iphone, "iphone-chauffeur", route, "clair", label, role="chauffeur")
         shoot(iphone, "iphone-chauffeur", "today", "sombre", "aujourdhui", role="chauffeur")
+        shoot_signer(iphone, "iphone-chauffeur")
         iphone.close()
 
         ipad = browser.new_context(viewport=IPAD, device_scale_factor=2, is_mobile=True, has_touch=True)

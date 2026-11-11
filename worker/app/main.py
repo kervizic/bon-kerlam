@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.responses import Response
 
-from . import closing, db, geocode, pdf
+from . import closing, db, geocode, pdf, signature
 from .auth import require_token, require_user
 from .config import settings
 
@@ -25,13 +25,17 @@ async def lifespan(app: FastAPI):
     if settings.geocode_on_start:
         with contextlib.suppress(Exception):
             geocode.geocode_missing()
-    task = asyncio.create_task(_midnight_loop())
+    tasks = [asyncio.create_task(_midnight_loop())]
+    if settings.documenso_api_key:
+        tasks.append(asyncio.create_task(_signature_loop()))
     try:
         yield
     finally:
-        task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await task
+        for task in tasks:
+            task.cancel()
+        for task in tasks:
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
 
 
 app = FastAPI(
@@ -138,6 +142,45 @@ def signature_envoi_groupe(payload: dict | None = None, _=Depends(require_token(
         "documenso": "hors_perimetre_beta",
         "lv": rows,
     }
+
+
+def _assert_user_access(email: str | None, lv_ids: list[int]) -> None:
+    for lv_id in lv_ids:
+        if not _user_can_access_lv(email, lv_id):
+            raise HTTPException(status_code=403, detail=f"Accès refusé à la lettre {lv_id}.")
+
+
+@router.post("/signature/sur-place")
+def signature_sur_place(payload: dict, user=Depends(require_user)):
+    """Signature « sur place » : une enveloppe par lettre, sans e-mail. Renvoie
+    les liens de signature que le front enchaîne sur le téléphone du chauffeur."""
+    lv_ids = [int(x) for x in (payload or {}).get("lv_ids") or []]
+    if not lv_ids:
+        raise HTTPException(status_code=400, detail="Aucune lettre sélectionnée.")
+    _assert_user_access(user.get("email"), lv_ids)
+    try:
+        return {"mode": "sur_place", "lettres": signature.sur_place(lv_ids)}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/signature/par-mail")
+def signature_par_mail(payload: dict, user=Depends(require_user)):
+    """Signature « par mail » : UNE enveloppe groupée envoyée au contact commun."""
+    lv_ids = [int(x) for x in (payload or {}).get("lv_ids") or []]
+    if not lv_ids:
+        raise HTTPException(status_code=400, detail="Aucune lettre sélectionnée.")
+    _assert_user_access(user.get("email"), lv_ids)
+    try:
+        return {"mode": "par_mail", **signature.par_mail(lv_ids)}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/signature/poll")
+def signature_poll(_=Depends(require_token("write"))):
+    """Déclenche la vérification des enveloppes en attente (archivage + statut)."""
+    return signature.poll_pending()
 
 
 @router.post("/chauffeur/{chauffeur_id}/depart")
@@ -277,3 +320,12 @@ async def _midnight_loop() -> None:
         await asyncio.sleep(max((nxt - now).total_seconds(), 60))
         with contextlib.suppress(Exception):
             closing.close_overdue()
+
+
+async def _signature_loop() -> None:
+    """Vérifie périodiquement les enveloppes Documenso en attente (retour de
+    signature) et marque/archive les lettres signées."""
+    while True:
+        await asyncio.sleep(180)
+        with contextlib.suppress(Exception):
+            await asyncio.to_thread(signature.poll_pending)
