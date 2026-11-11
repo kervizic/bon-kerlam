@@ -134,7 +134,7 @@ services:
         condition: service_started
     ports:
       - "127.0.0.1:5000:5000"
-    mem_limit: 160m
+    mem_limit: 192m
     environment:
       ANON_KEY: ${ANON_KEY}
       SERVICE_KEY: ${SERVICE_ROLE_KEY}

@@ -265,3 +265,17 @@ CFG
 
 `config.js` est chargé **sans `?v=`** : les vhosts le servent en `no-cache` (pas en
 cache immuable), sinon un mauvais `config.js` resterait figé 1 an côté navigateur.
+
+### Stockage S3 (activé 2026-11-11)
+
+Clés OVH réutilisées du remote rclone `[kerlam]` (= Documenso). `.env` :
+`S3_ACCESS_KEY`/`S3_SECRET_KEY`, `S3_BUCKET=kerlam-bon`, `PGRST_DB_SCHEMAS=api,svc,storage`.
+Bucket objet `kerlam-bon` créé via `rclone mkdir kerlam:kerlam-bon` (ne PAS toucher
+kerlam/kerlam-documenso/kerlam-protect-clips/kerpta). Pièges rencontrés sur init
+non rejoué : (1) mot de passe `supabase_storage_admin` à poser (= POSTGRES_PASSWORD) ;
+(2) `GRANT anon, authenticated, service_role TO supabase_storage_admin` (sinon
+403 « permission denied to set role service_role ») — désormais dans `zz-fix.sql`.
+Bucket applicatif privé `chauffeur-docs` créé via l'API storage (routes internes
+sans préfixe : `POST http://127.0.0.1:5000/bucket`, objets `/object/<bucket>/<path>` ;
+le préfixe `/storage/v1/` est ajouté par nginx `api.kerlam.fr`). Test service key
+upload/download/delete OK. `mem_limit` storage porté à 192m (était 160m, saturait).
