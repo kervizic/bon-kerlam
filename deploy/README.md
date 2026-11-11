@@ -249,3 +249,19 @@ cd /opt/bon-kerlam/deploy && docker compose up -d
 
 Sauvegardes présentes : `/root/backup-nginx-20261111-143433.tgz`,
 `/root/backup-bon-public-20261111-143433.tgz`, copies `vhost-{bon,api}-before-*.conf`.
+
+### Étape CRITIQUE : `config.js` runtime du front
+
+L'image front embarque un `assets/config.js` de **dev** (`API_URL: http://localhost:54321`).
+Au déploiement (option A, fichiers statiques), il FAUT l'écraser avec les vraies
+valeurs, sinon le front (bouton Google, OTP) part sur localhost :
+
+```bash
+cd /opt/bon-kerlam/deploy && set -a; . ./.env; set +a
+cat > /opt/bon-kerlam/front/assets/config.js <<CFG
+window.BON_CFG = { API_URL: "https://api.kerlam.fr", ANON_KEY: "${ANON_KEY}", GOOGLE_ENABLED: true };
+CFG
+```
+
+`config.js` est chargé **sans `?v=`** : les vhosts le servent en `no-cache` (pas en
+cache immuable), sinon un mauvais `config.js` resterait figé 1 an côté navigateur.
