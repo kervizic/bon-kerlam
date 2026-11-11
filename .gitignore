@@ -2,26 +2,31 @@
 .env
 .env.*
 !.env.example
-deploy/**/.env
-!deploy/**/.env.example
+*.pem
+*.key
 
-# Data / runtime
+# Données & volumes runtime
 data/
-*.db
-*.db-wal
-*.db-shm
-*.sqlite3
+volumes/
+deploy/volumes/db-data/
+deploy/volumes/storage-data/
+backups/
+*.sql.gz
+*.dump
 
 # Python
 .venv/
+venv/
 __pycache__/
 *.pyc
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
-*.egg-info/
+.coverage
+htmlcov/
 
-# OS / editors
+# OS / éditeurs
 .DS_Store
+*.swp
 .idea/
 .vscode/

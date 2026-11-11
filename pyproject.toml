@@ -1,22 +1,21 @@
 [project]
 name = "bon-kerlam"
 version = "0.1.0b1"
-description = "Lettres de voiture dématérialisées KERLAM (bon.kerlam.fr)"
+description = "Lettres de voiture dématérialisées KERLAM — worker + MCP (Supabase allégé)"
 requires-python = ">=3.12"
 
 [tool.ruff]
 line-length = 120
 target-version = "py312"
-extend-exclude = [".venv", "data"]
+extend-exclude = ["front/assets/vendor", "**/migrations/*.sql"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "W"]
-ignore = ["B008"]  # FastAPI Depends() in defaults
+ignore = ["B008"]  # FastAPI Depends() en valeur par défaut
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
-pythonpath = ["."]
-addopts = "-q"
-asyncio_mode = "auto"
-asyncio_default_fixture_loop_scope = "function"
-filterwarnings = ["ignore::DeprecationWarning"]
+testpaths = ["worker/tests", "supabase/tests"]
+addopts = "-ra -q"
+markers = [
+  "db: test nécessitant une base Postgres (service CI).",
+]
