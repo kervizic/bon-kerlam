@@ -95,12 +95,21 @@ def test_fr_date():
     assert pdf._fr_date(datetime.date(2026, 3, 9)) == "09/03/2026"
 
 
+def test_unite_label_big_bag_pluriel():
+    assert pdf.unite_label("big_bag", 1) == "big bag"
+    assert pdf.unite_label("big_bag", 3) == "big bags"
+    assert pdf.unite_label("t", 5) == "t"
+    assert pdf.unite_label("m3", 2) == "m³"
+    assert pdf.unite_label("unite", 1) == "unité"
+    assert pdf.unite_label("unite", 4) == "unités"
+
+
 def test_pdf_date_francaise_et_siren():
     ctx = _context()
     ctx["lv"]["date_etablissement"] = "11/11/2026"  # tel que build_context le produit
-    ctx["transporteur"] = {"nom": "KERLAM", "adresse": "KERLAM — 13 allée des Marguerites, 77410 Claye-Souilly",
+    ctx["transporteur"] = {"nom": "KERLAM", "adresse": "KERLAM — 2 rue des Plantes, 77410 Villevaudé",
                            "siren": "838 377 331"}
     html = pdf.render_html(ctx)
     assert "Établie le 11/11/2026" in html
     assert "838 377 331" in html
-    assert "13 allée des Marguerites" in html
+    assert "2 rue des Plantes" in html

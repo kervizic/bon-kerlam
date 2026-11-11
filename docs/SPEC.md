@@ -40,7 +40,7 @@ Déclencheur direct : contrôle DRIEAT du 29/10/2026, ayant constaté l'absence 
 | Repère | Mention | Détail |
 |---|---|---|
 | a | Date d'établissement | Date de création de la LV |
-| b | Transporteur | KERLAM, 15 Rue Victor Drouet, 77410 Claye-Souilly, SIREN (paramètre applicatif) |
+| b | Transporteur | KERLAM, 2 rue des Plantes, 77410 Villevaudé, SIREN (paramètre applicatif) |
 | c | Date de prise en charge | Date de prise en charge de la marchandise |
 | d | Nature et quantité | Nature de la marchandise, quantité / poids / volume |
 | e | Expéditeur | Identité de l'expéditeur |

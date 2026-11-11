@@ -36,6 +36,8 @@ jobs:
         run: python3 scripts/check-no-emoji.py
       - name: Anti-« LV » (libellés « lettre de voiture » en toutes lettres)
         run: python3 scripts/check-no-lv.py
+      - name: Sarpanch réservée au logo
+        run: python3 scripts/check-sarpanch.py
 
   db-tests:
     name: tests SQL (fonctions + RLS + migrations)
@@ -100,7 +102,7 @@ jobs:
           S3_ENDPOINT=https://s3.eu-west-par.io.cloud.ovh.net
           S3_ACCESS_KEY=
           S3_SECRET_KEY=
-          APP_VERSION=0.1.0-beta.10
+          APP_VERSION=0.1.0-beta.11
           GIT_SHA=${{ github.sha }}
           GEOCODE_ON_START=false
           KERLAM_SIREN=
@@ -176,7 +178,7 @@ jobs:
         run: |
           body=$(curl -fsS http://127.0.0.1:8099/worker/version)
           echo "$body"
-          echo "$body" | python -c "import sys,json; d=json.load(sys.stdin); assert d['version']=='0.1.0-beta.10', d; assert d['schema_version'], d; print('version ok, schema', d['schema_version'])"
+          echo "$body" | python -c "import sys,json; d=json.load(sys.stdin); assert d['version']=='0.1.0-beta.11', d; assert d['schema_version'], d; print('version ok, schema', d['schema_version'])"
       - name: Attente de GoTrue (auth)
         run: |
           for i in $(seq 1 30); do

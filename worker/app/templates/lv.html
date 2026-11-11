@@ -84,7 +84,7 @@
       <tbody>
       {% for ligne in tour.lignes %}
         {# Seul le NOM de l'article est imprimé — jamais le commentaire interne. #}
-        <tr><td>{{ ligne.nom }}</td><td class="num">{{ ligne.quantite }}</td><td>{{ ligne.unite }}</td></tr>
+        <tr><td>{{ ligne.nom }}</td><td class="num">{{ ligne.quantite }}</td><td>{{ ligne.unite_aff or ligne.unite }}</td></tr>
       {% else %}
         <tr><td colspan="3" class="muted">Aucune ligne.</td></tr>
       {% endfor %}

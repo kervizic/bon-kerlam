@@ -39,7 +39,7 @@ class Settings:
     # Identité KERLAM imprimée sur le PDF (SIREN + adresse du siège, cf. Kbis).
     kerlam_siren: str = os.environ.get("KERLAM_SIREN", "")
     kerlam_adresse: str = os.environ.get(
-        "KERLAM_ADRESSE", "13 allée des Marguerites, 77410 Claye-Souilly"
+        "KERLAM_ADRESSE", "2 rue des Plantes, 77410 Villevaudé"
     )
     # Signature électronique Documenso (sign.kerlam.fr) : clé API UNIQUEMENT ici
     # (jamais côté front ni en base), lue depuis l'environnement du worker.

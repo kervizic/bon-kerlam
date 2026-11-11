@@ -30,6 +30,22 @@ def _format_siren(raw: str) -> str:
     return raw or ""
 
 
+def unite_label(code: str, quantite) -> str:
+    """Libellé d'unité pour le PDF, avec pluriel (« 3 big bags »)."""
+    try:
+        q = float(quantite)
+    except (TypeError, ValueError):
+        q = 1
+    plural = q > 1
+    mapping = {
+        "t": "t",
+        "m3": "m³",
+        "unite": "unités" if plural else "unité",
+        "big_bag": "big bags" if plural else "big bag",
+    }
+    return mapping.get(code, code or "")
+
+
 def _fr_date(value) -> str:
     """Date au format français JJ/MM/AAAA (depuis une date ou une chaîne ISO)."""
     if not value:
@@ -99,6 +115,8 @@ def build_context(lv_id: int) -> dict[str, Any]:
             """,
             (tour["id"],),
         )
+        for ligne in tour["lignes"]:
+            ligne["unite_aff"] = unite_label(ligne.get("unite"), ligne.get("quantite"))
     # Bandeau « Non signée » tant que la lettre n'est pas au statut signée.
     signee = lv.get("statut") == "signee"
     return {"lv": lv, "tours": tours, "transporteur": TRANSPORTEUR, "signee": signee}

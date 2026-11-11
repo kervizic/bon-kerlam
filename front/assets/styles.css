@@ -356,10 +356,15 @@ body.mode-bureau .side-nav li.nav-bureau { display: block; }
   gap: 12px; margin-bottom: 16px;
 }
 .lv-numero {
-  font-weight: 900; color: var(--text);
-  font-family: "Sarpanch", Arial, sans-serif;
+  font-weight: 700; color: var(--text);
+  font-family: var(--font); /* police système : la Sarpanch est réservée au logo */
   border-left: 4px solid var(--c-orange);
   padding-left: 8px;
+}
+.lv-numero:empty { display: none; }            /* rien tant qu'aucun numéro */
+.lv-numero.is-brouillon {                        /* discret « Brouillon » */
+  font-weight: 600; color: var(--text-muted);
+  border-left-color: var(--border);
 }
 
 .bottom-bar {
@@ -444,7 +449,19 @@ input[type="email"], input[type="tel"], input[type="search"], select, textarea {
   color: var(--text);
   width: 100%;
   font-variant-numeric: tabular-nums;
+  /* iOS : les input date/time/number ont une largeur intrinsèque qui déborde
+     sinon (cf. retour iPhone). On force la mise en boîte et on neutralise
+     l'apparence native pour qu'ils respectent width:100%. */
+  min-width: 0;
+  box-sizing: border-box;
+  display: block;
+  text-align: left;
+  -webkit-appearance: none;
+  appearance: none;
 }
+/* Le picker natif iOS garde son indicateur ; on évite juste le débordement. */
+input[type="date"], input[type="time"], input[type="number"] { max-width: 100%; }
+input[type="date"]::-webkit-date-and-time-value { text-align: left; }
 input:focus-visible, select:focus-visible, textarea:focus-visible {
   outline: 2px solid var(--c-orange);
   outline-offset: 1px;

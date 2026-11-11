@@ -4,6 +4,29 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.11] — 2026-11-11
+
+Lot correctif (retours iPhone de Manu). Items A, B, E, F, G, I livrés ; C, D, H
+reportés (budget) au lot suivant.
+
+- **(A)** En-tête du formulaire : plus de « — ». Tant qu'aucun numéro n'est
+  attribué, un discret **« Brouillon »** ; dès l'attribution, **« KER-xxxxx » en
+  police système** (plus de Sarpanch).
+- **(B)** Champs **date / heure / nombre** qui débordaient sur iPhone : largeur
+  100 %, `appearance:none`, `min-width:0`, `box-sizing`, alignés comme les autres
+  champs. Le test « pas de scroll horizontal » couvre les formulaires ouverts.
+- **(E)** **Suppression totale de la charge estimée / alerte de surcharge / %
+  PTAC** (formulaire, PDF, hors-ligne). Le PTAC et le poids à vide restent sur la
+  **fiche camion** uniquement.
+- **(F)** Police **Sarpanch réservée au logo KERLAM** (front + PDF) — **test CI**
+  `scripts/check-sarpanch.py`.
+- **(G)** **Adresse KERLAM = « 2 rue des Plantes, 77410 Villevaudé »** partout :
+  PDF (config `KERLAM_ADRESSE`), e-mails `otp_fr.html` / `action_fr.html`, pages
+  légales du front, SPEC. Plus aucune occurrence « Victor Drouet » / « Marguerites ».
+- **(I)** Unité de chargement **« big bag »** ajoutée (tonne, m³, unité, big bag) ;
+  **pluriel sur le PDF (« 3 big bags »)**, mémoire de dernière unité par
+  chauffeur/article conservée. `unite_label()` worker testé.
+
 ## [0.1.0-beta.10] — 2026-11-11
 
 Lot 2 — (f) accueil chauffeur + signature électronique Documenso.

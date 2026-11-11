@@ -113,7 +113,6 @@ import {
   workerSignatureParMail,
   searchAddress,
   reverseAddress,
-  rpcLvPoids,
   rpcPrefill,
   rpcSitesPour,
   rpcLvUndo,
@@ -121,11 +120,11 @@ import {
   todayIso,
 } from "./data.js";
 
-import { initInstall } from "./install.js?v=10";
-import { UndoStack } from "./undo-stack.js?v=10";
-import { PdfCache, shouldCachePdf, formatGeneratedAt } from "./pdf-cache.js?v=10";
-import { statutLabel } from "./status-labels.js?v=10";
-import { canGroupForSignature } from "./signature-group.js?v=10";
+import { initInstall } from "./install.js?v=11";
+import { UndoStack } from "./undo-stack.js?v=11";
+import { PdfCache, shouldCachePdf, formatGeneratedAt } from "./pdf-cache.js?v=11";
+import { statutLabel } from "./status-labels.js?v=11";
+import { canGroupForSignature } from "./signature-group.js?v=11";
 
 /* ============================================================== IndexedDB == */
 /* Deux object stores :
@@ -499,7 +498,6 @@ const state = {
   refs: { camions: [], clients: [], projets: [], contacts: [], articles: [], sites: [], chauffeurs: [] },
   lv: null,
   tours: [],
-  lastPoids: null,
   prefillData: {},
   route: "dashboard",
   mode: "chauffeur", // vue active : "chauffeur" (défaut) | "bureau"
@@ -848,7 +846,16 @@ function fillHeaderForm(data) {
 }
 
 function renderLvNumero() {
-  document.getElementById("lv-numero").textContent = (state.lv && state.lv.numero) || "—";
+  const el = document.getElementById("lv-numero");
+  const numero = state.lv && state.lv.numero;
+  if (numero) {
+    el.textContent = numero;             // KER-xxxxx, police système
+    el.classList.remove("is-brouillon");
+  } else {
+    // Pas de numéro tant qu'aucun tour : discret « Brouillon » (jamais « — »).
+    el.textContent = "Brouillon";
+    el.classList.add("is-brouillon");
+  }
 }
 
 async function ensureLv() {
@@ -1019,7 +1026,7 @@ function renderLigneRow(lignesList, entry, ligne) {
   wireAutosaveField(qteInput, { table: "tour_lignes", id: ligne.id, field: "quantite", transform: toFloatOrNull });
   wireAutosaveField(uniteSel, { table: "tour_lignes", id: ligne.id, field: "unite" });
 
-  // Le poids dépend de ces 3 champs : petite marge pour laisser l'autosave (600ms) partir.
+  // Ces 3 champs déclenchent une remise en cache hors-ligne (autosave 600ms).
   [articleSel, qteInput, uniteSel].forEach((el) => {
     el.addEventListener("change", () => setTimeout(refreshWeightGauge, 750));
   });
@@ -1093,57 +1100,19 @@ async function addTour() {
   }
 }
 
-/* --------------------------------------------------------------- Jauge de poids */
+/* ---------------------------------------------- Mise en cache hors-ligne (e/g) */
+// Charge estimée / % PTAC supprimés en beta.11 : ce hook ne fait plus que
+// entretenir l'instantané hors-ligne et le PDF local (appelé après modification).
 async function refreshWeightGauge() {
-  const fillEl = document.getElementById("weight-gauge-fill");
-  const textEl = document.getElementById("weight-gauge-text");
-  const noteEl = document.getElementById("weight-gauge-note");
-  if (!state.lv) {
-    fillEl.style.width = "0%";
-    fillEl.classList.remove("is-warn", "is-danger");
-    textEl.textContent = "—";
-    noteEl.textContent = "";
-    return;
-  }
-  try {
-    const poids = await rpcLvPoids(state.lv.id);
-    state.lastPoids = poids;
-    renderWeightGauge(poids, false);
-    await cacheTodaySnapshot();
-  } catch (err) {
-    reportIfVersionMismatch(err);
-    if (state.lastPoids) renderWeightGauge(state.lastPoids, true);
-  }
+  await cacheTodaySnapshot();
 }
 
-function renderWeightGauge(poids, isStale) {
-  const fillEl = document.getElementById("weight-gauge-fill");
-  const textEl = document.getElementById("weight-gauge-text");
-  const noteEl = document.getElementById("weight-gauge-note");
-  const ratioPct = poids.ratio != null ? Math.round(poids.ratio * 100) : null;
-
-  fillEl.style.width = Math.min(ratioPct || 0, 100) + "%";
-  fillEl.classList.remove("is-warn", "is-danger");
-  if (poids.gauge === "warn") fillEl.classList.add("is-warn");
-  if (poids.gauge === "danger") fillEl.classList.add("is-danger");
-
-  textEl.textContent = poids.ptac_t
-    ? `${poids.masse_totale_t} t / ${poids.ptac_t} t (${ratioPct}%)`
-    : `${poids.masse_totale_t} t (PTAC inconnu)`;
-
-  let note = poids.poids_partiel ? `${poids.lignes_non_comptees} ligne(s) non convertie(s) en poids. ` : "";
-  if (isStale) note += "Dernière valeur connue (hors ligne).";
-  noteEl.textContent = note;
-}
-
-/* -------------------------------------------------- Instantané hors-ligne (Contrôle) */
 async function cacheTodaySnapshot() {
   if (!state.lv) return;
   const snapshot = {
     savedAt: new Date().toISOString(),
     lv: state.lv,
     tours: state.tours.map(({ tour, lignes }) => ({ tour, lignes })),
-    poids: state.lastPoids || null,
     articlesById: Object.fromEntries((state.refs.articles || []).map((a) => [a.id, a.nom])),
     sitesById: Object.fromEntries((state.refs.sites || []).map((s) => [s.id, s.nom])),
   };

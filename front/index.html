@@ -10,8 +10,8 @@
   <!-- Empreinte de version du shell (cf. assets/app-version.js). Bumper `app-rev`
        à chaque déploiement backend devant forcer un refresh (sinon le bump d'un
        `?v=` d'asset suffit). -->
-  <meta name="app-version" content="0.1.0-beta.10">
-  <meta name="app-rev" content="10">
+  <meta name="app-version" content="0.1.0-beta.11">
+  <meta name="app-rev" content="11">
 
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
@@ -26,8 +26,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="mobile-web-app-capable" content="yes">
 
-  <link rel="stylesheet" href="/assets/styles.css?v=10">
-  <script src="/assets/app-version.js?v=10" defer></script>
+  <link rel="stylesheet" href="/assets/styles.css?v=11">
+  <script src="/assets/app-version.js?v=11" defer></script>
 </head>
 <body>
   <a href="#main" class="skip-link">Aller au contenu</a>
@@ -196,7 +196,7 @@
         <section id="view-today" class="view" data-view="today" hidden>
           <div class="view-header">
             <h1>Aujourd'hui</h1>
-            <span id="lv-numero" class="lv-numero">—</span>
+            <span id="lv-numero" class="lv-numero"></span>
             <button type="button" id="btn-pdf-today" class="icon-btn btn-pdf" title="Exporter en PDF" aria-label="Exporter en PDF">
               <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M12 18v-6"/><path d="m9 15 3 3 3-3"/></svg>
             </button>
@@ -239,15 +239,6 @@
               <input type="text" id="f-heures-regie" name="heures_regie" placeholder="ex. 7h30 - 16h00">
             </div>
           </form>
-
-          <div class="weight-gauge" id="weight-gauge">
-            <div class="weight-gauge-head">
-              <strong>Charge estimée</strong>
-              <span id="weight-gauge-text">—</span>
-            </div>
-            <div class="weight-gauge-bar"><div class="weight-gauge-fill" id="weight-gauge-fill"></div></div>
-            <p id="weight-gauge-note" class="weight-gauge-note"></p>
-          </div>
 
           <div id="tours-list" class="tours-list"></div>
           <button type="button" id="btn-add-tour" class="btn btn-secondary btn-block">+ Ajouter un tour</button>
@@ -574,6 +565,7 @@
         <option value="t">t</option>
         <option value="m3">m³</option>
         <option value="unite">unité</option>
+        <option value="big_bag">big bag</option>
       </select>
       <button type="button" class="icon-btn btn-delete-ligne" aria-label="Supprimer la ligne"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6M14 11v6"/></svg></button>
     </div>
@@ -597,8 +589,8 @@
   </template>
 
   <!-- ================================================================== Scripts -->
-  <script src="/assets/config.js?v=10"></script>
+  <script src="/assets/config.js?v=11"></script>
   <script src="/assets/vendor/supabase/supabase.js"></script>
-  <script type="module" src="/assets/app.js?v=10"></script>
+  <script type="module" src="/assets/app.js?v=11"></script>
 </body>
 </html>
