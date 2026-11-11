@@ -112,7 +112,16 @@ jobs:
           EOF
       - name: Démarrage Postgres
         working-directory: deploy
-        run: docker compose up -d db
+        run: |
+          # La pile ne publie plus le port 5432 (conflit sur le VPS). En CI,
+          # apply.py tourne sur l'hôte et a besoin de 127.0.0.1:5432 : override local.
+          cat > docker-compose.override.yml <<'OVR'
+          services:
+            db:
+              ports:
+                - "127.0.0.1:5432:5432"
+          OVR
+          docker compose up -d db
       - name: Attente Postgres
         run: |
           for i in $(seq 1 40); do
