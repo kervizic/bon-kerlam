@@ -9,8 +9,11 @@ services:
     container_name: bon-db
     image: supabase/postgres:15.8.1.085
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:5432:5432"
+    # PAS de publication hôte : le port 127.0.0.1:5432 est déjà occupé par le
+    # PostgreSQL système (postgresql@10-main) qui sert kerlam.fr / kervic.fr /
+    # kervic-location.fr. Publier 5432 ici provoquait « address already in use »
+    # au (re)démarrage de bon-db. Tous les services de la pile joignent la base
+    # via le réseau Docker (db:5432) ; l'admin passe par « docker exec bon-db psql ».
     mem_limit: 256m
     environment:
       POSTGRES_HOST: /var/run/postgresql
@@ -118,9 +121,9 @@ services:
       GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI: ${API_EXTERNAL_URL}/callback
       # Restriction de domaine (hd) optionnelle, désactivée par défaut.
       GOTRUE_EXTERNAL_GOOGLE_HD: ${GOOGLE_HD}
-    volumes:
-      - ./email/otp_fr.html:/etc/gotrue/otp_fr.html:ro
-      - ./email/action_fr.html:/etc/gotrue/action_fr.html:ro
+    # Pas de montage de templates : GoTrue récupère ses modèles d'e-mail par HTTP
+    # (https://api.kerlam.fr/email/*.html servis par nginx), le schéma file:// n'étant
+    # pas supporté par cette version de GoTrue.
 
   rest:
     container_name: bon-rest
