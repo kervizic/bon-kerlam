@@ -1,18 +1,23 @@
 /* styles.css — design system bon.kerlam.fr
  *
- * Palette : orange #FD8008 (action), orange foncé #D46B06 (hover/active),
- * gris #4C4C4C, anthracite #2B2B2B, fond #F4F4F2, blanc, vert #2E7D32,
- * rouge #C62828, bleu #1565C0.
+ * Palette FINALE (validée Manu) : orange #FD8008 (action), orange foncé
+ * #D46B06 (hover/active), gris de marque #808080, gris texte #595959,
+ * anthracite #2B2B2B, fond #F4F4F2, blanc, vert #2E7D32, rouge #C62828,
+ * bleu #1565C0.
  *
  * Règles WCAG (AA) à respecter dans tout ajout :
  * - Bouton primaire = fond orange + texte ANTHRACITE (jamais blanc : échoue AA).
  * - Jamais d'orange comme texte courant sur fond clair (échoue AA, ~3.5:1).
  *   L'orange reste réservé aux surfaces, au logo « LAM », aux icônes/accents
  *   (bordures, puces de statut sur fond teinté avec texte anthracite dessus).
- * - Gris #4C4C4C pour le texte secondaire sur fond clair ; en sombre, gris
- *   clair #C9C9C9 pour « KER » du logo (le gris foncé n'y serait pas lisible).
+ * - Gris de marque #808080 : logo « KER », filets, bordures, accents NON
+ *   textuels UNIQUEMENT (contraste ~3.5:1 sur blanc : échoue AA pour du texte).
+ * - Gris texte #595959 pour le texte secondaire sur fond clair (contraste ~7:1,
+ *   AA/AAA). En sombre, #B8B6B2.
+ * - Logo « KER » = #808080 exactement, « LAM » = #FD8008 exactement, IDENTIQUES
+ *   en clair et en sombre (demande Manu).
  *
- * Police : Sarpanch (800) auto-hébergée, réservée au logo "KERLAM".
+ * Police : Sarpanch (900 / Black) auto-hébergée, réservée au logo "KERLAM".
  *
  * Thème : clair par défaut, sombre automatique via prefers-color-scheme,
  * override manuel via [data-theme="clair"|"sombre"] sur <html> (Auto = pas
@@ -22,24 +27,16 @@
 @font-face {
   font-family: "Sarpanch";
   font-style: normal;
-  font-weight: 800;
+  font-weight: 900;
   font-display: swap;
-  src: url("/assets/fonts/sarpanch-800-latin.woff2") format("woff2");
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-@font-face {
-  font-family: "Sarpanch";
-  font-style: normal;
-  font-weight: 800;
-  font-display: swap;
-  src: url("/assets/fonts/sarpanch-800-latin-ext.woff2") format("woff2");
-  unicode-range: U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+  src: url("/assets/fonts/sarpanch-900.woff2") format("woff2");
 }
 
 :root {
   --c-orange: #FD8008;
   --c-orange-dark: #D46B06;
-  --c-grey: #4C4C4C;
+  --c-grey: #808080;        /* gris de marque : logo KER, filets, accents NON textuels */
+  --c-grey-text: #595959;   /* gris texte secondaire sur blanc (AA ~7:1) */
   --c-grey-light: #C9C9C9;
   --c-anthracite: #2B2B2B;
   --c-bg: #F4F4F2;
@@ -61,7 +58,7 @@
   --bg: var(--c-bg);
   --surface: var(--c-white);
   --text: var(--c-anthracite);
-  --text-muted: var(--c-grey);
+  --text-muted: var(--c-grey-text);
   --border: #DDDAD4;
   --shadow: 0 1px 3px rgba(43,43,43,0.12);
 
@@ -79,7 +76,7 @@
     --text-muted: #B8B6B2;
     --border: #3A3A38;
     --shadow: 0 1px 3px rgba(0,0,0,0.5);
-    --logo-ker: var(--c-grey-light);
+    --logo-ker: var(--c-grey); /* KER = #808080 exact, identique clair/sombre */
   }
 }
 
@@ -87,7 +84,7 @@ html[data-theme="clair"] {
   --bg: var(--c-bg);
   --surface: var(--c-white);
   --text: var(--c-anthracite);
-  --text-muted: var(--c-grey);
+  --text-muted: var(--c-grey-text);
   --border: #DDDAD4;
   --shadow: 0 1px 3px rgba(43,43,43,0.12);
   --logo-ker: var(--c-grey);
@@ -100,7 +97,7 @@ html[data-theme="sombre"] {
   --text-muted: #B8B6B2;
   --border: #3A3A38;
   --shadow: 0 1px 3px rgba(0,0,0,0.5);
-  --logo-ker: var(--c-grey-light);
+  --logo-ker: var(--c-grey); /* KER = #808080 exact, identique clair/sombre */
 }
 
 * { box-sizing: border-box; }
@@ -141,7 +138,7 @@ a { color: var(--c-blue); }
 /* --------------------------------------------------------------------- Logo */
 .logo {
   font-family: "Sarpanch", "Arial", sans-serif;
-  font-weight: 800;
+  font-weight: 900;
   font-size: 22px;
   letter-spacing: -0.5px;
   display: inline-flex;
@@ -294,7 +291,7 @@ a { color: var(--c-blue); }
   gap: 12px; margin-bottom: 16px;
 }
 .lv-numero {
-  font-weight: 800; color: var(--text);
+  font-weight: 900; color: var(--text);
   font-family: "Sarpanch", Arial, sans-serif;
   border-left: 4px solid var(--c-orange);
   padding-left: 8px;

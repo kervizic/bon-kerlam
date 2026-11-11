@@ -85,7 +85,7 @@ jobs:
           S3_ENDPOINT=https://s3.eu-west-par.io.cloud.ovh.net
           S3_ACCESS_KEY=
           S3_SECRET_KEY=
-          APP_VERSION=0.1.0-beta.3
+          APP_VERSION=0.1.0-beta.4
           GIT_SHA=${{ github.sha }}
           GEOCODE_ON_START=false
           KERLAM_SIREN=
@@ -152,7 +152,7 @@ jobs:
         run: |
           body=$(curl -fsS http://127.0.0.1:8099/worker/version)
           echo "$body"
-          echo "$body" | python -c "import sys,json; d=json.load(sys.stdin); assert d['version']=='0.1.0-beta.3', d; assert d['schema_version'], d; print('version ok, schema', d['schema_version'])"
+          echo "$body" | python -c "import sys,json; d=json.load(sys.stdin); assert d['version']=='0.1.0-beta.4', d; assert d['schema_version'], d; print('version ok, schema', d['schema_version'])"
       - name: Attente de GoTrue (auth)
         run: |
           for i in $(seq 1 30); do
@@ -179,10 +179,8 @@ jobs:
           python-version: "3.12"
       - name: Dépendances
         run: |
-          pip install pillow playwright
+          pip install playwright
           playwright install --with-deps chromium
-      - name: Génération des icônes PWA
-        run: python scripts/gen-icons.py build-assets/Sarpanch.ttf front/assets/icons
       - name: Service du front
         run: |
           python -m http.server 8080 --directory front &
