@@ -282,15 +282,34 @@ Une recherche libre et un bouton **« + Nouveau site »** complètent la liste.
 
 ## 6. Connexion et rôles
 
-### 6.1 Authentification
+### 6.1 Authentification (depuis beta.2)
 
-- Fournisseur unique : **Supabase Auth**, connexion **Google uniquement**.
-- L'inscription par e-mail/mot de passe est **désactivée**.
-- Option de restriction de domaine Google (`hd`) disponible en variable d'environnement, **désactivée par défaut**.
+- Fournisseur : **Supabase Auth (GoTrue)**. Deux méthodes au choix :
+  - **« Continuer avec Google »** (OAuth) ;
+  - **« Recevoir un code par mail »** : code à usage unique à **6 chiffres**
+    envoyé par e-mail (OTP GoTrue, **sans mot de passe**), n'importe quel domaine.
+- L'inscription « libre » par mot de passe est **désactivée** ; c'est la **liste
+  blanche** qui gouverne l'accès pour les deux méthodes.
+- Écran de connexion : deux choix clairs aux couleurs KERLAM (mode sombre auto),
+  saisie de l'adresse puis des 6 chiffres, **renvoi du code après 60 s**.
+- **Session persistante** sur le téléphone (refresh token tournant : pas de
+  reconnexion quotidienne).
+- SMTP : réutilise la connexion SMTP de **Documenso** déjà présente sur le VPS
+  (`smtp.gmail.com:587` STARTTLS, boîte `sign@kerlam.fr`). Expéditeur des codes :
+  **« KERLAM <bon@kerlam.fr> »**. Dans le dépôt : uniquement des variables
+  (`GOTRUE_SMTP_*`) + le script `deploy/scripts/import-smtp-from-documenso.sh`
+  qui recopie les valeurs depuis `/opt/documenso/.env` sans les afficher. Modèle
+  d'e-mail du code en français : `deploy/email/otp_fr.html`.
+- Option de restriction de domaine Google (`hd`) disponible en variable
+  d'environnement, **désactivée par défaut**.
 
 ### 6.2 Contrôle d'accès
 
-- Accès géré par **liste blanche** : une table `utilisateurs` associe chaque e-mail Google à un rôle (`chauffeur` \| `bureau` \| `desactive`).
+- Accès géré par **liste blanche** : la table `utilisateurs` associe chaque
+  e-mail (Google ou e-mail OTP) à un rôle (`chauffeur` \| `bureau` \| `desactive`).
+- Elle s'applique aux **deux méthodes** de connexion, par **RLS** et, si GoTrue
+  l'active, par un **hook « before user created »**
+  (`bon.gotrue_before_user_created`) qui refuse un e-mail non listé.
 - Un e-mail non présent dans la liste blanche :
   - Ne voit **aucune donnée** (appliqué par RLS — Row Level Security PostgreSQL).
   - Affiche l'écran « Accès non autorisé, contactez le bureau ».

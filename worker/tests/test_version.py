@@ -9,7 +9,7 @@ def test_version_endpoint():
         r = client.get("/worker/version")
         assert r.status_code == 200
         body = r.json()
-        assert body["version"] == "0.1.0-beta.1"
+        assert body["version"] == "0.1.0-beta.2"
         assert "sha" in body
         assert "schema_version" in body
 

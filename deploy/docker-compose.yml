@@ -64,12 +64,34 @@ services:
       GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       GOTRUE_SITE_URL: ${SITE_URL}
       GOTRUE_URI_ALLOW_LIST: ${ADDITIONAL_REDIRECT_URLS}
-      # Inscription e-mail désactivée : accès par liste blanche + Google.
-      GOTRUE_DISABLE_SIGNUP: "true"
-      GOTRUE_EXTERNAL_EMAIL_ENABLED: "false"
-      GOTRUE_MAILER_AUTOCONFIRM: "true"
+      # Connexion : Google OU code OTP e-mail (6 chiffres, sans mot de passe).
+      # L'inscription « libre » est bloquée par la liste blanche (RLS + hook) :
+      # un e-mail non listé peut obtenir un code mais ne voit RIEN.
+      GOTRUE_DISABLE_SIGNUP: "false"
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_MAILER_AUTOCONFIRM: "false"
+      GOTRUE_MAILER_OTP_EXP: "600"
+      GOTRUE_MAILER_OTP_LENGTH: "6"
       GOTRUE_EXTERNAL_PHONE_ENABLED: "false"
       GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED: "false"
+      # Session persistante sur le téléphone (refresh token tournant).
+      GOTRUE_REFRESH_TOKEN_ROTATION_ENABLED: "true"
+      GOTRUE_SECURITY_REFRESH_TOKEN_REUSE_INTERVAL: "10"
+      # SMTP (réutilise la connexion Documenso ; valeurs posées sur le serveur).
+      GOTRUE_SMTP_HOST: ${GOTRUE_SMTP_HOST}
+      GOTRUE_SMTP_PORT: ${GOTRUE_SMTP_PORT:-587}
+      GOTRUE_SMTP_USER: ${GOTRUE_SMTP_USER}
+      GOTRUE_SMTP_PASS: ${GOTRUE_SMTP_PASS}
+      GOTRUE_SMTP_ADMIN_EMAIL: ${GOTRUE_SMTP_ADMIN_EMAIL:-bon@kerlam.fr}
+      GOTRUE_SMTP_SENDER_NAME: ${GOTRUE_SMTP_SENDER_NAME:-KERLAM}
+      GOTRUE_MAILER_SUBJECTS_MAGIC_LINK: "Votre code de connexion KERLAM"
+      # Modèle FR du code (monté sur le serveur ; vide = modèle intégré en CI).
+      GOTRUE_MAILER_TEMPLATES_MAGIC_LINK: ${GOTRUE_MAILER_TEMPLATES_MAGIC_LINK}
+      # Hook « before user created » (refus des e-mails non listés) si disponible.
+      GOTRUE_HOOK_BEFORE_USER_CREATED_ENABLED: ${GOTRUE_HOOK_BEFORE_USER_CREATED_ENABLED:-false}
+      GOTRUE_HOOK_BEFORE_USER_CREATED_URI: ${GOTRUE_HOOK_BEFORE_USER_CREATED_URI}
+    volumes:
+      - ./email/otp_fr.html:/etc/gotrue/otp_fr.html:ro
       GOTRUE_JWT_ADMIN_ROLES: service_role
       GOTRUE_JWT_AUD: authenticated
       GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated

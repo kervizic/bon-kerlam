@@ -101,6 +101,26 @@ docker stats --no-stream
 5. L'accès reste gouverné par la **liste blanche** (`bon.utilisateurs`) et la
    RLS : une adresse Google non listée ne voit rien.
 
+## 5bis. Connexion par code e-mail (OTP) + SMTP
+
+La beta.2 ajoute la connexion par **code e-mail à 6 chiffres** (en plus de
+Google). GoTrue envoie le code par e-mail ; on réutilise le **SMTP de Documenso** :
+
+```bash
+cd /opt/bon-kerlam/deploy
+# Recopie NEXT_PRIVATE_SMTP_* -> GOTRUE_SMTP_* dans .env, sans afficher les secrets
+./scripts/import-smtp-from-documenso.sh /opt/documenso/.env ./.env
+docker compose up -d auth        # recharge GoTrue
+```
+
+- Expéditeur des codes : **« KERLAM <bon@kerlam.fr> »** (alias de `sign@kerlam.fr`).
+- Modèle FR du code : `email/otp_fr.html` (monté sur `/etc/gotrue/otp_fr.html`,
+  référencé par `GOTRUE_MAILER_TEMPLATES_MAGIC_LINK=file:///etc/gotrue/otp_fr.html`).
+- Hook de refus des e-mails hors liste blanche (optionnel) : mettre
+  `GOTRUE_HOOK_BEFORE_USER_CREATED_ENABLED=true` et
+  `GOTRUE_HOOK_BEFORE_USER_CREATED_URI=pg-functions://postgres/bon/gotrue_before_user_created`
+  (la RLS reste le garde-fou dur dans tous les cas).
+
 **Documenso** (hors périmètre de cette pile, connexion Google native propre) :
 renseigner dans son déploiement `NEXT_PRIVATE_GOOGLE_CLIENT_ID` et
 `NEXT_PRIVATE_GOOGLE_CLIENT_SECRET`. Ne pas toucher au conteneur Documenso.
@@ -144,4 +164,7 @@ l'étape 2 avec la dernière sauvegarde.
 `ADDITIONAL_REDIRECT_URLS`, `PGRST_DB_SCHEMAS`, `GOOGLE_ENABLED`,
 `GOOGLE_CLIENT_ID`, `GOOGLE_SECRET`, `GOOGLE_HD`, `S3_BUCKET`, `S3_REGION`,
 `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `APP_VERSION`, `GIT_SHA`,
-`GEOCODE_ON_START`, `KERLAM_SIREN`.
+`GEOCODE_ON_START`, `KERLAM_SIREN`, `GOTRUE_SMTP_HOST`, `GOTRUE_SMTP_PORT`,
+`GOTRUE_SMTP_USER`, `GOTRUE_SMTP_PASS`, `GOTRUE_SMTP_ADMIN_EMAIL`,
+`GOTRUE_SMTP_SENDER_NAME`, `GOTRUE_MAILER_TEMPLATES_MAGIC_LINK`,
+`GOTRUE_HOOK_BEFORE_USER_CREATED_ENABLED`, `GOTRUE_HOOK_BEFORE_USER_CREATED_URI`.

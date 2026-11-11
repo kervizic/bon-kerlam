@@ -4,6 +4,28 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.2] — 2026-11-11
+
+### Connexion — Google OU code e-mail (OTP)
+- Deux méthodes de connexion : **« Continuer avec Google »** ou **« Recevoir un
+  code par mail »** (code à usage unique à 6 chiffres, sans mot de passe, OTP
+  e-mail GoTrue). Écran de connexion aux couleurs KERLAM, mode sombre auto,
+  saisie e-mail puis code, renvoi du code après 60 s.
+- **Session persistante** sur le téléphone (refresh token tournant : pas de
+  reconnexion quotidienne).
+- La **liste blanche** du bureau (e-mail + rôle chauffeur | bureau | désactivé)
+  s'applique aux DEUX méthodes, par RLS **et** par un hook SQL optionnel
+  « before user created » (`bon.gotrue_before_user_created`, migration 0009) qui
+  refuse un e-mail non listé si GoTrue l'active. Une adresse non listée (Google
+  ou e-mail) ne voit RIEN et obtient « Accès non autorisé, contactez le bureau ».
+- **SMTP** : réutilise la connexion SMTP de Documenso du VPS (variables
+  `GOTRUE_SMTP_*` uniquement dans le dépôt). Script
+  `deploy/scripts/import-smtp-from-documenso.sh` qui recopie les valeurs depuis
+  `/opt/documenso/.env` sans les afficher. Expéditeur : « KERLAM
+  <bon@kerlam.fr> ». Modèle d'e-mail du code en français (`deploy/email/otp_fr.html`).
+- Tests : liste blanche pour un e-mail Google et un e-mail OTP autorisés, et
+  pour une adresse non autorisée (aucune donnée) ; hook de refus.
+
 ## [0.1.0-beta.1] — 2026-11-11
 
 Première beta : socle complet, testé, avec CI et fichiers de déploiement.
@@ -62,4 +84,5 @@ Première beta : socle complet, testé, avec CI et fichiers de déploiement.
 - Signature Documenso, envoi groupé, fin de mois / facturation, outils MCP en
   écriture.
 
+[0.1.0-beta.2]: https://github.com/kervizic/bon-kerlam/releases/tag/v0.1.0-beta.2
 [0.1.0-beta.1]: https://github.com/kervizic/bon-kerlam/releases/tag/v0.1.0-beta.1

@@ -31,9 +31,13 @@ Navigateur (PWA)  ──►  nginx  ──►  GoTrue (auth)  ┐
 - **MCP** (`mcp/`) : serveur FastMCP **lecture seule** (beta) :
   `lv_rechercher`, `lv_lire`, `alertes`, `referentiel_lister`.
 
-Connexion : Supabase Auth **Google uniquement**, inscription e-mail désactivée,
-accès par **liste blanche** (`bon.utilisateurs` : e-mail, rôle
-`chauffeur | bureau | desactive`). Une adresse non listée ne voit rien (RLS).
+Connexion (depuis beta.2) : Supabase Auth **Google OU code e-mail (OTP 6
+chiffres, sans mot de passe)**. Accès par **liste blanche** (`bon.utilisateurs` :
+e-mail, rôle `chauffeur | bureau | desactive`) appliquée aux deux méthodes par
+RLS et par un hook GoTrue optionnel. Une adresse non listée (Google ou e-mail) ne
+voit rien (RLS) et obtient « Accès non autorisé, contactez le bureau ». Session
+persistante (refresh token). SMTP réutilisé de Documenso (variables seulement +
+script d'import ; expéditeur « KERLAM &lt;bon@kerlam.fr&gt; »).
 
 ## Arborescence
 
