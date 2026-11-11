@@ -1,0 +1,142 @@
+name: ci
+
+on:
+  push:
+    branches: ["**"]
+    tags-ignore: ["v*"]
+  pull_request:
+
+jobs:
+  lint-and-worker:
+    name: ruff + tests worker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Dépendances
+        run: pip install ruff pytest fastapi "psycopg[binary]" jinja2 httpx
+      - name: Ruff
+        run: ruff check .
+      - name: Tests worker (sans base)
+        run: pytest worker/tests -q
+
+  db-tests:
+    name: tests SQL (fonctions + RLS + migrations)
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Dépendances
+        run: pip install pytest "psycopg[binary]"
+      - name: Tests base (migrations rejouables, numérotation, poids, RLS, undo…)
+        run: pytest supabase/tests -q
+
+  compose-smoke:
+    name: démarrage de la pile + seed + /worker/version + mémoire
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Dépendances hôte (migrations)
+        run: pip install "psycopg[binary]"
+      - name: Fichier d'environnement de la pile
+        working-directory: deploy
+        run: |
+          cat > .env <<'EOF'
+          POSTGRES_DB=postgres
+          POSTGRES_PASSWORD=postgres
+          WORKER_DB_PASSWORD=postgres
+          JWT_SECRET=ci-secret-ci-secret-ci-secret-32
+          JWT_EXPIRY=3600
+          ANON_KEY=ci-anon
+          SERVICE_ROLE_KEY=ci-service
+          API_EXTERNAL_URL=https://api.kerlam.fr
+          SITE_URL=https://bon.kerlam.fr
+          ADDITIONAL_REDIRECT_URLS=https://bon.kerlam.fr
+          PGRST_DB_SCHEMAS=api,svc,storage
+          GOOGLE_ENABLED=false
+          GOOGLE_CLIENT_ID=
+          GOOGLE_SECRET=
+          GOOGLE_HD=
+          S3_BUCKET=kerlam-bon
+          S3_REGION=eu-west-par
+          S3_ENDPOINT=https://s3.eu-west-par.io.cloud.ovh.net
+          S3_ACCESS_KEY=
+          S3_SECRET_KEY=
+          APP_VERSION=0.1.0-beta.1
+          GIT_SHA=${{ github.sha }}
+          GEOCODE_ON_START=false
+          KERLAM_SIREN=
+          EOF
+      - name: Démarrage Postgres
+        working-directory: deploy
+        run: docker compose up -d db
+      - name: Attente Postgres
+        run: |
+          for i in $(seq 1 40); do
+            if docker exec bon-db pg_isready -U postgres >/dev/null 2>&1; then echo ok; break; fi
+            sleep 2
+          done
+      - name: Application des migrations + seed
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+          CI: "true"
+        run: python supabase/apply.py --apply --no-backup
+      - name: Connexion du rôle worker
+        run: docker exec bon-db psql -U postgres -c "ALTER ROLE bon_worker LOGIN PASSWORD 'postgres';"
+      - name: Vérification du seed (articles + sites communs)
+        run: |
+          docker exec bon-db psql -U postgres -tAc "SELECT count(*) FROM bon.articles" | grep -qx 9
+          docker exec bon-db psql -U postgres -tAc "SELECT count(*) FROM bon.sites WHERE portee='commun'" | grep -qx 9
+          echo "seed ok (9 articles, 9 sites communs)"
+      - name: Build + démarrage auth, rest, worker
+        working-directory: deploy
+        run: docker compose up -d --build auth rest worker
+      - name: Attente du worker
+        run: |
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:8099/worker/version >/dev/null 2>&1; then break; fi
+            sleep 3
+          done
+      - name: /worker/version == 0.1.0-beta.1
+        run: |
+          body=$(curl -fsS http://127.0.0.1:8099/worker/version)
+          echo "$body"
+          echo "$body" | python -c "import sys,json; d=json.load(sys.stdin); assert d['version']=='0.1.0-beta.1', d; assert d['schema_version'], d; print('version ok, schema', d['schema_version'])"
+      - name: Attente de GoTrue (auth)
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:9999/health >/dev/null 2>&1; then echo "auth ok"; break; fi
+            sleep 3
+          done
+          curl -fsS http://127.0.0.1:9999/health || (echo "auth KO"; docker logs bon-auth | tail -40; exit 1)
+      - name: Mémoire par service (docker stats)
+        run: |
+          docker stats --no-stream --format "table {{.Name}}\t{{.MemUsage}}\t{{.MemPerc}}" \
+            bon-db bon-auth bon-rest bon-worker
+      - name: Arrêt
+        if: always()
+        working-directory: deploy
+        run: docker compose down -v
