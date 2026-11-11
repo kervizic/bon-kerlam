@@ -4,6 +4,26 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.12] — 2026-11-11
+
+Item **D** du lot reporté + retouches. H (prestations) et C (création rapide)
+restent à faire (budget).
+
+### (D) Un seul « Client », plus d'« expéditeur » dans l'appli
+- **Suppression du champ « Expéditeur »** et de la case « destinataire identique
+  à l'expéditeur ». Le mot **« expéditeur » n'apparaît plus dans le front** —
+  **test CI** `scripts/check-no-expediteur.py`. L'expéditeur figure uniquement sur
+  le **PDF**, **dérivé du client** (raison sociale + adresse).
+- **« Destinataire » = sélecteur** : **Identique (client)** par défaut, **un autre
+  client**, ou **Autre…** (saisie libre).
+- **Migration 0014** : sauvegarde (table `bon.lv_expediteur_backup` = liste des
+  lettres touchées) puis neutralisation de l'ancien expéditeur « KERLAM ».
+
+### Retouches (demandes de Manu)
+- **PDF** : plus aucun **badge/filigrane de statut** (« Non signée » retiré).
+- **Accord singulier/pluriel** partout (« 1 lettre de voiture » / « 2 lettres de
+  voiture »…), plus de « lettre(s) ».
+
 ## [0.1.0-beta.11] — 2026-11-11
 
 Lot correctif (retours iPhone de Manu). Items A, B, E, F, G, I livrés ; C, D, H

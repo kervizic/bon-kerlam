@@ -72,11 +72,13 @@ def build_context(lv_id: int) -> dict[str, Any]:
         SELECT lv.id, lv.numero, lv.date_etablissement, lv.date_prise_en_charge,
                lv.expediteur, lv.destinataire, lv.dest_identique, lv.heures_regie,
                lv.statut,
-               c.immatriculation AS camion, ch.nom AS chauffeur, p.nom AS projet
+               c.immatriculation AS camion, ch.nom AS chauffeur, p.nom AS projet,
+               cl.raison_sociale AS client_nom, cl.adresse AS client_adresse
           FROM bon.lettres_voiture lv
-          LEFT JOIN bon.camions c    ON c.id = lv.camion_id
+          LEFT JOIN bon.camions c     ON c.id = lv.camion_id
           LEFT JOIN bon.chauffeurs ch ON ch.id = lv.chauffeur_id
-          LEFT JOIN bon.projets p    ON p.id = lv.projet_id
+          LEFT JOIN bon.projets p     ON p.id = lv.projet_id
+          LEFT JOIN bon.clients cl    ON cl.id = p.client_id
          WHERE lv.id = %s
         """,
         (lv_id,),
@@ -84,9 +86,16 @@ def build_context(lv_id: int) -> dict[str, Any]:
     if lv is None:
         raise ValueError(f"LV introuvable: {lv_id}")
 
-    # Destinataire identique à l'expéditeur => nom en entier dans les deux champs.
-    if lv["dest_identique"] and lv["expediteur"]:
+    # Expéditeur (D) : dérivé du CLIENT (raison sociale + adresse), jamais saisi
+    # dans l'appli. Repli sur la valeur stockée (lettres anciennes) si pas de client.
+    client_parts = [p for p in (lv.get("client_nom"), lv.get("client_adresse")) if p]
+    lv["expediteur"] = ", ".join(client_parts) if client_parts else (lv.get("expediteur") or "")
+
+    # Destinataire : identique => reprend l'expéditeur (client) ; sinon valeur saisie.
+    if lv["dest_identique"]:
         lv["destinataire"] = lv["expediteur"]
+    else:
+        lv["destinataire"] = lv.get("destinataire") or ""
 
     # Dates au format français JJ/MM/AAAA (le template ne reformate pas).
     lv["date_etablissement"] = _fr_date(lv.get("date_etablissement"))

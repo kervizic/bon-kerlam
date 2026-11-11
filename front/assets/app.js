@@ -120,11 +120,11 @@ import {
   todayIso,
 } from "./data.js";
 
-import { initInstall } from "./install.js?v=11";
-import { UndoStack } from "./undo-stack.js?v=11";
-import { PdfCache, shouldCachePdf, formatGeneratedAt } from "./pdf-cache.js?v=11";
-import { statutLabel } from "./status-labels.js?v=11";
-import { canGroupForSignature } from "./signature-group.js?v=11";
+import { initInstall } from "./install.js?v=12";
+import { UndoStack } from "./undo-stack.js?v=12";
+import { PdfCache, shouldCachePdf, formatGeneratedAt } from "./pdf-cache.js?v=12";
+import { statutLabel } from "./status-labels.js?v=12";
+import { canGroupForSignature } from "./signature-group.js?v=12";
 
 /* ============================================================== IndexedDB == */
 /* Deux object stores :
@@ -682,6 +682,10 @@ function makeSelectInput(options, value, placeholder = "—") {
 }
 
 /* -------------------------------------------------------------------- Utils == */
+function plur(n, singulier, pluriel) {
+  return `${n} ${Number(n) > 1 ? pluriel : singulier}`;
+}
+
 function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, (c) => (
     { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
@@ -734,6 +738,7 @@ async function loadRefs() {
   state.reglages = Object.fromEntries(reglages.map((r) => [r.cle, r.valeur]));
   populateSelect(document.getElementById("f-camion"), camions, (c) => c.id, (c) => c.immatriculation);
   populateSelect(document.getElementById("f-client"), clients, (c) => c.id, (c) => c.raison_sociale);
+  populateSelect(document.getElementById("f-dest-client"), clients, (c) => c.id, (c) => c.raison_sociale);
   refreshProjetContactOptions();
 }
 
@@ -836,13 +841,55 @@ function fillHeaderForm(data) {
 
   document.getElementById("f-projet").value = d.projet_id != null ? String(d.projet_id) : "";
   document.getElementById("f-contact").value = d.contact_id != null ? String(d.contact_id) : "";
-  document.getElementById("f-expediteur").value = d.expediteur || "";
 
-  const destIdentique = d.dest_identique !== false;
-  document.getElementById("f-dest-identique").checked = destIdentique;
-  document.getElementById("field-destinataire-wrap").hidden = destIdentique;
-  document.getElementById("f-destinataire").value = d.destinataire || "";
+  fillDestinataireControls(d);
   document.getElementById("f-heures-regie").value = d.heures_regie || "";
+}
+
+// Destinataire (D) : Identique (client) / un autre client / Autre… (saisie libre).
+// L'émetteur (raison sociale + adresse du client) n'est plus saisi : il figure
+// uniquement sur le PDF, dérivé du client.
+function fillDestinataireControls(d) {
+  const mode = document.getElementById("f-dest-mode");
+  const destClient = document.getElementById("f-dest-client");
+  const destAutre = document.getElementById("f-dest-autre");
+  if (d.dest_identique !== false) {
+    mode.value = "identique"; destClient.value = ""; destAutre.value = "";
+  } else {
+    const match = (state.refs.clients || []).find((c) => c.raison_sociale === d.destinataire);
+    if (match) { mode.value = "autre_client"; destClient.value = String(match.id); destAutre.value = ""; }
+    else { mode.value = "autre"; destAutre.value = d.destinataire || ""; destClient.value = ""; }
+  }
+  updateDestVisibility();
+}
+
+function updateDestVisibility() {
+  const mode = document.getElementById("f-dest-mode").value;
+  document.getElementById("field-dest-client-wrap").hidden = mode !== "autre_client";
+  document.getElementById("field-dest-autre-wrap").hidden = mode !== "autre";
+}
+
+async function saveDestinataire() {
+  updateDestVisibility();
+  const mode = document.getElementById("f-dest-mode").value;
+  const destIdentique = mode === "identique";
+  let destinataire = null;
+  if (mode === "autre_client") {
+    const c = (state.refs.clients || []).find((x) => String(x.id) === document.getElementById("f-dest-client").value);
+    destinataire = c ? c.raison_sociale : null;
+  } else if (mode === "autre") {
+    destinataire = document.getElementById("f-dest-autre").value || null;
+  }
+  setSyncState("sending");
+  try {
+    const lvId = await ensureLv();
+    await patchRemote("lettres_voiture", lvId, { dest_identique: destIdentique, destinataire });
+    if (state.lv) { state.lv.dest_identique = destIdentique; state.lv.destinataire = destinataire; }
+    setSyncState(window.bonSync.queueLength > 0 ? "offline" : "saved");
+  } catch (err) {
+    console.error(err);
+    setSyncState(window.bonSync.queueLength > 0 ? "offline" : "saved");
+  }
 }
 
 function renderLvNumero() {
@@ -881,25 +928,14 @@ function wireHeaderAutosave() {
   wireAutosaveField(document.getElementById("f-camion"), { table: "lettres_voiture", ensureId: ensureLv, field: "camion_id", transform: toIntOrNull });
   wireAutosaveField(document.getElementById("f-projet"), { table: "lettres_voiture", ensureId: ensureLv, field: "projet_id", transform: toIntOrNull });
   wireAutosaveField(document.getElementById("f-contact"), { table: "lettres_voiture", ensureId: ensureLv, field: "contact_id", transform: toIntOrNull });
-  wireAutosaveField(document.getElementById("f-expediteur"), { table: "lettres_voiture", ensureId: ensureLv, field: "expediteur" });
-  wireAutosaveField(document.getElementById("f-destinataire"), { table: "lettres_voiture", ensureId: ensureLv, field: "destinataire" });
   wireAutosaveField(document.getElementById("f-heures-regie"), { table: "lettres_voiture", ensureId: ensureLv, field: "heures_regie" });
 
   document.getElementById("f-client").addEventListener("change", refreshProjetContactOptions);
 
-  const destCheckbox = document.getElementById("f-dest-identique");
-  destCheckbox.addEventListener("change", async () => {
-    document.getElementById("field-destinataire-wrap").hidden = destCheckbox.checked;
-    setSyncState("sending");
-    try {
-      const lvId = await ensureLv();
-      await patchRemote("lettres_voiture", lvId, { dest_identique: destCheckbox.checked });
-      setSyncState(window.bonSync.queueLength > 0 ? "offline" : "saved");
-    } catch (err) {
-      console.error(err);
-      setSyncState(window.bonSync.queueLength > 0 ? "offline" : "saved");
-    }
-  });
+  // Destinataire (D) : mode + client/saisie libre -> dest_identique + destinataire.
+  document.getElementById("f-dest-mode").addEventListener("change", saveDestinataire);
+  document.getElementById("f-dest-client").addEventListener("change", saveDestinataire);
+  document.getElementById("f-dest-autre").addEventListener("change", saveDestinataire);
 }
 
 /* ============================================================= Vue "Aujourd'hui" */
@@ -1345,7 +1381,7 @@ function openSignerChoice() {
     alert(grp.reason);
     return;
   }
-  if (msgEl) msgEl.textContent = `${lvs.length} lettre(s) de voiture, même contact signataire.`;
+  if (msgEl) msgEl.textContent = `${plur(lvs.length, "lettre de voiture", "lettres de voiture")}, même contact signataire.`;
   if (sheet) sheet.hidden = false;
 }
 
@@ -1366,7 +1402,7 @@ async function doSignSurPlace() {
     // On enchaîne les signatures sur ce téléphone : on ouvre la première ; chaque
     // retour ramène l'utilisateur ici pour la suivante (liste des liens affichée).
     if (urls.length) {
-      alert(`${urls.length} lettre(s) prête(s) à signer sur ce téléphone. Ouverture de la première.`);
+      alert(`${plur(urls.length, "lettre prête", "lettres prêtes")} à signer sur ce téléphone. Ouverture de la première.`);
       window.location.href = urls[0];
     }
   } catch (err) {
@@ -1382,7 +1418,7 @@ async function doSignParMail() {
     const res = await workerSignatureParMail(ids);
     clearSignSelection();
     await loadMesLv();
-    alert(`Enveloppe envoyée à ${res.contact_email || "le contact"}. ${ids.length} lettre(s) en attente de signature.`);
+    alert(`Enveloppe envoyée à ${res.contact_email || "le contact"}. ${plur(ids.length, "lettre de voiture en attente de signature", "lettres de voiture en attente de signature")}.`);
   } catch (err) {
     alert("Échec de l'envoi par mail : " + (err.message || err));
   }
@@ -3008,7 +3044,7 @@ function wireStaticUI() {
     btn.disabled = true;
     try {
       const res = await workerEnvoiGroupe(ids);
-      alert(`Envoi déclenché manuellement pour ${res.lv ? res.lv.length : ids.length} lettre(s) de voiture (Documenso hors périmètre bêta).`);
+      alert(`Envoi déclenché manuellement pour ${plur(res.lv ? res.lv.length : ids.length, "lettre de voiture", "lettres de voiture")} (Documenso hors périmètre bêta).`);
       state.planningSelection = new Set();
       refreshPlanningSelectionUi();
       await loadPlanning();

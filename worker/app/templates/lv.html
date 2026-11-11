@@ -26,11 +26,6 @@
   .sign { margin-top: 10px; }
   /* Zone de signature réservée pour Documenso : 44 x 22 mm. */
   .sign-box { width: 44mm; height: 22mm; border: 1px dashed #808080; }
-  .banner-unsigned {
-    display: inline-block; margin-top: 6px; padding: 2px 8px;
-    border: 1px solid #FD8008; color: #D46B06; font-weight: 700;
-    font-size: 9pt; border-radius: 3px;
-  }
   .legal { margin-top: 10px; font-size: 8pt; color: #595959; }
   .recap-title { font-size: 11pt; margin: 10px 0 2px; }
 </style>
@@ -46,7 +41,6 @@
       <div><b>N° {{ lv.numero or "(non attribué)" }}</b></div>
       <div class="muted">Établie le {{ lv.date_etablissement }}</div>
       <div class="muted">Prise en charge : {{ lv.date_prise_en_charge or "—" }}</div>
-      {% if not signee %}<div class="banner-unsigned">Non signée</div>{% endif %}
     </div>
   </div>
 

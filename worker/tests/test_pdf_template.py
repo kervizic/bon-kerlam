@@ -62,12 +62,14 @@ def test_mentions_legales_art4():
     assert "État récapitulatif des tours" in html
 
 
-def test_bandeau_non_signee():
-    ctx = _context()
-    ctx["signee"] = False
-    assert "Non signée" in pdf.render_html(ctx)
-    ctx["signee"] = True
-    assert "Non signée" not in pdf.render_html(ctx)
+def test_aucun_badge_statut_sur_pdf():
+    # Retouche beta.12 (demande de Manu) : plus aucun badge/filigrane de statut.
+    for signee in (False, True):
+        ctx = _context()
+        ctx["signee"] = signee
+        html = pdf.render_html(ctx)
+        assert "Non signée" not in html
+        assert "banner-unsigned" not in html
 
 
 def test_build_context_signee_depuis_statut():
