@@ -197,6 +197,8 @@ services:
       STORAGE_URL: http://storage:5000
       SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
       DOCS_BUCKET: chauffeur-docs
+      # Valide le jeton de session Supabase (génération PDF par le chauffeur, g).
+      JWT_SECRET: ${JWT_SECRET}
 
   front:
     container_name: bon-front

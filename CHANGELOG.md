@@ -4,6 +4,46 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.8] — 2026-11-11
+
+Lot 1 des gros chantiers (retours Manu). CI verte, image publiée, déployée.
+
+### (e) Fin de l'abréviation « LV » dans l'interface
+- **« lettre(s) de voiture » en toutes lettres partout** : titres, cartes,
+  « Lettres de voiture aujourd'hui », boutons, menus latéral/« Plus », messages,
+  aides, et le PDF. Onglet de la barre du bas : **« Lettres »**. Inchangés : le
+  `short_name` du manifest (**« LV KERLAM »**) et les numéros **KER-xxxxx**.
+- **Test CI anti-« LV »** (`scripts/check-no-lv.py`) : échoue si un libellé
+  VISIBLE (texte HTML, attributs `aria-label`/`title`/`placeholder`, chaînes JS
+  affichées) contient le mot « LV » isolé ; commentaires et code ignorés.
+
+### (d) Vue chauffeur par défaut + sélecteur Chauffeur | Bureau
+- **Vue chauffeur par défaut pour TOUS les utilisateurs** au premier lancement.
+- **Sélecteur segmenté Chauffeur | Bureau** (icônes Lucide truck / briefcase),
+  visible **uniquement pour les rôles bureau** : dans l'en-tête à droite du logo
+  sur ordinateur, **en haut du menu « Plus »** sur mobile (l'en-tête mobile reste
+  logo seul). Dernier mode **mémorisé sur l'appareil** (localStorage, try/catch).
+- Le sélecteur ne donne **aucun droit** (RLS inchangée). **Pile d'annulation
+  remise à zéro** au changement de mode. Navigation et contenu cohérents (un
+  utilisateur bureau qui ouvre une section bureau bascule en vue bureau).
+
+### (g) Fin du mode « Contrôle » → bouton PDF par lettre
+- **Suppression complète** du mode/écran/carte/route « Contrôle ».
+- **Bouton icône PDF** (Lucide file-down, `aria-label`/`title` « Exporter en
+  PDF », aucun texte) dans chaque lettre ouverte **et** en action de ligne des
+  listes. Génère le **PDF officiel** via le worker (WeasyPrint, mentions art. 4
+  de l'arrêté du 9/11/1999 + état récapitulatif des tours, **bandeau « Non
+  signée »** si la lettre n'est pas signée) et le partage via
+  `navigator.share({files})` si disponible, sinon téléchargement.
+- **Hors ligne** : le PDF de chaque lettre **non signée du chauffeur connecté**
+  est régénéré (debounce) après chaque modification et mis en **cache local**
+  (IndexedDB) ; sans réseau, le bouton affiche le PDF en cache avec
+  **« généré le JJ/MM à HH:MM »**. **Cache purgé à la déconnexion.**
+- Worker : nouveau point d'accès **`POST /worker/lv/{id}/pdf`** authentifié par
+  le **jeton de session Supabase** (HS256, `JWT_SECRET`), contrôle d'accès
+  explicite (bureau = tout ; chauffeur = ses lettres). Tests (génération, cache,
+  purge, décodage de session, bandeau).
+
 ## [0.1.0-beta.7] — 2026-11-11
 
 ### En-tête épuré (retour Manu « point 0 »)
@@ -266,6 +306,7 @@ Première beta : socle complet, testé, avec CI et fichiers de déploiement.
 - Signature Documenso, envoi groupé, fin de mois / facturation, outils MCP en
   écriture.
 
+[0.1.0-beta.8]: https://github.com/kervizic/bon-kerlam/releases/tag/v0.1.0-beta.8
 [0.1.0-beta.3]: https://github.com/kervizic/bon-kerlam/releases/tag/v0.1.0-beta.3
 [0.1.0-beta.2]: https://github.com/kervizic/bon-kerlam/releases/tag/v0.1.0-beta.2
 [0.1.0-beta.1]: https://github.com/kervizic/bon-kerlam/releases/tag/v0.1.0-beta.1

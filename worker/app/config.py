@@ -32,6 +32,10 @@ class Settings:
     storage_url: str = os.environ.get("STORAGE_URL", "http://storage:5000")
     service_role_key: str = os.environ.get("SERVICE_ROLE_KEY", "")
     docs_bucket: str = os.environ.get("DOCS_BUCKET", "chauffeur-docs")
+    # Secret HS256 partagé avec GoTrue : valide le jeton de session Supabase du
+    # navigateur (génération PDF par l'utilisateur connecté, sans jeton IA).
+    jwt_secret: str = os.environ.get("JWT_SECRET", "")
+    jwt_aud: str = os.environ.get("JWT_AUD", "authenticated")
 
 
 settings = Settings()

@@ -1,7 +1,11 @@
 """La route /worker/version renvoie la version attendue."""
 
+from pathlib import Path
+
 from app.main import app
 from fastapi.testclient import TestClient
+
+_EXPECTED_VERSION = (Path(__file__).resolve().parents[2] / "VERSION").read_text(encoding="utf-8").strip()
 
 
 def test_version_endpoint():
@@ -9,7 +13,7 @@ def test_version_endpoint():
         r = client.get("/worker/version")
         assert r.status_code == 200
         body = r.json()
-        assert body["version"] == "0.1.0-beta.7"
+        assert body["version"] == _EXPECTED_VERSION
         assert "sha" in body
         assert "schema_version" in body
 

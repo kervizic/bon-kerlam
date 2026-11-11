@@ -506,6 +506,23 @@ export async function workerDocumentSignedUrl(key, expires = 120) {
   return callWorker(`/document/signed-url?key=${encodeURIComponent(key)}&expires=${expires}`);
 }
 
+// PDF officiel de la lettre de voiture, généré par le worker (WeasyPrint) et
+// authentifié par le jeton de session Supabase. Renvoie un Blob application/pdf.
+export async function workerLvPdf(lvId) {
+  let authHeader = {};
+  try {
+    const session = await getSession();
+    if (session && session.access_token) authHeader = { Authorization: `Bearer ${session.access_token}` };
+  } catch (e) { /* on tente sans jeton : le serveur refusera proprement */ }
+  const res = await fetch(`/worker/lv/${lvId}/pdf`, { method: "POST", headers: authHeader });
+  if (!res.ok) {
+    let detail = "";
+    try { detail = (await res.json()).detail || ""; } catch (e) {}
+    throw new Error(`bon-worker ${res.status}${detail ? " — " + detail : ""}`);
+  }
+  return res.blob();
+}
+
 // -------------------------------------------------------- Adresse (api-adresse) --
 // api-adresse.data.gouv.fr est autorisée par la CSP (connect-src) : cf. front/nginx.conf.
 export async function searchAddress(query, limit = 5) {

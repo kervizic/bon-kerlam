@@ -108,6 +108,7 @@ import {
   signedUrlChauffeurDoc,
   workerEnvoiGroupe,
   workerChauffeurDepart,
+  workerLvPdf,
   searchAddress,
   reverseAddress,
   rpcLvPoids,
@@ -118,8 +119,9 @@ import {
   todayIso,
 } from "./data.js";
 
-import { initInstall } from "./install.js?v=7";
-import { UndoStack } from "./undo-stack.js?v=7";
+import { initInstall } from "./install.js?v=8";
+import { UndoStack } from "./undo-stack.js?v=8";
+import { PdfCache, shouldCachePdf, formatGeneratedAt } from "./pdf-cache.js?v=8";
 
 /* ============================================================== IndexedDB == */
 /* Deux object stores :
@@ -129,7 +131,7 @@ import { UndoStack } from "./undo-stack.js?v=7";
  *    plein milieu d'une saisie (cf. window.bonSync plus bas).
  */
 const DB_NAME = "bon-kerlam";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 let dbPromise = null;
 
 function openDb() {
@@ -142,6 +144,9 @@ function openDb() {
       if (!db.objectStoreNames.contains("queue")) {
         db.createObjectStore("queue", { keyPath: "id", autoIncrement: true });
       }
+      // "pdfcache" (clé/valeur) : PDF des lettres non signées du chauffeur, pour
+      // l'affichage hors ligne (g). Purgé à la déconnexion.
+      if (!db.objectStoreNames.contains("pdfcache")) db.createObjectStore("pdfcache");
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -198,6 +203,24 @@ async function idbAll(store) {
     req.onerror = () => reject(req.error);
   });
 }
+
+async function idbKeys(store) {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, "readonly");
+    const req = tx.objectStore(store).getAllKeys();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+/* ---------------------------------------- Cache local des PDF (hors ligne, g) == */
+const pdfCache = new PdfCache({
+  get: (k) => idbGet("pdfcache", k),
+  put: (k, v) => idbSet("pdfcache", k, v),
+  delete: (k) => idbDelete("pdfcache", k),
+  keys: () => idbKeys("pdfcache"),
+});
 
 /* ================================================= File de synchro sortante == */
 /* window.bonSync.queueLength est lu par assets/app-version.js : on ne recharge
@@ -475,19 +498,82 @@ const state = {
   lastPoids: null,
   prefillData: {},
   route: "dashboard",
+  mode: "chauffeur", // vue active : "chauffeur" (défaut) | "bureau"
   reglages: {},
   planningSelection: new Set(),
   sitePickerTarget: null, // <select> actuellement ciblé par la feuille de choix de site
 };
 
 const ROUTES = [
-  "dashboard", "today", "mes-lv", "controle", "reglages",
+  "dashboard", "today", "mes-lv", "reglages",
   "lv", "planning", "projets", "clients", "sites", "camions",
   "chauffeurs", "articles", "utilisateurs",
 ];
 
 function hasRole(role) {
   return state.roles.includes(role);
+}
+
+/* ------------------------------------------------- Vue Chauffeur | Bureau (d) ==
+ * Le mode pilote la navigation (barre d'onglets, menu latéral, tiroir « Plus »).
+ * Défaut « chauffeur » pour TOUS les utilisateurs au premier lancement ; dernier
+ * mode mémorisé sur l'appareil (localStorage). Le sélecteur n'est visible que
+ * pour les rôles bureau et ne donne AUCUN droit (la RLS reste la seule autorité).
+ */
+const VIEW_MODE_KEY = "bon_view_mode";
+const CHAUFFEUR_ROUTES = ["today", "mes-lv"]; // reglages est commun aux deux modes
+
+function canSwitchMode() {
+  return hasRole("bureau");
+}
+function getStoredMode() {
+  try {
+    const m = localStorage.getItem(VIEW_MODE_KEY);
+    if (m === "bureau" || m === "chauffeur") return m;
+  } catch (e) { /* localStorage indisponible : on retombe sur le défaut */ }
+  return "chauffeur";
+}
+function persistMode(mode) {
+  try {
+    localStorage.setItem(VIEW_MODE_KEY, mode);
+  } catch (e) { /* noop */ }
+}
+function defaultRouteForMode(mode = state.mode) {
+  return mode === "bureau" ? "dashboard" : "today";
+}
+function applyModeUi() {
+  const mode = state.mode;
+  document.body.classList.toggle("mode-chauffeur", mode === "chauffeur");
+  document.body.classList.toggle("mode-bureau", mode === "bureau");
+  document.querySelectorAll(".mode-seg").forEach((b) => {
+    b.setAttribute("aria-pressed", b.dataset.mode === mode ? "true" : "false");
+  });
+}
+function setMode(mode, { navigateDefault = true } = {}) {
+  if (!canSwitchMode()) mode = "chauffeur";
+  if (mode !== "chauffeur" && mode !== "bureau") mode = "chauffeur";
+  const changed = state.mode !== mode;
+  state.mode = mode;
+  persistMode(mode);
+  applyModeUi();
+  if (changed) resetUndo(); // pile d'annulation remise à zéro au changement de mode
+  if (navigateDefault) navigate(defaultRouteForMode(mode));
+}
+function initModeForUser() {
+  const canSwitch = canSwitchMode();
+  document.body.classList.toggle("can-switch-mode", canSwitch);
+  const switchHeader = document.getElementById("mode-switch-header");
+  const switchDrawer = document.getElementById("mode-switch-drawer");
+  if (switchHeader) switchHeader.hidden = !canSwitch;
+  if (switchDrawer) switchDrawer.hidden = !canSwitch;
+  state.mode = canSwitch ? getStoredMode() : "chauffeur";
+  applyModeUi();
+}
+// Bascule le mode pour qu'il corresponde à la route demandée (cohérence nav).
+function maybeSwitchModeForRoute(route) {
+  if (!canSwitchMode() || route === "reglages") return;
+  const wanted = CHAUFFEUR_ROUTES.includes(route) ? "chauffeur" : "bureau";
+  if (state.mode !== wanted) setMode(wanted, { navigateDefault: false });
 }
 
 /* --------------------------------------------------------- Helpers d'affichage */
@@ -678,7 +764,7 @@ async function loadDashboard() {
     reportIfVersionMismatch(e);
   }
   tilesEl.innerHTML = `
-    <div class="dash-tile"><strong>${lvToday.length}</strong><span>LV aujourd'hui</span></div>
+    <div class="dash-tile"><strong>${lvToday.length}</strong><span>Lettres de voiture aujourd'hui</span></div>
     <div class="dash-tile"><strong>${state.refs.camions.length}</strong><span>Camions actifs</span></div>
     <div class="dash-tile"><strong>${state.refs.chauffeurs.filter((c) => c.actif).length}</strong><span>Chauffeurs actifs</span></div>
   `;
@@ -1057,6 +1143,116 @@ async function cacheTodaySnapshot() {
     sitesById: Object.fromEntries((state.refs.sites || []).map((s) => [s.id, s.nom])),
   };
   await idbSet("cache", "today-snapshot", snapshot).catch(() => {});
+  // Entretien du PDF hors-ligne de la lettre du jour (debounce, chauffeur connecté).
+  schedulePdfCacheRefresh(state.lv);
+}
+
+/* ============================================= Export PDF de la lettre (g) == */
+const PDF_ICON_SVG =
+  '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M12 18v-6"/><path d="m9 15 3 3 3-3"/></svg>';
+
+function connectedChauffeurId() {
+  return state.chauffeur && state.chauffeur.id != null ? state.chauffeur.id : null;
+}
+
+// Construit une ligne de lettre de voiture : zone cliquable (ouvre la lettre) +
+// bouton icône PDF (export). Partagé par « Mes lettres de voiture » et la liste
+// bureau pour ne pas dupliquer le balisage.
+function buildLvRow(lv, { dateText } = {}) {
+  const row = document.createElement("div");
+  row.className = "lv-row";
+  const open = document.createElement("button");
+  open.type = "button";
+  open.className = "lv-row-open";
+  open.innerHTML = `
+    <span class="lv-row-main">
+      <span class="lv-row-numero">${escapeHtml(lv.numero || "(brouillon)")}</span>
+      <span class="lv-row-date">${escapeHtml(dateText != null ? dateText : (lv.date_etablissement || ""))}</span>
+    </span>
+    <span class="badge badge-${escapeHtml(lv.statut)}">${escapeHtml(lv.statut)}</span>`;
+  open.addEventListener("click", () => openLvInToday(lv));
+  const pdf = document.createElement("button");
+  pdf.type = "button";
+  pdf.className = "icon-btn lv-row-pdf";
+  pdf.title = "Exporter en PDF";
+  pdf.setAttribute("aria-label", "Exporter en PDF");
+  pdf.innerHTML = PDF_ICON_SVG;
+  pdf.addEventListener("click", (e) => { e.stopPropagation(); exportLvPdf(lv); });
+  row.append(open, pdf);
+  return row;
+}
+
+async function sharePdf(blob, filename, generatedNote) {
+  const file = new File([blob], filename, { type: "application/pdf" });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: filename, text: generatedNote || undefined });
+      return;
+    } catch (e) {
+      if (e && e.name === "AbortError") return; // l'utilisateur a annulé le partage
+      // sinon : on bascule sur le téléchargement ci-dessous
+    }
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+  if (generatedNote) alert(`PDF ${generatedNote}.`);
+}
+
+async function exportLvPdf(lv) {
+  if (!lv || lv.id == null) {
+    alert("Enregistrez d'abord la lettre de voiture (aucun numéro).");
+    return;
+  }
+  const filename = `lettre-de-voiture-${lv.numero || lv.id}.pdf`;
+  if (navigator.onLine) {
+    try {
+      const blob = await workerLvPdf(lv.id);
+      if (shouldCachePdf(lv, connectedChauffeurId())) {
+        await pdfCache.put(lv.id, blob, Date.now()).catch(() => {});
+      }
+      await sharePdf(blob, filename, null);
+      return;
+    } catch (err) {
+      // Échec réseau/serveur : on tente le cache local ci-dessous.
+      reportIfVersionMismatch(err);
+    }
+  }
+  const cached = await pdfCache.get(lv.id).catch(() => null);
+  if (cached && cached.blob) {
+    await sharePdf(cached.blob, filename, formatGeneratedAt(cached.generatedAt));
+    return;
+  }
+  alert("PDF indisponible hors ligne (aucune version en cache pour cette lettre).");
+}
+
+// Régénération debounce du PDF hors-ligne après chaque modification de la lettre
+// du jour (chauffeur connecté, lettre non signée).
+let pdfRefreshTimer = null;
+function schedulePdfCacheRefresh(lv) {
+  if (!lv || lv.id == null || lv.statut === "signee" || !hasRole("chauffeur")) return;
+  if (!navigator.onLine) return;
+  if (pdfRefreshTimer) clearTimeout(pdfRefreshTimer);
+  pdfRefreshTimer = setTimeout(async () => {
+    pdfRefreshTimer = null;
+    try {
+      const blob = await workerLvPdf(lv.id);
+      await pdfCache.put(lv.id, blob, Date.now());
+    } catch (e) { /* best-effort : silencieux */ }
+  }, 2500);
+}
+
+// Déconnexion : on purge le cache PDF local (documents non signés du chauffeur)
+// AVANT de clôturer la session, puis on déconnecte.
+async function logout() {
+  if (pdfRefreshTimer) { clearTimeout(pdfRefreshTimer); pdfRefreshTimer = null; }
+  await pdfCache.purge().catch(() => {});
+  await signOut();
 }
 
 /* ===================================================================== Mes LV == */
@@ -1071,18 +1267,7 @@ async function loadMesLv() {
     }
     listEl.innerHTML = "";
     for (const lv of data.slice(0, 30)) {
-      const row = document.createElement("button");
-      row.type = "button";
-      row.className = "lv-row";
-      row.innerHTML = `
-        <span class="lv-row-main">
-          <span class="lv-row-numero">${escapeHtml(lv.numero || "(brouillon)")}</span>
-          <span class="lv-row-date">${escapeHtml(lv.date_etablissement || "")}</span>
-        </span>
-        <span class="badge badge-${escapeHtml(lv.statut)}">${escapeHtml(lv.statut)}</span>
-      `;
-      row.addEventListener("click", () => openLvInToday(lv));
-      listEl.appendChild(row);
+      listEl.appendChild(buildLvRow(lv));
     }
   } catch (err) {
     reportIfVersionMismatch(err);
@@ -1096,53 +1281,6 @@ async function openLvInToday(lv) {
   renderLvNumero();
   await loadToursFor(lv);
   navigate("today");
-}
-
-/* ==================================================================== Contrôle == */
-async function loadControle() {
-  const statusEl = document.getElementById("controle-status");
-  const contentEl = document.getElementById("controle-content");
-  const snapshot = await idbGet("cache", "today-snapshot").catch(() => null);
-  if (!snapshot) {
-    statusEl.textContent = "Aucune donnée en cache pour l'instant — ouvrez d'abord « Aujourd'hui ».";
-    contentEl.innerHTML = "";
-    return;
-  }
-  statusEl.textContent = `Dernière mise à jour locale : ${new Date(snapshot.savedAt).toLocaleString("fr-FR")}`;
-  contentEl.innerHTML = renderControleHtml(snapshot);
-}
-
-function renderControleHtml(s) {
-  const lv = s.lv || {};
-  const poids = s.poids;
-  const toursHtml =
-    (s.tours || [])
-      .map(
-        ({ tour, lignes }) => `
-    <h2>Tour n°${escapeHtml(tour.ordre)}</h2>
-    <dl>
-      <dt>Chargement</dt><dd>${escapeHtml(s.sitesById[tour.site_chargement_id] || "—")}</dd>
-      <dt>Déchargement</dt><dd>${escapeHtml(s.sitesById[tour.site_dechargement_id] || "—")}</dd>
-      <dt>Départ</dt><dd>${tour.heure_depart ? new Date(tour.heure_depart).toLocaleTimeString("fr-FR") : "—"}</dd>
-    </dl>
-    <ul>
-      ${(lignes || [])
-        .map((l) => `<li>${escapeHtml(s.articlesById[l.article_id] || "Article")} — ${l.quantite ?? "?"} ${escapeHtml(l.unite || "")}</li>`)
-        .join("")}
-    </ul>`
-      )
-      .join("") || "<p>Aucun tour.</p>";
-
-  return `
-    <dl>
-      <dt>Numéro</dt><dd>${escapeHtml(lv.numero || "non attribué")}</dd>
-      <dt>Date</dt><dd>${escapeHtml(lv.date_etablissement || "—")}</dd>
-      <dt>Statut</dt><dd>${escapeHtml(lv.statut || "—")}</dd>
-      <dt>Expéditeur</dt><dd>${escapeHtml(lv.expediteur || "—")}</dd>
-    </dl>
-    ${poids ? `<p><strong>Charge :</strong> ${poids.masse_totale_t} t${poids.ptac_t ? ` / ${poids.ptac_t} t (${Math.round((poids.ratio || 0) * 100)}%)` : ""}</p>` : ""}
-    ${toursHtml}
-  `;
 }
 
 /* =============================================================== Réglages bureau == */
@@ -1200,18 +1338,7 @@ async function loadLvScreen() {
     }
     listEl.innerHTML = "";
     for (const lv of rows) {
-      const row = document.createElement("button");
-      row.type = "button";
-      row.className = "lv-row";
-      row.innerHTML = `
-        <span class="lv-row-main">
-          <span class="lv-row-numero">${escapeHtml(lv.numero || "(brouillon)")}</span>
-          <span class="lv-row-date">${escapeHtml(formatDateFr(lv.date_etablissement))}</span>
-        </span>
-        <span class="badge badge-${escapeHtml(lv.statut)}">${escapeHtml(lv.statut)}</span>
-      `;
-      row.addEventListener("click", () => openLvInToday(lv));
-      listEl.appendChild(row);
+      listEl.appendChild(buildLvRow(lv, { dateText: formatDateFr(lv.date_etablissement) }));
     }
   };
   wireFilterInput(document.getElementById("filter-lv"), render);
@@ -1231,7 +1358,7 @@ async function loadPlanning() {
     reportIfVersionMismatch(e);
   }
   if (!rows.length) {
-    listEl.innerHTML = '<p class="entity-empty">Aucune LV préparée.</p>';
+    listEl.innerHTML = '<p class="entity-empty">Aucune lettre de voiture préparée.</p>';
     return;
   }
   listEl.innerHTML = "";
@@ -1248,7 +1375,7 @@ function renderPlanningCard(lv) {
   const client = state.refs.projets.find((p) => p.id === lv.projet_id);
   const clientNom = client ? (state.refs.clients.find((c) => c.id === client.client_id) || {}).raison_sociale : "";
   return createAccordionCard({
-    title: lv.numero || `LV préparée — ${formatDateFr(lv.date_etablissement)}`,
+    title: lv.numero || `Lettre de voiture préparée — ${formatDateFr(lv.date_etablissement)}`,
     subtitle: clientNom || "Client non défini",
     metaHtml: `<label class="field-checkbox planning-check">
       <input type="checkbox" class="planning-select" data-lv-id="${lv.id}"> Envoyer
@@ -2305,7 +2432,7 @@ function renderArticleCard(a, allRows, startOpen = false) {
 
       const nomInput = makeTextInput("text", a.nom);
       wireAutosaveField(nomInput, { table: "articles", id: a.id, field: "nom" });
-      grid.appendChild(fieldBlock("Nom (imprimé sur la LV)", nomInput));
+      grid.appendChild(fieldBlock("Nom (imprimé sur la lettre de voiture)", nomInput));
 
       const comInput = document.createElement("textarea");
       comInput.value = a.commentaire_interne || "";
@@ -2585,7 +2712,6 @@ async function renderSitePickerList(query) {
 const ROUTE_LOADERS = {
   today: loadToday,
   "mes-lv": loadMesLv,
-  controle: loadControle,
   dashboard: loadDashboard,
   reglages: loadReglagesBureau,
   lv: loadLvScreen,
@@ -2613,7 +2739,8 @@ function closeNavDrawer() {
 }
 
 async function navigate(route) {
-  if (!ROUTES.includes(route)) route = "dashboard";
+  if (!ROUTES.includes(route)) route = defaultRouteForMode();
+  maybeSwitchModeForRoute(route); // cohérence mode <-> contenu (utilisateurs bureau)
   resetUndo(); // on quitte le formulaire courant : la pile d'annulation repart de zéro
   state.route = route;
   document.querySelectorAll(".view").forEach((el) => {
@@ -2642,10 +2769,15 @@ function wireStaticUI() {
   wireHeaderAutosave();
 
   document.getElementById("btn-add-tour").addEventListener("click", addTour);
-  document.getElementById("btn-controle-refresh").addEventListener("click", async () => {
-    await loadToday();
-    await loadControle();
+
+  // Sélecteur de vue Chauffeur | Bureau (d).
+  document.querySelectorAll(".mode-seg").forEach((b) => {
+    b.addEventListener("click", () => setMode(b.dataset.mode));
   });
+
+  // Bouton d'export PDF de la lettre ouverte (g).
+  const btnPdfToday = document.getElementById("btn-pdf-today");
+  if (btnPdfToday) btnPdfToday.addEventListener("click", () => exportLvPdf(state.lv));
 
   document.querySelectorAll("[data-route]").forEach((el) => {
     el.addEventListener("click", (e) => {
@@ -2701,8 +2833,8 @@ function wireStaticUI() {
       showAuthError("Connexion impossible : " + (err && err.message ? err.message : "erreur inconnue"));
     }
   });
-  document.getElementById("btn-logout-unauthorized").addEventListener("click", () => signOut());
-  document.getElementById("btn-logout").addEventListener("click", () => signOut());
+  document.getElementById("btn-logout-unauthorized").addEventListener("click", () => logout());
+  document.getElementById("btn-logout").addEventListener("click", () => logout());
 
   wireEmailOtpLogin();
   wireReglagesBureauFields();
@@ -2737,7 +2869,7 @@ function wireStaticUI() {
     btn.disabled = true;
     try {
       const res = await workerEnvoiGroupe(ids);
-      alert(`Envoi déclenché manuellement pour ${res.lv ? res.lv.length : ids.length} LV (Documenso hors périmètre bêta).`);
+      alert(`Envoi déclenché manuellement pour ${res.lv ? res.lv.length : ids.length} lettre(s) de voiture (Documenso hors périmètre bêta).`);
       state.planningSelection = new Set();
       refreshPlanningSelectionUi();
       await loadPlanning();
@@ -2960,6 +3092,7 @@ async function handleSessionChange(session) {
 
   document.body.classList.toggle("has-bureau", hasRole("bureau"));
   document.body.classList.toggle("has-chauffeur", hasRole("chauffeur"));
+  initModeForUser(); // vue chauffeur par défaut + sélecteur visible pour le bureau
 
   const badgeEl = document.getElementById("profil-badge");
   if (badgeEl) badgeEl.textContent = `${profil.nom || profil.email} · ${state.roles.join(" + ") || profil.role}`;
@@ -2980,8 +3113,10 @@ async function handleSessionChange(session) {
     await openDemoScreen(demoScreenParam());
     return;
   }
-  const initialRoute = (window.location.hash || "#/dashboard").replace(/^#\//, "") || "dashboard";
-  navigate(initialRoute);
+  // Pas de hash explicite : on respecte le mode (chauffeur par défaut). Un hash
+  // présent est honoré (navigate() ajuste le mode au besoin).
+  const hashRoute = (window.location.hash || "").replace(/^#\//, "");
+  navigate(hashRoute || defaultRouteForMode());
 }
 
 // Deep-links `?demo=1&screen=...` (cf. front/README.md et la mission CI

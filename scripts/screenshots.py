@@ -35,8 +35,7 @@ BUREAU_SCREENS = [
     ("planning", "planning"), ("reglages", "reglages"),
 ]
 CHAUFFEUR_SCREENS = [
-    ("today", "aujourdhui"), ("mes-lv", "mes-lv"),
-    ("controle", "controle"), ("reglages", "reglages"),
+    ("today", "aujourdhui"), ("mes-lv", "mes-lv"), ("reglages", "reglages"),
 ]
 
 overflow_failures: list[str] = []

@@ -10,8 +10,8 @@
   <!-- Empreinte de version du shell (cf. assets/app-version.js). Bumper `app-rev`
        à chaque déploiement backend devant forcer un refresh (sinon le bump d'un
        `?v=` d'asset suffit). -->
-  <meta name="app-version" content="0.1.0-beta.7">
-  <meta name="app-rev" content="7">
+  <meta name="app-version" content="0.1.0-beta.8">
+  <meta name="app-rev" content="8">
 
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
@@ -26,8 +26,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="mobile-web-app-capable" content="yes">
 
-  <link rel="stylesheet" href="/assets/styles.css?v=7">
-  <script src="/assets/app-version.js?v=7" defer></script>
+  <link rel="stylesheet" href="/assets/styles.css?v=8">
+  <script src="/assets/app-version.js?v=8" defer></script>
 </head>
 <body>
   <a href="#main" class="skip-link">Aller au contenu</a>
@@ -112,7 +112,19 @@
   <div id="app-shell" class="app-shell" hidden>
 
     <header class="topbar">
-      <div class="logo" aria-hidden="true"><span class="logo-ker">KER</span><span class="logo-lam">LAM</span></div>
+      <div class="topbar-brand">
+        <div class="logo" aria-hidden="true"><span class="logo-ker">KER</span><span class="logo-lam">LAM</span></div>
+        <div class="mode-switch mode-switch-header" id="mode-switch-header" role="group" aria-label="Changer de vue" hidden>
+          <button type="button" class="mode-seg" data-mode="chauffeur" aria-pressed="true">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg>
+            <span>Chauffeur</span>
+          </button>
+          <button type="button" class="mode-seg" data-mode="bureau" aria-pressed="false">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+            <span>Bureau</span>
+          </button>
+        </div>
+      </div>
 
       <div class="topbar-actions">
         <button id="btn-undo" class="icon-btn" type="button" title="Annuler (Ctrl+Z)" aria-label="Annuler la dernière modification" hidden>
@@ -132,16 +144,18 @@
     <div class="app-body">
       <nav class="side-nav" aria-label="Navigation principale">
         <ul>
-          <li><a href="#/dashboard"    data-route="dashboard">Tableau de bord</a></li>
-          <li><a href="#/lv"           data-route="lv">LV</a></li>
-          <li><a href="#/planning"     data-route="planning">Planning</a></li>
-          <li><a href="#/projets"      data-route="projets">Projets</a></li>
-          <li><a href="#/clients"      data-route="clients">Clients</a></li>
-          <li><a href="#/sites"        data-route="sites">Sites</a></li>
-          <li><a href="#/camions"      data-route="camions">Camions</a></li>
-          <li><a href="#/chauffeurs"   data-route="chauffeurs">Chauffeurs</a></li>
-          <li><a href="#/articles"     data-route="articles">Articles</a></li>
-          <li><a href="#/utilisateurs" data-route="utilisateurs">Utilisateurs</a></li>
+          <li class="nav-chauffeur"><a href="#/today"    data-route="today">Aujourd'hui</a></li>
+          <li class="nav-chauffeur"><a href="#/mes-lv"   data-route="mes-lv">Mes lettres de voiture</a></li>
+          <li class="nav-bureau"><a href="#/dashboard"    data-route="dashboard">Tableau de bord</a></li>
+          <li class="nav-bureau"><a href="#/lv"           data-route="lv">Lettres de voiture</a></li>
+          <li class="nav-bureau"><a href="#/planning"     data-route="planning">Planning</a></li>
+          <li class="nav-bureau"><a href="#/projets"      data-route="projets">Projets</a></li>
+          <li class="nav-bureau"><a href="#/clients"      data-route="clients">Clients</a></li>
+          <li class="nav-bureau"><a href="#/sites"        data-route="sites">Sites</a></li>
+          <li class="nav-bureau"><a href="#/camions"      data-route="camions">Camions</a></li>
+          <li class="nav-bureau"><a href="#/chauffeurs"   data-route="chauffeurs">Chauffeurs</a></li>
+          <li class="nav-bureau"><a href="#/articles"     data-route="articles">Articles</a></li>
+          <li class="nav-bureau"><a href="#/utilisateurs" data-route="utilisateurs">Utilisateurs</a></li>
           <li><a href="#/reglages"     data-route="reglages">Réglages</a></li>
         </ul>
       </nav>
@@ -155,16 +169,12 @@
 
           <div id="dashboard-driver-cards" class="dashboard-cards" hidden>
             <a class="dashboard-card" data-route="today" href="#/today">
-              <strong>LV du jour</strong>
+              <strong>Lettre de voiture du jour</strong>
               <span>Ouvrir la lettre de voiture d'aujourd'hui</span>
             </a>
             <a class="dashboard-card" data-route="mes-lv" href="#/mes-lv">
-              <strong>Mes LV</strong>
+              <strong>Mes lettres de voiture</strong>
               <span>Historique de mes lettres de voiture</span>
-            </a>
-            <a class="dashboard-card" data-route="controle" href="#/controle">
-              <strong>Contrôle</strong>
-              <span>Lecture hors-ligne, vérification terrain</span>
             </a>
           </div>
 
@@ -187,6 +197,9 @@
           <div class="view-header">
             <h1>Aujourd'hui</h1>
             <span id="lv-numero" class="lv-numero">—</span>
+            <button type="button" id="btn-pdf-today" class="icon-btn btn-pdf" title="Exporter en PDF" aria-label="Exporter en PDF">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M12 18v-6"/><path d="m9 15 3 3 3-3"/></svg>
+            </button>
           </div>
 
           <form id="lv-header-form" class="lv-header-form" autocomplete="off">
@@ -242,20 +255,10 @@
 
         <!-- -------------------------------------------------------------- Mes LV -->
         <section id="view-mes-lv" class="view" data-view="mes-lv" hidden>
-          <div class="view-header"><h1>Mes LV</h1></div>
+          <div class="view-header"><h1>Mes lettres de voiture</h1></div>
           <div id="mes-lv-list" class="mes-lv-list">
             <p class="muted">Chargement…</p>
           </div>
-        </section>
-
-        <!-- -------------------------------------------------------------- Contrôle -->
-        <section id="view-controle" class="view" data-view="controle" hidden>
-          <div class="view-header">
-            <h1>Contrôle</h1>
-            <button type="button" id="btn-controle-refresh" class="btn btn-secondary btn-sm">Actualiser</button>
-          </div>
-          <p id="controle-status" class="muted"></p>
-          <div id="controle-content" class="controle-content"></div>
         </section>
 
         <!-- --------------------------------------------------------------- Réglages -->
@@ -318,7 +321,7 @@
 
         <!-- ------------------------------------------------------------------- LV -->
         <section id="view-lv" class="view" data-view="lv" hidden>
-          <div class="view-header"><h1>LV</h1></div>
+          <div class="view-header"><h1>Lettres de voiture</h1></div>
           <div class="view-toolbar">
             <input type="search" id="filter-lv" class="filter-input" placeholder="Rechercher un numéro, un expéditeur…">
           </div>
@@ -415,10 +418,7 @@
         <span class="bb-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg></span><span class="bb-label">Aujourd'hui</span>
       </button>
       <button type="button" class="bottom-bar-item bb-chauffeur" data-route="mes-lv">
-        <span class="bb-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h.01M3 12h.01M3 18h.01"/><path d="M8 6h13M8 12h13M8 18h13"/></svg></span><span class="bb-label">Mes LV</span>
-      </button>
-      <button type="button" class="bottom-bar-item bb-chauffeur" data-route="controle">
-        <span class="bb-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.8 10A10 10 0 1 1 17 3.3"/><path d="m9 11 3 3L22 4"/></svg></span><span class="bb-label">Contrôle</span>
+        <span class="bb-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h.01M3 12h.01M3 18h.01"/><path d="M8 6h13M8 12h13M8 18h13"/></svg></span><span class="bb-label">Lettres</span>
       </button>
       <button type="button" class="bottom-bar-item bb-chauffeur" data-route="reglages">
         <span class="bb-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span><span class="bb-label">Réglages</span>
@@ -427,8 +427,8 @@
       <button type="button" class="bottom-bar-item bb-bureau" data-route="dashboard">
         <span class="bb-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg></span><span class="bb-label">Tableau</span>
       </button>
-      <button type="button" class="bottom-bar-item" data-route="lv">
-        <span class="bb-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4M12 16h4M8 11h.01M8 16h.01"/></svg></span><span class="bb-label">LV</span>
+      <button type="button" class="bottom-bar-item bb-bureau" data-route="lv">
+        <span class="bb-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4M12 16h4M8 11h.01M8 16h.01"/></svg></span><span class="bb-label">Lettres</span>
       </button>
       <button type="button" class="bottom-bar-item bb-bureau" data-route="planning">
         <span class="bb-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01"/></svg></span><span class="bb-label">Planning</span>
@@ -445,17 +445,29 @@
           <h2>Menu</h2>
           <button type="button" class="icon-btn" id="btn-nav-drawer-close" aria-label="Fermer"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
         </div>
+        <div class="mode-switch mode-switch-drawer" id="mode-switch-drawer" role="group" aria-label="Changer de vue" hidden>
+          <button type="button" class="mode-seg" data-mode="chauffeur" aria-pressed="true">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg>
+            <span>Chauffeur</span>
+          </button>
+          <button type="button" class="mode-seg" data-mode="bureau" aria-pressed="false">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+            <span>Bureau</span>
+          </button>
+        </div>
         <nav class="nav-drawer-list" aria-label="Toutes les sections">
-          <a href="#/dashboard"    data-route="dashboard">Tableau de bord</a>
-          <a href="#/lv"           data-route="lv">LV</a>
-          <a href="#/planning"     data-route="planning">Planning</a>
-          <a href="#/projets"      data-route="projets">Projets</a>
-          <a href="#/clients"      data-route="clients">Clients</a>
-          <a href="#/sites"        data-route="sites">Sites</a>
-          <a href="#/camions"      data-route="camions">Camions</a>
-          <a href="#/chauffeurs"   data-route="chauffeurs">Chauffeurs</a>
-          <a href="#/articles"     data-route="articles">Articles</a>
-          <a href="#/utilisateurs" data-route="utilisateurs">Utilisateurs</a>
+          <a class="nav-chauffeur" href="#/today"    data-route="today">Aujourd'hui</a>
+          <a class="nav-chauffeur" href="#/mes-lv"   data-route="mes-lv">Mes lettres de voiture</a>
+          <a class="nav-bureau" href="#/dashboard"    data-route="dashboard">Tableau de bord</a>
+          <a class="nav-bureau" href="#/lv"           data-route="lv">Lettres de voiture</a>
+          <a class="nav-bureau" href="#/planning"     data-route="planning">Planning</a>
+          <a class="nav-bureau" href="#/projets"      data-route="projets">Projets</a>
+          <a class="nav-bureau" href="#/clients"      data-route="clients">Clients</a>
+          <a class="nav-bureau" href="#/sites"        data-route="sites">Sites</a>
+          <a class="nav-bureau" href="#/camions"      data-route="camions">Camions</a>
+          <a class="nav-bureau" href="#/chauffeurs"   data-route="chauffeurs">Chauffeurs</a>
+          <a class="nav-bureau" href="#/articles"     data-route="articles">Articles</a>
+          <a class="nav-bureau" href="#/utilisateurs" data-route="utilisateurs">Utilisateurs</a>
           <a href="#/reglages"     data-route="reglages">Réglages</a>
         </nav>
       </div>
@@ -550,8 +562,8 @@
   </template>
 
   <!-- ================================================================== Scripts -->
-  <script src="/assets/config.js?v=7"></script>
+  <script src="/assets/config.js?v=8"></script>
   <script src="/assets/vendor/supabase/supabase.js"></script>
-  <script type="module" src="/assets/app.js?v=7"></script>
+  <script type="module" src="/assets/app.js?v=8"></script>
 </body>
 </html>

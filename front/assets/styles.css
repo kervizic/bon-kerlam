@@ -265,6 +265,40 @@ a { color: var(--c-blue); }
 
 .profil-badge { font-size: 13px; color: var(--text-muted); margin-left: 6px; }
 
+/* ---------------------------------------- Sélecteur de vue Chauffeur | Bureau */
+.topbar-brand { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.mode-switch {
+  display: inline-flex; align-items: stretch;
+  border: 1px solid var(--border); border-radius: 999px;
+  overflow: hidden; background: var(--surface);
+}
+.mode-switch[hidden] { display: none; }
+.mode-seg {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 14px; min-height: 36px;
+  border: none; background: transparent; cursor: pointer;
+  color: var(--text-muted); font: inherit; font-size: 14px; font-weight: 600;
+}
+.mode-seg + .mode-seg { border-left: 1px solid var(--border); }
+.mode-seg[aria-pressed="true"] { background: var(--c-orange); color: #fff; }
+.mode-seg svg { flex-shrink: 0; }
+/* Le sélecteur du header est caché sur mobile ; celui du tiroir « Plus » est
+   caché sur ordinateur (cf. media queries). L'en-tête mobile reste logo seul. */
+.mode-switch-drawer { width: 100%; margin-bottom: 14px; }
+.mode-switch-drawer .mode-seg { flex: 1; justify-content: center; }
+
+/* Affichage des entrées de navigation selon le mode actif. */
+.nav-chauffeur, .nav-bureau { display: none; }
+body.mode-chauffeur .nav-chauffeur { display: block; }
+body.mode-bureau .nav-bureau { display: block; }
+.side-nav li.nav-chauffeur, .side-nav li.nav-bureau { display: none; }
+body.mode-chauffeur .side-nav li.nav-chauffeur { display: block; }
+body.mode-bureau .side-nav li.nav-bureau { display: block; }
+
+/* Bouton d'export PDF (icône seule, Lucide file-down). */
+.btn-pdf { color: var(--c-orange-dark); }
+.lv-row-pdf { margin-left: auto; }
+
 .app-body { flex: 1; display: flex; min-height: 0; }
 
 .side-nav {
@@ -457,13 +491,17 @@ input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 12px 14px;
-  cursor: pointer;
+  padding: 8px 10px 8px 14px;
   text-align: left;
   width: 100%;
   font-size: 15px;
 }
 .lv-row:hover { background: var(--bg); }
+.lv-row-open {
+  flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: none; border: none; cursor: pointer; text-align: left;
+  font: inherit; color: inherit; padding: 4px 0;
+}
 .lv-row .lv-row-main { display: flex; flex-direction: column; }
 .lv-row .lv-row-numero { font-weight: 700; }
 .lv-row .lv-row-date { color: var(--text-muted); font-size: 13px; }
@@ -680,14 +718,21 @@ input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
   .topbar-theme { display: none; }
   .avatar-btn { display: inline-flex; }
   .topbar { padding-left: 12px; padding-right: 12px; }
+  /* En-tête mobile = logo seul : le sélecteur de vue passe dans le menu « Plus ». */
+  .mode-switch-header { display: none !important; }
+}
+@media (min-width: 900px) {
+  /* Sur ordinateur, le sélecteur vit dans l'en-tête, jamais dans le tiroir. */
+  .mode-switch-drawer { display: none !important; }
 }
 
-/* Barre d'onglets : items affichés selon le rôle (l'onglet LV est commun). */
+/* Barre d'onglets : items affichés selon le MODE actif (chauffeur | bureau).
+   Le mode chauffeur est le défaut pour tout le monde ; les utilisateurs bureau
+   gardent l'onglet « Plus » dans les deux modes pour revenir en arrière. */
 .bottom-bar-item { display: none; }
-.bottom-bar-item[data-route="lv"] { display: flex; }
-body.has-bureau .bb-bureau,
-body.has-bureau .bb-more { display: flex; }
-body.has-chauffeur:not(.has-bureau) .bb-chauffeur { display: flex; }
+body.mode-chauffeur .bb-chauffeur { display: flex; }
+body.mode-bureau .bb-bureau { display: flex; }
+body.can-switch-mode .bb-more { display: flex; }
 
 /* Tiroir « Plus » : menu plein écran (mobile), fermé par défaut. */
 .nav-drawer { position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,.4); display: flex; }

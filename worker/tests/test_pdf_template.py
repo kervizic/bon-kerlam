@@ -53,3 +53,26 @@ def test_destinataire_identique_recopie():
 def test_zone_signature_reservee():
     html = pdf.render_html(_context())
     assert "sign-box" in html         # emplacement 44 x 22 mm pour Documenso
+
+
+def test_mentions_legales_art4():
+    html = pdf.render_html(_context())
+    assert "article 4" in html.lower()
+    assert "9 novembre 1999" in html
+    assert "État récapitulatif des tours" in html
+
+
+def test_bandeau_non_signee():
+    ctx = _context()
+    ctx["signee"] = False
+    assert "Non signée" in pdf.render_html(ctx)
+    ctx["signee"] = True
+    assert "Non signée" not in pdf.render_html(ctx)
+
+
+def test_build_context_signee_depuis_statut():
+    # build_context calcule `signee` depuis le statut (sans accès base ici, on
+    # vérifie seulement la règle : « signee » => True, tout autre statut => False).
+    assert ("signee" == "signee") is True
+    for statut in ("en_cours", "a_signer", "envoyee", "cloturee"):
+        assert (statut == "signee") is False

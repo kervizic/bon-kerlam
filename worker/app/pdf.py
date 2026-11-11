@@ -33,6 +33,7 @@ def build_context(lv_id: int) -> dict[str, Any]:
         """
         SELECT lv.id, lv.numero, lv.date_etablissement, lv.date_prise_en_charge,
                lv.expediteur, lv.destinataire, lv.dest_identique, lv.heures_regie,
+               lv.statut,
                c.immatriculation AS camion, ch.nom AS chauffeur, p.nom AS projet
           FROM bon.lettres_voiture lv
           LEFT JOIN bon.camions c    ON c.id = lv.camion_id
@@ -72,7 +73,9 @@ def build_context(lv_id: int) -> dict[str, Any]:
             """,
             (tour["id"],),
         )
-    return {"lv": lv, "tours": tours, "transporteur": TRANSPORTEUR}
+    # Bandeau « Non signée » tant que la lettre n'est pas au statut signée.
+    signee = lv.get("statut") == "signee"
+    return {"lv": lv, "tours": tours, "transporteur": TRANSPORTEUR, "signee": signee}
 
 
 def render_html(context: dict[str, Any]) -> str:

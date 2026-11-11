@@ -512,6 +512,14 @@ export async function workerDocumentSignedUrl(key) {
   if (DEMO) return { signed_url: "about:blank#demo-" + encodeURIComponent(key) };
   return live.workerDocumentSignedUrl(key);
 }
+export async function workerLvPdf(lvId) {
+  if (DEMO) {
+    // En démo (captures), pas de worker : on fabrique un PDF minimal valide.
+    const stub = "%PDF-1.4\n% démo bon.kerlam.fr — lettre de voiture\n";
+    return new Blob([stub], { type: "application/pdf" });
+  }
+  return live.workerLvPdf(lvId);
+}
 
 /* -------------------------------------------------------- Adresse (api-adresse) */
 export async function searchAddress(query) {

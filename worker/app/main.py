@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.responses import Response
 
 from . import closing, db, geocode, pdf
-from .auth import require_token
+from .auth import require_token, require_user
 from .config import settings
 
 
@@ -207,6 +207,49 @@ def referentiel(kind: str, _=Depends(require_token("read"))):
 
 @router.post("/pdf/{lv_id}")
 def lv_pdf(lv_id: int, _=Depends(require_token("read"))):
+    try:
+        ctx = pdf.build_context(lv_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return Response(content=pdf.render_pdf(ctx), media_type="application/pdf")
+
+
+def _user_can_access_lv(email: str | None, lv_id: int) -> bool:
+    """Le bureau voit toutes les lettres ; un chauffeur, seulement les siennes.
+
+    bon_worker a le BYPASSRLS : on applique donc la règle d'accès explicitement
+    ici (même logique que la RLS des schémas api/bon)."""
+    if not email:
+        return False
+    row = db.query_one(
+        """
+        SELECT (
+          EXISTS (
+            SELECT 1 FROM bon.utilisateurs u
+             WHERE lower(u.email) = lower(%(email)s) AND 'bureau' = ANY(u.roles)
+          )
+          OR EXISTS (
+            SELECT 1 FROM bon.lettres_voiture lv
+              LEFT JOIN bon.chauffeurs ch ON ch.id = lv.chauffeur_id
+             WHERE lv.id = %(id)s AND lv.deleted_at IS NULL
+               AND (lower(lv.owner_email) = lower(%(email)s)
+                    OR lower(ch.email) = lower(%(email)s))
+          )
+        ) AS allowed
+        """,
+        {"email": email, "id": lv_id},
+    )
+    return bool(row and row["allowed"])
+
+
+@router.post("/lv/{lv_id}/pdf")
+def lv_pdf_user(lv_id: int, user=Depends(require_user)):
+    """PDF officiel pour l'utilisateur connecté (jeton de session Supabase).
+
+    Permet au front PWA de générer/partager le PDF sans jeton IA. Le bandeau
+    « Non signée » est géré par le gabarit selon le statut de la lettre."""
+    if not _user_can_access_lv(user.get("email"), lv_id):
+        raise HTTPException(status_code=403, detail="Accès refusé à cette lettre de voiture.")
     try:
         ctx = pdf.build_context(lv_id)
     except ValueError as exc:
