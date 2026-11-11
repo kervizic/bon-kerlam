@@ -25,6 +25,10 @@ __pycache__/
 .coverage
 htmlcov/
 
+# Icônes PWA générées au build (cf. scripts/gen-icons.py)
+front/assets/icons/*.png
+front/assets/icons/favicon.ico
+
 # OS / éditeurs
 .DS_Store
 *.swp

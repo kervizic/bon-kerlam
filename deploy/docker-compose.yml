@@ -175,6 +175,9 @@ services:
       WORKER_DATABASE_URL: postgres://bon_worker:${WORKER_DB_PASSWORD}@db:5432/${POSTGRES_DB}
       GEOCODE_ON_START: ${GEOCODE_ON_START:-false}
       KERLAM_SIREN: ${KERLAM_SIREN}
+      STORAGE_URL: http://storage:5000
+      SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+      DOCS_BUCKET: chauffeur-docs
 
   front:
     container_name: bon-front

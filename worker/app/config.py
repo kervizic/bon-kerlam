@@ -28,6 +28,10 @@ class Settings:
     # Géocodage BAN au démarrage (désactivable en test).
     geocode_on_start: bool = os.environ.get("GEOCODE_ON_START", "false").lower() == "true"
     ban_url: str = os.environ.get("BAN_URL", "https://api-adresse.data.gouv.fr/search/")
+    # Storage (scans documents chauffeur) : URL interne + clé service_role.
+    storage_url: str = os.environ.get("STORAGE_URL", "http://storage:5000")
+    service_role_key: str = os.environ.get("SERVICE_ROLE_KEY", "")
+    docs_bucket: str = os.environ.get("DOCS_BUCKET", "chauffeur-docs")
 
 
 settings = Settings()
