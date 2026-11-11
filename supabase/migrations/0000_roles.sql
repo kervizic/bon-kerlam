@@ -26,27 +26,11 @@ $$;
 
 GRANT anon, authenticated, service_role TO authenticator;
 
--- Schéma auth + helpers. Sur supabase/postgres ils existent déjà ; CREATE IF NOT
--- EXISTS / OR REPLACE restent sûrs (on ne change pas le propriétaire ici).
+-- Schéma auth (présent sur l'image supabase/postgres ; créé vide sinon). On NE
+-- (re)définit PAS auth.uid()/role()/email() : sur supabase/postgres ces fonctions
+-- appartiennent à supabase_auth_admin et les redéfinir volerait leur propriété,
+-- faisant échouer la migration interne de GoTrue (« must be owner of function uid »).
+-- Les règles RLS de ce projet s'appuient sur bon.current_actor() (cf. 0003), qui
+-- lit directement le GUC request.jwt.claims — aucune dépendance à auth.*.
 CREATE SCHEMA IF NOT EXISTS auth;
 GRANT USAGE ON SCHEMA auth TO anon, authenticated, service_role;
-
--- NULLIF(..., '') protège contre un GUC à chaîne vide (set_config(..., NULL)) :
--- ''::jsonb lèverait « invalid input syntax for type json ».
-CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid
-  LANGUAGE sql STABLE AS $$
-  SELECT NULLIF(NULLIF(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub', '')::uuid
-$$;
-
-CREATE OR REPLACE FUNCTION auth.role() RETURNS text
-  LANGUAGE sql STABLE AS $$
-  SELECT NULLIF(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role'
-$$;
-
-CREATE OR REPLACE FUNCTION auth.email() RETURNS text
-  LANGUAGE sql STABLE AS $$
-  SELECT NULLIF(current_setting('request.jwt.claims', true), '')::jsonb ->> 'email'
-$$;
-
-GRANT EXECUTE ON FUNCTION auth.uid(), auth.role(), auth.email()
-  TO anon, authenticated, service_role;
