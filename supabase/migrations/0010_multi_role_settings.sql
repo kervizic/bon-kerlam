@@ -63,8 +63,10 @@ CREATE OR REPLACE FUNCTION bon.my_role() RETURNS text
 $$;
 
 -- Expose roles dans l'API profil.
+-- roles ajouté en DERNIÈRE colonne : CREATE OR REPLACE VIEW ne permet que
+-- l'ajout de colonnes en fin (pas d'insertion au milieu).
 CREATE OR REPLACE VIEW api.profil WITH (security_invoker = true) AS
-  SELECT u.id, u.email, u.role, u.roles, u.nom, u.actif
+  SELECT u.id, u.email, u.role, u.nom, u.actif, u.roles
     FROM bon.utilisateurs u
    WHERE lower(u.email) = lower(bon.current_actor())
      AND u.actif = true AND cardinality(u.roles) > 0;

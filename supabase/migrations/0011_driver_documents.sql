@@ -144,6 +144,8 @@ CREATE OR REPLACE FUNCTION api.alertes_documents()
 $$;
 GRANT EXECUTE ON FUNCTION bon.alertes_documents(), api.alertes_documents()
   TO authenticated, service_role;
+-- bon_worker (créé en 0008) appelle ces fonctions via /worker/alertes.
+GRANT EXECUTE ON FUNCTION bon.alertes_documents() TO bon_worker;
 
 -- Purge des scans au départ d'un salarié (date_sortie renseignée). Renvoie les
 -- clés d'objets à supprimer côté Storage (le worker s'en charge).
@@ -168,7 +170,8 @@ BEGIN
   UPDATE bon.caces            SET scan_recto=NULL, scan_verso=NULL WHERE chauffeur_id=p_chauffeur_id;
   RETURN coalesce(v_keys, '{}'::text[]);
 END $$;
-GRANT EXECUTE ON FUNCTION bon.purge_documents_chauffeur(bigint) TO service_role, authenticated;
+GRANT EXECUTE ON FUNCTION bon.purge_documents_chauffeur(bigint) TO service_role, authenticated, bon_worker;
+GRANT UPDATE ON bon.chauffeurs TO bon_worker;  -- date_sortie au départ
 
 -- updated_at
 DO $$
