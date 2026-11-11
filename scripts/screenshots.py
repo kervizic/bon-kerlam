@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Captures d'écran responsive via Playwright (exécuté en CI).
+"""Captures responsive + contrôle « pas de scroll horizontal » (Playwright, CI).
 
-Le front est servi en statique et ouvert en MODE DÉMO (?demo=1) : pas
-d'authentification, données fictives (aucune donnée réelle). Les vues sont
-adressables par ?screen=… et le thème forcé par ?theme=clair|sombre.
+Front servi en statique, ouvert en MODE DÉMO (?demo=1 : pas d'auth, données
+fictives). Deep-links : ?screen=<route>, ?theme=clair|sombre, ?role=bureau|chauffeur.
 
-Sortie : dossier screenshots/ (publié comme artefact du run CI).
+Captures : iPhone 15 Pro (393x852, DSR 3, UA Safari iOS 26) en rôle bureau ET
+chauffeur, iPad, ordinateur 1440. Sortie : screenshots/ (artefact CI).
+
+Sort en échec (exit 1) si un écran mobile déborde horizontalement.
 """
 
 from __future__ import annotations
@@ -19,43 +21,111 @@ BASE = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8080/index.html"
 OUT = Path("screenshots")
 OUT.mkdir(exist_ok=True)
 
-MOBILE = {"width": 390, "height": 844}
+IOS26_UA = (
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) "
+    "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1"
+)
+IPHONE = {"width": 393, "height": 852}
+IPAD = {"width": 834, "height": 1112}
 DESKTOP = {"width": 1440, "height": 900}
 
-MOBILE_SCREENS = [("aujourdhui", "aujourdhui"), ("tour", "tour"), ("site-picker", "choix-site")]
-DESKTOP_SCREENS = [("tableau-de-bord", "tableau-de-bord"), ("chauffeurs", "chauffeurs")]
+# (route démo, libellé)
+BUREAU_SCREENS = [
+    ("dashboard", "tableau-de-bord"), ("lv", "lv"), ("today", "lv-ouverte"),
+    ("planning", "planning"), ("reglages", "reglages"),
+]
+CHAUFFEUR_SCREENS = [
+    ("today", "aujourdhui"), ("mes-lv", "mes-lv"),
+    ("controle", "controle"), ("reglages", "reglages"),
+]
+
+overflow_failures: list[str] = []
 
 
-def shoot(page, screen: str, theme: str, label: str, viewport: dict) -> None:
-    url = f"{BASE}?demo=1&screen={screen}&theme={theme}"
-    page.set_viewport_size(viewport)
-    page.emulate_media(color_scheme="dark" if theme == "sombre" else "light")
-    page.goto(url, wait_until="networkidle")
-    page.wait_for_timeout(600)
-    out = OUT / f"{'mobile' if viewport is MOBILE else 'bureau'}-{label}-{theme}.png"
-    page.screenshot(path=str(out), full_page=False)
-    print("  ", out)
+def check_no_hscroll(page, label: str) -> None:
+    data = page.evaluate(
+        "() => ({sw: document.documentElement.scrollWidth, iw: window.innerWidth})"
+    )
+    if data["sw"] > data["iw"] + 1:
+        overflow_failures.append(f"{label}: scrollWidth={data['sw']} > innerWidth={data['iw']}")
+
+
+def shoot(ctx, prefix, route, theme, label, *, role="", drawer=False, check=True):
+    page = ctx.new_page()
+    try:
+        extra = f"&role={role}" if role else ""
+        url = f"{BASE}?demo=1&screen={route}&theme={theme}{extra}"
+        page.goto(url, wait_until="networkidle")
+        page.wait_for_timeout(500)
+        if drawer:
+            page.click("#btn-nav-more", timeout=3000)
+            page.wait_for_timeout(300)
+        out = OUT / f"{prefix}-{label}-{theme}.png"
+        page.screenshot(path=str(out), full_page=False)
+        print("  ", out)
+        if check and not drawer:
+            check_no_hscroll(page, f"{prefix}-{label}-{theme}")
+    except Exception as exc:  # noqa: BLE001
+        print(f"   !! {prefix}/{label}/{theme}: {exc}")
+    finally:
+        page.close()
 
 
 def main() -> int:
     with sync_playwright() as p:
         browser = p.chromium.launch()
-        page = browser.new_page()
-        for screen, label in MOBILE_SCREENS:
-            for theme in ("clair", "sombre"):
-                try:
-                    shoot(page, screen, theme, label, MOBILE)
-                except Exception as exc:  # noqa: BLE001
-                    print(f"   !! {label}/{theme}: {exc}")
-        for screen, label in DESKTOP_SCREENS:
-            try:
-                shoot(page, screen, "clair", label, DESKTOP)
-            except Exception as exc:  # noqa: BLE001
-                print(f"   !! {label}: {exc}")
+        iphone = browser.new_context(
+            viewport=IPHONE, device_scale_factor=3, is_mobile=True, has_touch=True,
+            user_agent=IOS26_UA,
+        )
+        # Bureau (cas de Manu) : clair + sombre sur le tableau de bord et une LV.
+        for route, label in BUREAU_SCREENS:
+            shoot(iphone, "iphone-bureau", route, "clair", label, role="bureau")
+        shoot(iphone, "iphone-bureau", "dashboard", "sombre", "tableau-de-bord", role="bureau")
+        shoot(iphone, "iphone-bureau", "today", "sombre", "lv-ouverte", role="bureau")
+        shoot(iphone, "iphone-bureau", "dashboard", "clair", "menu-plus", role="bureau", drawer=True)
+        shoot(iphone, "iphone-bureau", "dashboard", "sombre", "menu-plus", role="bureau", drawer=True)
+        # Chauffeur.
+        for route, label in CHAUFFEUR_SCREENS:
+            shoot(iphone, "iphone-chauffeur", route, "clair", label, role="chauffeur")
+        shoot(iphone, "iphone-chauffeur", "today", "sombre", "aujourdhui", role="chauffeur")
+        iphone.close()
+
+        ipad = browser.new_context(viewport=IPAD, device_scale_factor=2, is_mobile=True, has_touch=True)
+        shoot(ipad, "ipad", "dashboard", "clair", "tableau-de-bord", role="bureau")
+        ipad.close()
+
+        desktop = browser.new_context(viewport=DESKTOP)
+        shoot(desktop, "bureau", "dashboard", "clair", "tableau-de-bord", check=False)
+        shoot(desktop, "bureau", "chauffeurs", "clair", "chauffeurs", check=False)
+        desktop.close()
+
+        # Page /installer/ (mobile iOS 26).
+        inst = browser.new_context(
+            viewport=IPHONE, device_scale_factor=3, is_mobile=True,
+            has_touch=True, user_agent=IOS26_UA,
+        )
+        ip = inst.new_page()
+        try:
+            ip.goto(BASE.replace("index.html", "") + "installer/", wait_until="networkidle")
+            ip.wait_for_timeout(500)
+            ip.screenshot(path=str(OUT / "iphone-installer-clair.png"), full_page=True)
+            check_no_hscroll(ip, "installer")
+            print("   installer ok")
+        except Exception as exc:  # noqa: BLE001
+            print(f"   !! installer: {exc}")
+        inst.close()
         browser.close()
+
     n = len(list(OUT.glob("*.png")))
     print(f"{n} captures dans {OUT}/")
-    return 0  # on ne casse jamais le job : l'artefact publie ce qui a été capturé
+    if overflow_failures:
+        print("DÉBORDEMENT HORIZONTAL détecté :")
+        for f in overflow_failures:
+            print("  -", f)
+        return 1
+    print("OK : aucun débordement horizontal.")
+    return 0
 
 
 if __name__ == "__main__":

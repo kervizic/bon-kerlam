@@ -6,6 +6,22 @@ qui est réellement livré.
 
 ## [0.1.0-beta.5] — 2026-11-11
 
+### Mobile — interface repensée (bug : illisible sur iPhone)
+- Sous **900 px** : fini le menu latéral fixe qui mangeait l'écran → **barre
+  d'onglets en bas** adaptée au rôle (chauffeur : Aujourd'hui · Mes LV · Contrôle ·
+  Réglages ; bureau : Tableau · LV · Planning · **Plus**) + **tiroir « Plus »**
+  plein écran (toutes les sections). Ordinateur (≥ 900 px) : menu latéral conservé.
+- En-tête **collé en haut** et respectant l'encoche (`env(safe-area-inset-top)`),
+  barre d'onglets avec `env(safe-area-inset-bottom)`, `viewport-fit=cover`.
+- Titres mobiles ~23 px (plus de « Tableau de bord » géant), cartes de synthèse en
+  **2 colonnes** pleine largeur, zones tactiles ≥ 44 px, **aucun débordement
+  horizontal** (test automatique en CI sur chaque écran).
+- **Chiffres des cartes** en police système (la **Sarpanch est réservée au logo**).
+
+### Nom de l'application (installation)
+- `name` = **« Lettre de Voiture KERLAM »**, `short_name` = **« LV KERLAM »**,
+  meta `apple-mobile-web-app-title` et `application-name` alignés.
+
 ### Installation PWA — refonte « comme les pros »
 - Nouveau moteur de détection **OS + navigateur + version** (`assets/install-detect.js`,
   pur et **testé**, 25 cas d'UA réels). N'affiche QUE les étapes de l'appareil courant,

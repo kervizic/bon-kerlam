@@ -2960,6 +2960,15 @@ async function handleSessionChange(session) {
     }
   }
 
+  // Mode démo : `?role=chauffeur|bureau` force le rôle (captures CI des deux layouts).
+  if (isDemoMode()) {
+    try {
+      const forced = new URLSearchParams(location.search).get("role");
+      if (forced === "chauffeur") state.roles = ["chauffeur"];
+      else if (forced === "bureau") state.roles = ["bureau"];
+    } catch (e) { /* noop */ }
+  }
+
   document.body.classList.toggle("has-bureau", hasRole("bureau"));
   document.body.classList.toggle("has-chauffeur", hasRole("chauffeur"));
 

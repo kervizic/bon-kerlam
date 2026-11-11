@@ -649,6 +649,9 @@ input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
   .view-header h1 { font-size: 23px; line-height: 1.2; }
   .view-header { flex-wrap: wrap; }
   h1 { font-size: 23px; line-height: 1.2; }
+  /* Topbar compacte : le badge profil passe dans le tiroir, pas dans la barre. */
+  .profil-badge { display: none; }
+  .topbar { padding-left: 12px; padding-right: 12px; }
 }
 
 /* Barre d'onglets : items affichés selon le rôle (l'onglet LV est commun). */
