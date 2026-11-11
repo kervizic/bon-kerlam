@@ -27,13 +27,11 @@ WHERE NOT EXISTS (SELECT 1 FROM bon.articles a WHERE a.nom = v.nom);
 INSERT INTO bon.sites (nom, adresse, type, portee, statut, created_by)
 SELECT v.nom, v.adresse, v.type, 'commun', 'actif', 'seed'
 FROM (VALUES
-  ('YPREMA Lagny 1',       '6 rue Freycinet, Port de Lagny, 77400 Lagny-sur-Marne', 'transit et recyclage de terres'),
-  ('YPREMA Lagny 2',       '6 rue Freycinet, Port de Lagny, 77400 Lagny-sur-Marne', 'centrale de recyclage'),
+  ('YPREMA Lagny',         '6 rue Freycinet, Port de Lagny, 77400 Lagny-sur-Marne', 'transit et recyclage de terres'),
   ('YPREMA Émerainville',  '11 allée de la Briarde, 77184 Émerainville',            'centrale de recyclage'),
   ('Yterres Émerainville', '11 allée de la Briarde, 77184 Émerainville',            'transit et recyclage de terres (7h-18h30)'),
   ('YPREMA Bonneuil',      '63-64 route de l''Île St Julien, Port de Bonneuil, 94380 Bonneuil-sur-Marne', 'point de vente'),
-  ('YPREMA Massy 1',       '11 route de la Bonde, ZI de la Bonde, 91300 Massy',     'plateforme'),
-  ('YPREMA Massy 2',       '14 route de la Bonde, ZI de la Bonde, 91300 Massy',     'plateforme'),
+  ('YPREMA Massy',         '11 route de la Bonde, ZI de la Bonde, 91300 Massy',     'plateforme'),
   ('YPREMA Trappes',       'Allée Basile Levraud, 78190 Trappes',                   'plateforme'),
   ('YPREMA Gennevilliers', '7 route du Môle Central, Port de Gennevilliers, 92230 Gennevilliers', 'plateforme')
 ) AS v(nom, adresse, type)
