@@ -6,8 +6,8 @@
 -- @baseline:      false
 -- @down:          DROP SCHEMA svc CASCADE;
 
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
+-- Le hachage utilise sha256() (pg_catalog, aucune extension requise) : robuste
+-- quel que soit le schéma de pgcrypto (public / extensions selon l'image).
 CREATE SCHEMA IF NOT EXISTS svc;
 REVOKE ALL ON SCHEMA svc FROM PUBLIC;
 GRANT USAGE ON SCHEMA svc TO service_role;   -- jamais anon / authenticated
@@ -29,7 +29,7 @@ CREATE OR REPLACE FUNCTION svc.ai_token_add(p_label text, p_secret text, p_scope
   RETURNS bigint
   LANGUAGE sql SECURITY DEFINER SET search_path = svc, pg_temp AS $$
   INSERT INTO svc.ai_tokens (label, token_hash, scope)
-  VALUES (p_label, encode(digest(p_secret, 'sha256'), 'hex'), p_scope)
+  VALUES (p_label, encode(sha256(convert_to(p_secret, 'UTF8')), 'hex'), p_scope)
   RETURNING id
 $$;
 
@@ -41,7 +41,7 @@ DECLARE v_scope text;
 BEGIN
   UPDATE svc.ai_tokens
      SET last_used_at = now()
-   WHERE token_hash = encode(digest(p_secret, 'sha256'), 'hex')
+   WHERE token_hash = encode(sha256(convert_to(p_secret, 'UTF8')), 'hex')
      AND revoked = false
   RETURNING scope INTO v_scope;
   RETURN v_scope;
