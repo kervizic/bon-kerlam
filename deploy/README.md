@@ -85,21 +85,33 @@ free -m                                                # mémoire APRÈS
 docker stats --no-stream
 ```
 
-## 5. Google Cloud — identifiant client OAuth (Supabase Auth)
+## 5. Google Cloud — identifiant client OAuth générique « KERLAM web »
 
-1. Google Cloud Console → **APIs & Services → Credentials → Create credentials →
-   OAuth client ID → Web application**.
-2. **Authorized JavaScript origins** :
+**Un seul** client OAuth web, partagé par toutes les applis KERLAM (bon, sign…).
+Projet Google Cloud **« KERLAM »**, compte **contact@kerlam.fr**.
+
+1. Google Cloud Console (projet **KERLAM**) → **APIs & Services → OAuth consent
+   screen** : type **Externe**, application **publiée** (pas en test), **sans
+   logo** (évite la revue de marque). Scopes : `openid`, `.../auth/userinfo.email`,
+   `.../auth/userinfo.profile`.
+2. **Credentials → Create credentials → OAuth client ID → Web application**, nom
+   **« KERLAM web »**.
+3. **Authorized JavaScript origins** :
    - `https://bon.kerlam.fr`
-   - `https://api.kerlam.fr`
-3. **Authorized redirect URIs** (exact) :
-   - `https://api.kerlam.fr/auth/v1/callback`
-4. Copier *Client ID* et *Client secret* dans `.env`
-   (`GOOGLE_CLIENT_ID`, `GOOGLE_SECRET`). Laisser `GOOGLE_HD` vide (option de
-   restriction de domaine désactivée par défaut ; la mettre à `kerlam.fr` pour
-   n'autoriser que ce domaine, en plus de la liste blanche).
-5. L'accès reste gouverné par la **liste blanche** (`bon.utilisateurs`) et la
+   - `https://sign.kerlam.fr`
+4. **Authorized redirect URIs** (exactes) :
+   - `https://api.kerlam.fr/auth/v1/callback`  (bon.kerlam.fr / GoTrue)
+   - `https://sign.kerlam.fr/api/auth/callback/google`  (Documenso)
+5. Enregistrer *Client ID* et *Client secret* dans **Bitwarden** (projet
+   **Kerlam**) : items **« Google OAuth KERLAM client ID »** et
+   **« Google OAuth KERLAM client secret »**. Les reporter dans `.env`
+   (`GOOGLE_CLIENT_ID`, `GOOGLE_SECRET`). `GOOGLE_HD` vide par défaut (mettre
+   `kerlam.fr` pour restreindre au domaine, en plus de la liste blanche).
+6. L'accès reste gouverné par la **liste blanche** (`bon.utilisateurs`) et la
    RLS : une adresse Google non listée ne voit rien.
+7. Documenso réutilise **le même** client (origine `sign.kerlam.fr`, redirection
+   `…/api/auth/callback/google`) via `NEXT_PRIVATE_GOOGLE_CLIENT_ID` /
+   `NEXT_PRIVATE_GOOGLE_CLIENT_SECRET`. Ne pas toucher au conteneur Documenso.
 
 ## 5bis. Connexion par code e-mail (OTP) + SMTP
 
@@ -124,6 +136,23 @@ docker compose up -d auth        # recharge GoTrue
 **Documenso** (hors périmètre de cette pile, connexion Google native propre) :
 renseigner dans son déploiement `NEXT_PRIVATE_GOOGLE_CLIENT_ID` et
 `NEXT_PRIVATE_GOOGLE_CLIENT_SECRET`. Ne pas toucher au conteneur Documenso.
+
+## 5ter. Bucket privé des documents chauffeur
+
+Les scans (permis, FCO, carte conducteur, CACES) vont dans un bucket Storage
+**privé** `chauffeur-docs`. Créé via l'API Storage une fois la pile démarrée
+(la politique RLS « bureau uniquement » est posée par la migration 0011) :
+
+```bash
+source .env
+curl -s -X POST http://127.0.0.1:5000/storage/v1/bucket \
+  -H "Authorization: Bearer ${SERVICE_ROLE_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"id":"chauffeur-docs","name":"chauffeur-docs","public":false}'
+```
+
+Le worker génère des **URL signées courtes** (`SERVICE_ROLE_KEY`, `STORAGE_URL`)
+et supprime les scans au **départ d'un salarié** (`POST /worker/chauffeur/{id}/depart`).
 
 ## 6. Sauvegarde (cron quotidien)
 

@@ -352,9 +352,9 @@ Une application unique, **responsive**, déclinée en deux contextes d'usage :
 
 | Couleur | Code | Usage |
 |---|---|---|
-| Orange | `#FF9300` | Action principale |
-| Orange foncé | `#D97B00` | Variante / hover de l'action principale |
-| Gris | `#5E5E5E` | Texte secondaire, logo « KER » |
+| Orange | `#FD8008` | Action principale |
+| Orange foncé | `#D46B06` | Variante / hover de l'action principale |
+| Gris | `#4C4C4C` | Texte secondaire, logo « KER » |
 | Anthracite | `#2B2B2B` | Texte principal |
 | Fond | `#F4F4F2` | Arrière-plan |
 | Blanc | `#FFFFFF` | Surfaces |
@@ -471,3 +471,32 @@ Horaires par défaut : lundi-vendredi 6h-17h30, sauf mention contraire.
 | Gennevilliers | 7 route du Môle Central, Port de Gennevilliers, 92230 Gennevilliers | Défaut |
 
 Tous ces sites sont de type `commun` (cf. §3.5), visibles pour l'ensemble des clients.
+
+---
+
+## 11. Évolutions beta.3
+
+### 11.1 Charte & logo
+- Couleurs : orange **#FD8008** (action principale, texte en **anthracite** par-dessus pour le contraste AA), orange foncé **#D46B06**, gris **#4C4C4C**, anthracite #2B2B2B, fond #F4F4F2, vert #2E7D32, rouge #C62828, bleu #1565C0. L'orange n'est jamais utilisé comme texte sur fond clair (contraste insuffisant) : il est réservé aux surfaces, au logo et aux icônes.
+- Logo = texte « KERLAM » en police **Sarpanch** (SIL OFL, graisse 800, auto-hébergée en woff2) ; « KER » gris, « LAM » orange ; « KER » gris clair en mode sombre.
+- Icônes PWA « KL » (Sarpanch sur fond anthracite) générées au build.
+
+### 11.2 Rôles cumulables
+Un utilisateur peut cumuler **chauffeur ET bureau** (gérants qui conduisent). Modélisé par un tableau `roles[]` ; la RLS applique l'union des droits.
+
+### 11.3 Pré-remplissage des tours
+À la création d'un nouveau tour, le **lieu de chargement** est pré-rempli avec le **lieu de déchargement du tour précédent** (modifiable). Le **premier tour** du bon reste vierge.
+
+### 11.4 Documents réglementaires du chauffeur (bureau uniquement)
+- Permis (numéro, visite médicale) + **catégories datées** (validité par catégorie) ; carte **FCO / code 95** (numéro, délivrance, expiration) ; **carte conducteur** chronotachygraphe (numéro, expiration, **date du dernier téléchargement**) ; **CACES** (type ex. R490/R482, catégories, expiration ; plusieurs par chauffeur).
+- Scans recto/verso dans un bucket Storage **privé** `chauffeur-docs` ; politiques Storage **bureau uniquement** ; accès par **URL signées courtes**.
+- **Alertes** 60 j avant expiration ; document expiré en **rouge** au tableau de bord ; **retard** de téléchargement de la carte conducteur (> 28 j) signalé.
+- **Suppression** des scans au départ du salarié (`date_sortie`).
+- Un **chauffeur ne voit pas** ces documents, même les siens (RLS).
+
+### 11.5 Réglages & signature
+- Table de **réglages** (bureau) : `signature_envoi_auto` (toujours manuel), `documenso_cc_contact` (copie des mails finaux Documenso à `contact@kerlam.fr`), seuils d'alerte.
+- **Envoi groupé en signature** : déclenché **uniquement par un bouton** (chauffeur ou bureau), jamais automatiquement. L'envoi Documenso lui-même reste hors périmètre (point d'extension).
+
+### 11.6 Connexion Google — client générique
+Identifiant **OAuth web générique « KERLAM web »** (projet Google Cloud « KERLAM », compte contact@kerlam.fr) partagé par toutes les applis KERLAM. Origines `bon.kerlam.fr` et `sign.kerlam.fr` ; redirections `https://api.kerlam.fr/auth/v1/callback` et `https://sign.kerlam.fr/api/auth/callback/google`. Secrets dans Bitwarden (projet Kerlam). Cf. `deploy/README.md` §5.

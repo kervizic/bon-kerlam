@@ -4,6 +4,47 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.3] — 2026-11-11
+
+### Charte & logo
+- Nouvelle charte : orange **#FD8008**, gris **#4C4C4C** (remplacent #FF9300 /
+  #5E5E5E partout : front, PDF, e-mails). Orange foncé recalculé **#D46B06**.
+  Contrastes WCAG AA vérifiés : texte **anthracite** sur orange (5.57) ; l'orange
+  n'est pas utilisé comme texte sur fond clair (réservé surfaces/logo/icônes).
+- Logo = texte « KERLAM » en police **Sarpanch** (SIL OFL, graisse 800
+  auto-hébergée en woff2 + `OFL.txt`) ; « KER » gris, « LAM » orange ; « KER »
+  gris clair en mode sombre. Plus d'Arial Black.
+- Icônes PWA générées **au build** (`scripts/gen-icons.py`, Pillow) : « KL » en
+  Sarpanch sur fond anthracite (192, 512, maskable 192/512, apple-touch 180,
+  favicon).
+
+### Métier
+- **Rôles cumulables** : un utilisateur peut être chauffeur ET bureau. RLS et
+  helpers adaptés (`roles[]`).
+- **Pré-remplissage des tours** : un nouveau tour reprend le lieu de déchargement
+  du tour précédent comme lieu de chargement ; le premier tour reste vierge.
+- **Documents chauffeur** (bureau seulement, RLS) : permis + catégories datées,
+  FCO/code 95, carte conducteur chrono (+ dernier téléchargement), CACES (n par
+  chauffeur). Scans recto/verso dans un bucket Storage **privé** `chauffeur-docs`
+  (politique bureau, URL signées courtes). **Alertes 60 j**, document expiré en
+  rouge, retard de téléchargement carte conducteur (> 28 j). **Purge** des scans
+  au départ (`date_sortie`). Un chauffeur ne voit pas ces documents, même les siens.
+- **Réglages** (table + écran bureau) : envoi en signature **manuel seulement**
+  (jamais automatique), copie des mails finaux Documenso à `contact@kerlam.fr`,
+  seuils d'alerte. **Envoi groupé en signature** déclenché uniquement par bouton
+  (`/worker/signature/envoi-groupe`) — Documenso hors périmètre.
+
+### Front
+- Écrans bureau réels (fin des « À venir ») : Projets, Clients + Contacts, Sites,
+  Camions, Chauffeurs (+ documents), Articles, Utilisateurs, Planning, Réglages,
+  Tableau de bord. Autocomplétion d'adresse api-adresse.data.gouv.fr + géocodage
+  inverse. Redo (↷) fonctionnel. Mode démo (`?demo=1`) pour les captures.
+
+### CI / déploiement
+- Job **captures Playwright** (mobile clair/sombre + bureau) publié en artefact.
+- Procédure Google Cloud mise à jour : **client OAuth web générique « KERLAM web »**
+  partagé (origines bon/sign, redirections GoTrue + Documenso), secrets Bitwarden.
+
 ## [0.1.0-beta.2] — 2026-11-11
 
 ### Connexion — Google OU code e-mail (OTP)
@@ -84,5 +125,6 @@ Première beta : socle complet, testé, avec CI et fichiers de déploiement.
 - Signature Documenso, envoi groupé, fin de mois / facturation, outils MCP en
   écriture.
 
+[0.1.0-beta.3]: https://github.com/kervizic/bon-kerlam/releases/tag/v0.1.0-beta.3
 [0.1.0-beta.2]: https://github.com/kervizic/bon-kerlam/releases/tag/v0.1.0-beta.2
 [0.1.0-beta.1]: https://github.com/kervizic/bon-kerlam/releases/tag/v0.1.0-beta.1
