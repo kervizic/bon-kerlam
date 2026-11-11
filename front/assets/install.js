@@ -101,7 +101,7 @@ function wireCopyLink(scope) {
       const url = "https://bon.kerlam.fr/";
       try {
         await navigator.clipboard.writeText(url);
-        btn.textContent = "Lien copié ✓";
+        btn.textContent = "Lien copié";
       } catch (e) {
         btn.textContent = url;
       }

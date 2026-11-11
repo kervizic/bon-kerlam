@@ -254,10 +254,14 @@ a { color: var(--c-blue); }
   font-size: 13px; font-weight: 600;
   padding: 4px 10px; border-radius: 999px;
   white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 6px;
 }
-.sync-saved   { background: rgba(46,125,50,0.12); color: var(--c-green); }
+/* « rien quand tout est enregistré » : l'indicateur n'apparaît qu'en cas de
+   problème (envoi en cours = discret, hors ligne = orange + nombre en attente). */
+.sync-indicator.sync-saved { display: none; }
 .sync-sending { background: rgba(21,101,192,0.12); color: var(--c-blue); }
-.sync-offline { background: rgba(198,40,40,0.12); color: var(--c-red); }
+.sync-offline { background: rgba(253,128,8,0.16); color: var(--c-orange-dark); }
+.sync-offline .sync-text { display: inline; }
 
 .profil-badge { font-size: 13px; color: var(--text-muted); margin-left: 6px; }
 

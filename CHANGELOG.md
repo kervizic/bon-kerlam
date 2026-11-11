@@ -4,6 +4,38 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.7] — 2026-11-11
+
+### En-tête épuré (retour Manu « point 0 »)
+- L'en-tête ne contient plus que le **logo KERLAM**, le bouton **Annuler** (dans
+  les formulaires) et l'**état de synchro affiché UNIQUEMENT en cas de problème**
+  (envoi en cours = spinner discret ; hors ligne = nuage barré orange + « Hors
+  ligne – N en attente » ; rien quand tout est enregistré). Supprimés de la barre :
+  avatar/nom/rôles, **thème** (→ Réglages) et pastille « Enregistré ». Idem sur
+  ordinateur. Déconnexion accessible depuis **Réglages** (menu Plus).
+
+### Divers retours
+- **(a)** Pied de l'écran de connexion : suppression du doublon « Installer
+  l'appli » (on garde le bouton « Comment installer » + Confidentialité + Conditions).
+- **(b)** **Liste blanche GoTrue réactivée** (hook `before_user_created`) : une
+  adresse non autorisée reçoit « Accès non autorisé » (**403**) et **aucun mail**
+  n'est envoyé ni aucun compte créé ; les utilisateurs listés (Google ou code
+  e-mail) se connectent normalement. Testé (`intrus@example.invalid` → 403, 0 mail ;
+  `manu@kervizic.fr` inchangé).
+- **(c)** **Aucun émoji** comme icône dans le front : tout en **icônes Lucide**
+  (boutons Fermer = X, etc.), sauf logo Google et logo texte KERLAM. **Test CI
+  anti-émoji** (`scripts/check-no-emoji.py`).
+
+### Reste à faire (gros chantiers, lots suivants)
+- **(e)** « lettre(s) de voiture » en toutes lettres partout (abandon de « LV »).
+- **(d)** vue chauffeur par défaut + sélecteur **Chauffeur | Bureau** (mémorisé).
+- **(f)** accueil chauffeur = liste des lettres non signées + sélection/groupage +
+  signature Documenso (sur place / par mail).
+- **(g)** suppression du mode « Contrôle » → bouton **PDF** (icône) par lettre,
+  hors ligne, via le worker WeasyPrint.
+- **(h)** Profil > **Mes documents** chauffeur (permis, carte conducteur, FCO,
+  CACES) depuis le bucket privé `chauffeur-docs`.
+
 ## [0.1.0-beta.6] — 2026-11-11
 
 ### Retours iPhone de Manu

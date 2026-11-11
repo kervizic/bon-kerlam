@@ -1,6 +1,6 @@
 /* installer.js — page autonome /installer/. Détecte l'appareil, affiche le cas
  * courant en premier puis la liste complète. Module ES (import du moteur partagé). */
-import { detectEnv, buildGuide, guideByCaseId, ALL_CASES, ICONS } from "/assets/install-detect.js?v=6";
+import { detectEnv, buildGuide, guideByCaseId, ALL_CASES, ICONS } from "/assets/install-detect.js?v=7";
 
 let deferredPrompt = null;
 
@@ -66,7 +66,7 @@ function render() {
 
   const copy = body.querySelector(".js-copy");
   if (copy) copy.addEventListener("click", async () => {
-    try { await navigator.clipboard.writeText("https://bon.kerlam.fr/"); copy.textContent = "Lien copié ✓"; } catch (err) {}
+    try { await navigator.clipboard.writeText("https://bon.kerlam.fr/"); copy.textContent = "Lien copié"; } catch (err) {}
   });
 }
 

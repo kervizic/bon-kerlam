@@ -118,8 +118,8 @@ import {
   todayIso,
 } from "./data.js";
 
-import { initInstall } from "./install.js?v=6";
-import { UndoStack } from "./undo-stack.js?v=6";
+import { initInstall } from "./install.js?v=7";
+import { UndoStack } from "./undo-stack.js?v=7";
 
 /* ============================================================== IndexedDB == */
 /* Deux object stores :
@@ -274,9 +274,11 @@ setInterval(flushQueue, 30000);
 const syncIndicatorEl = document.getElementById("sync-indicator");
 function setSyncState(state) {
   syncIndicatorEl.classList.remove("sync-saved", "sync-sending", "sync-offline");
+  let pending = 0;
+  try { pending = (window.bonSync && window.bonSync.queueLength) || 0; } catch (e) { /* noop */ }
   const label =
     state === "sending" ? "Envoi en cours" :
-    state === "offline" ? "Hors ligne, sera envoyé" : "Enregistré";
+    state === "offline" ? `Hors ligne – ${pending} en attente` : "Enregistré";
   syncIndicatorEl.classList.add("sync-" + (state === "sending" ? "sending" : state === "offline" ? "offline" : "saved"));
   const txt = syncIndicatorEl.querySelector(".sync-text");
   if (txt) txt.textContent = label; else syncIndicatorEl.textContent = label;
@@ -2027,7 +2029,7 @@ function docScanUploadRow(chauffeurId, docKind, side, currentPath, onSaved) {
   row.className = "upload-row";
   const label = document.createElement("label");
   label.className = "upload-label";
-  label.textContent = currentPath ? `${side} ✓` : `Scan ${side}`;
+  label.textContent = currentPath ? `${side} (chargé)` : `Scan ${side}`;
   const input = document.createElement("input");
   input.type = "file";
   input.accept = "image/*,application/pdf";
@@ -2039,7 +2041,7 @@ function docScanUploadRow(chauffeurId, docKind, side, currentPath, onSaved) {
     try {
       await uploadChauffeurDoc(path, file);
       await onSaved(path);
-      label.textContent = `${side} ✓`;
+      label.textContent = `${side} (chargé)`;
     } catch (e) {
       alert("Échec de l'envoi du scan : " + (e.message || e));
     }
@@ -2680,7 +2682,8 @@ function wireStaticUI() {
   });
   applyTheme(getStoredTheme());
 
-  document.getElementById("btn-theme").addEventListener("click", () => {
+  const btnThemeEl = document.getElementById("btn-theme");
+  if (btnThemeEl) btnThemeEl.addEventListener("click", () => {
     const order = ["auto", "clair", "sombre"];
     const next = order[(order.indexOf(getStoredTheme()) + 1) % order.length];
     setTheme(next);
@@ -2958,7 +2961,8 @@ async function handleSessionChange(session) {
   document.body.classList.toggle("has-bureau", hasRole("bureau"));
   document.body.classList.toggle("has-chauffeur", hasRole("chauffeur"));
 
-  document.getElementById("profil-badge").textContent = `${profil.nom || profil.email} · ${state.roles.join(" + ") || profil.role}`;
+  const badgeEl = document.getElementById("profil-badge");
+  if (badgeEl) badgeEl.textContent = `${profil.nom || profil.email} · ${state.roles.join(" + ") || profil.role}`;
   const initialEl = document.getElementById("profil-initial");
   if (initialEl) initialEl.textContent = (profil.nom || profil.email || "?").trim().charAt(0).toUpperCase();
   const btnProfil = document.getElementById("btn-profil");
