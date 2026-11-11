@@ -1,0 +1,39 @@
+{
+  "name": "KERLAM — Lettres de voiture",
+  "short_name": "bon KERLAM",
+  "description": "Lettres de voiture dematerialisees KERLAM",
+  "lang": "fr",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#F4F4F2",
+  "theme_color": "#FF9300",
+  "icons": [
+    {
+      "src": "/assets/icons/icon-192.png?v=__APP_VERSION__",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/icons/icon-512.png?v=__APP_VERSION__",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/icons/icon-maskable-192.png?v=__APP_VERSION__",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/assets/icons/icon-maskable-512.png?v=__APP_VERSION__",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
