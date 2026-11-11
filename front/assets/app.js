@@ -118,7 +118,7 @@ import {
   todayIso,
 } from "./data.js";
 
-import { initInstall } from "./install.js";
+import { initInstall } from "./install.js?v=5";
 
 /* ============================================================== IndexedDB == */
 /* Deux object stores :
@@ -2615,6 +2615,15 @@ const ROUTE_LOADERS = {
 // besoin d'attendre un rendu complet (ex. les deep-links `?demo=1&screen=...`)
 // peuvent faire `await navigate(...)` plutôt que de rappeler le loader en double
 // (ce qui créait une course et des doublons de carte de tour en mode démo).
+function openNavDrawer() {
+  const d = document.getElementById("nav-drawer");
+  if (d) d.hidden = false;
+}
+function closeNavDrawer() {
+  const d = document.getElementById("nav-drawer");
+  if (d) d.hidden = true;
+}
+
 async function navigate(route) {
   if (!ROUTES.includes(route)) route = "dashboard";
   state.route = route;
@@ -2627,6 +2636,10 @@ async function navigate(route) {
   document.querySelectorAll(".bottom-bar-item[data-route]").forEach((b) => {
     b.classList.toggle("is-active", b.dataset.route === route);
   });
+  document.querySelectorAll(".nav-drawer-list a[data-route]").forEach((a) => {
+    a.classList.toggle("is-active", a.dataset.route === route);
+  });
+  closeNavDrawer();
   try {
     history.replaceState(null, "", "#/" + route);
   } catch (e) {}
@@ -2651,6 +2664,18 @@ function wireStaticUI() {
       navigate(el.dataset.route);
     });
   });
+
+  // Tiroir « Plus » (navigation mobile bureau).
+  const navMore = document.getElementById("btn-nav-more");
+  if (navMore) navMore.addEventListener("click", openNavDrawer);
+  const navDrawerClose = document.getElementById("btn-nav-drawer-close");
+  if (navDrawerClose) navDrawerClose.addEventListener("click", closeNavDrawer);
+  const navDrawer = document.getElementById("nav-drawer");
+  if (navDrawer) {
+    navDrawer.addEventListener("click", (e) => {
+      if (e.target.id === "nav-drawer") closeNavDrawer();
+    });
+  }
 
   btnUndo.addEventListener("click", undo);
   btnRedo.addEventListener("click", redo);

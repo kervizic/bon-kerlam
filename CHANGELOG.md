@@ -4,6 +4,28 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.5] — 2026-11-11
+
+### Installation PWA — refonte « comme les pros »
+- Nouveau moteur de détection **OS + navigateur + version** (`assets/install-detect.js`,
+  pur et **testé**, 25 cas d'UA réels). N'affiche QUE les étapes de l'appareil courant,
+  avec un dépliant **« autres appareils »** (liste complète). Pictos SVG inline proches
+  de l'interface réelle, libellés FR **exacts**.
+- Cas couverts : iOS 26 Safari (barre compacte « ••• » → Partager), iOS 16.4–18 Safari,
+  iOS Chrome/Edge/Firefox, navigateur intégré iOS (Gmail/Facebook/Instagram… → « Ouvrir
+  dans Safari » + copier le lien), Android Chrome/Edge/Samsung/Firefox/Opera (invite
+  native `beforeinstallprompt` sinon étapes), Mac Safari 17+ (Fichier → Ajouter au Dock),
+  Chrome/Edge ordinateur (barre d'adresse / menu), Firefox & Safari anciens (honnête :
+  pas d'installation → Chrome/Edge ou mise à jour).
+- Bouton adaptatif : **« Installer l'appli »** si invite native dispo, sinon
+  **« Comment installer »**. Masqué si déjà installée. Page `/installer/` refondue
+  (appareil courant en tête + tous les appareils).
+
+### Robustesse
+- `config.js` **versionné** (`?v=`) et servi **no-cache** : plus aucun téléphone ne
+  garde l'ancien `config.js` (localhost) en cache. Cache du service worker bumpé (beta.5).
+- Job CI **tests JS** (`node --test`) pour la détection d'installation.
+
 ## [0.1.0-beta.4] — 2026-11-11
 
 ### Charte finale (validée Manu)

@@ -233,16 +233,21 @@ a { color: var(--c-blue); }
 .btn-link:disabled { color: var(--text-muted); text-decoration: none; cursor: default; }
 
 /* -------------------------------------------------------------- Coquille app */
-.app-shell { display: flex; flex-direction: column; min-height: 100vh; }
+.app-shell { display: flex; flex-direction: column; min-height: 100vh; overflow-x: hidden; }
 
 .topbar {
   display: flex; align-items: center; justify-content: space-between;
+  gap: 8px;
   padding: 10px 16px;
+  /* Collé en haut + sous l'encoche/barre d'état en mode installé (iOS). */
+  padding-top: calc(10px + env(safe-area-inset-top));
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   position: sticky; top: 0; z-index: 20;
 }
-.topbar-actions { display: flex; align-items: center; gap: 4px; }
+.topbar .logo { flex-shrink: 0; }
+.topbar-actions { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.topbar .sync-indicator { overflow: hidden; text-overflow: ellipsis; max-width: 96px; }
 
 .sync-indicator {
   font-size: 13px; font-weight: 600;
@@ -557,7 +562,8 @@ input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
 .dash-section h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); margin-bottom: 10px; }
 .dash-grid { display: grid; gap: var(--gap); grid-template-columns: repeat(3, 1fr); margin-bottom: 20px; }
 .dash-tile { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; text-align: center; }
-.dash-tile strong { display: block; font-size: 28px; font-family: "Sarpanch", Arial, sans-serif; }
+/* Chiffres des cartes : police système en gras (la Sarpanch est réservée au LOGO). */
+.dash-tile strong { display: block; font-size: 26px; font-weight: 800; }
 .dash-tile span { color: var(--text-muted); font-size: 13px; }
 .dash-alert-list { display: flex; flex-direction: column; gap: 8px; }
 .dash-alert-row {
@@ -621,9 +627,13 @@ input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
 }
 
 /* ------------------------------------------------------------------ Mobile / Desktop */
+/* Mobile (< 900px) : PAS de menu latéral fixe. Navigation par barre d'onglets en
+   bas + tiroir « Plus » plein écran. Ordinateur (>= 900px) : menu latéral. */
+.main-content { overflow-x: hidden; }
+
 @media (min-width: 900px) {
   .side-nav { display: block; }
-  .bottom-bar { display: none; }
+  .bottom-bar, .nav-drawer { display: none !important; }
   .main-content { padding: 24px 32px; padding-bottom: 24px; }
   .dashboard-cards { grid-template-columns: repeat(3, 1fr); }
   .lv-header-form { grid-template-columns: repeat(2, 1fr); gap: 0 20px; }
@@ -631,15 +641,39 @@ input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
 }
 
 @media (max-width: 899px) {
-  .main-content { padding-bottom: 96px; }
+  .side-nav { display: none; }
+  .bottom-bar { display: flex; }
+  .main-content { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+  .dashboard-cards { grid-template-columns: repeat(2, 1fr); }
   .dash-grid { grid-template-columns: repeat(2, 1fr); }
+  .view-header h1 { font-size: 23px; line-height: 1.2; }
+  .view-header { flex-wrap: wrap; }
+  h1 { font-size: 23px; line-height: 1.2; }
 }
 
-/* Rôle bureau : le menu latéral reste accessible même sous 900px (un gérant qui
-   conduit doit pouvoir atteindre les écrans bureau depuis son téléphone). */
-body.has-bureau .side-nav { display: block; }
-/* Rôle chauffeur absent : pas de barre mobile chauffeur (rien à y faire). */
-body:not(.has-chauffeur) .bottom-bar { display: none; }
+/* Barre d'onglets : items affichés selon le rôle (l'onglet LV est commun). */
+.bottom-bar-item { display: none; }
+.bottom-bar-item[data-route="lv"] { display: flex; }
+body.has-bureau .bb-bureau,
+body.has-bureau .bb-more { display: flex; }
+body.has-chauffeur:not(.has-bureau) .bb-chauffeur { display: flex; }
+
+/* Tiroir « Plus » : menu plein écran (mobile), fermé par défaut. */
+.nav-drawer { position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,.4); display: flex; }
+.nav-drawer[hidden] { display: none; }
+.nav-drawer-panel {
+  margin-left: auto; width: min(320px, 85vw); height: 100%;
+  background: var(--surface); display: flex; flex-direction: column;
+  padding: calc(12px + env(safe-area-inset-top)) 12px calc(12px + env(safe-area-inset-bottom));
+  box-shadow: -2px 0 12px rgba(0,0,0,.2);
+}
+.nav-drawer-list { display: flex; flex-direction: column; overflow-y: auto; }
+.nav-drawer-list a {
+  display: flex; align-items: center; min-height: 48px; padding: 10px 14px;
+  color: var(--text); text-decoration: none; font-weight: 600;
+  border-radius: 10px; border-left: 3px solid transparent;
+}
+.nav-drawer-list a:hover, .nav-drawer-list a.is-active { background: var(--bg); border-left-color: var(--c-orange); }
 
 /* ======================================== Pied de page auth + liens utiles == */
 .auth-wrap {
@@ -716,3 +750,26 @@ body:not(.has-chauffeur) .bottom-bar { display: none; }
 .planning-check { margin: 0; }
 .sheet-section-title.is-spaced { margin-top: 18px; }
 .btn.is-spaced { margin-top: 14px; }
+
+/* Installation — rendu dynamique (install.js / installer.js) */
+.install-device { font-weight: 700; color: var(--text); margin: 0 0 10px; }
+.install-note { font-size: 13px; margin-top: 8px; }
+.install-actions { margin-top: 12px; }
+#install-help-all { margin-top: 14px; }
+.install-others-toggle > summary,
+.install-other > summary {
+  cursor: pointer; font-weight: 600; padding: 8px 0; color: var(--text);
+  list-style: none;
+}
+.install-others-toggle > summary::-webkit-details-marker,
+.install-other > summary::-webkit-details-marker { display: none; }
+.install-others-toggle > summary::before,
+.install-other > summary::before { content: "▸ "; color: var(--c-orange); }
+.install-others-toggle[open] > summary::before,
+.install-other[open] > summary::before { content: "▾ "; }
+.install-other { border-top: 1px solid var(--border); padding: 4px 0; }
+.install-others-toggle { border-top: 1px solid var(--border); padding-top: 8px; }
+.installer-current { margin: 16px 0 8px; padding: 16px; background: var(--bg); border-radius: var(--radius); }
+.installer-all-title { margin-top: 28px; }
+.install-done { background: var(--status-ok-bg); border-radius: var(--radius); padding: 12px 16px; margin: 12px 0; }
+.installer-native-btn, #installer-native-btn { margin-bottom: 12px; }

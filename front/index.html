@@ -10,8 +10,8 @@
   <!-- Empreinte de version du shell (cf. assets/app-version.js). Bumper `app-rev`
        à chaque déploiement backend devant forcer un refresh (sinon le bump d'un
        `?v=` d'asset suffit). -->
-  <meta name="app-version" content="0.1.0-beta.4">
-  <meta name="app-rev" content="4">
+  <meta name="app-version" content="0.1.0-beta.5">
+  <meta name="app-rev" content="5">
 
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
@@ -25,8 +25,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="mobile-web-app-capable" content="yes">
 
-  <link rel="stylesheet" href="/assets/styles.css?v=4">
-  <script src="/assets/app-version.js?v=4" defer></script>
+  <link rel="stylesheet" href="/assets/styles.css?v=5">
+  <script src="/assets/app-version.js?v=5" defer></script>
 </head>
 <body>
   <a href="#main" class="skip-link">Aller au contenu</a>
@@ -403,17 +403,57 @@
       </main>
     </div>
 
-    <nav class="bottom-bar" aria-label="Navigation mobile">
-      <button type="button" class="bottom-bar-item" data-route="today">
+    <nav class="bottom-bar" aria-label="Navigation">
+      <!-- Chauffeur -->
+      <button type="button" class="bottom-bar-item bb-chauffeur" data-route="today">
         <span class="bb-icon" aria-hidden="true">📅</span><span class="bb-label">Aujourd'hui</span>
       </button>
-      <button type="button" class="bottom-bar-item" data-route="mes-lv">
+      <button type="button" class="bottom-bar-item bb-chauffeur" data-route="mes-lv">
         <span class="bb-icon" aria-hidden="true">📄</span><span class="bb-label">Mes LV</span>
       </button>
-      <button type="button" class="bottom-bar-item" data-route="controle">
+      <button type="button" class="bottom-bar-item bb-chauffeur" data-route="controle">
         <span class="bb-icon" aria-hidden="true">✓</span><span class="bb-label">Contrôle</span>
       </button>
+      <button type="button" class="bottom-bar-item bb-chauffeur" data-route="reglages">
+        <span class="bb-icon" aria-hidden="true">⚙️</span><span class="bb-label">Réglages</span>
+      </button>
+      <!-- Bureau -->
+      <button type="button" class="bottom-bar-item bb-bureau" data-route="dashboard">
+        <span class="bb-icon" aria-hidden="true">📊</span><span class="bb-label">Tableau</span>
+      </button>
+      <button type="button" class="bottom-bar-item" data-route="lv">
+        <span class="bb-icon" aria-hidden="true">🚚</span><span class="bb-label">LV</span>
+      </button>
+      <button type="button" class="bottom-bar-item bb-bureau" data-route="planning">
+        <span class="bb-icon" aria-hidden="true">🗓️</span><span class="bb-label">Planning</span>
+      </button>
+      <button type="button" class="bottom-bar-item bb-more" id="btn-nav-more" aria-haspopup="true" aria-controls="nav-drawer">
+        <span class="bb-icon" aria-hidden="true">⋯</span><span class="bb-label">Plus</span>
+      </button>
     </nav>
+
+    <!-- Tiroir « Plus » : toutes les sections bureau (mobile) -->
+    <div id="nav-drawer" class="nav-drawer" hidden>
+      <div class="nav-drawer-panel" role="dialog" aria-modal="true" aria-label="Menu">
+        <div class="sheet-header">
+          <h2>Menu</h2>
+          <button type="button" class="icon-btn" id="btn-nav-drawer-close" aria-label="Fermer">✕</button>
+        </div>
+        <nav class="nav-drawer-list" aria-label="Toutes les sections">
+          <a href="#/dashboard"    data-route="dashboard">Tableau de bord</a>
+          <a href="#/lv"           data-route="lv">LV</a>
+          <a href="#/planning"     data-route="planning">Planning</a>
+          <a href="#/projets"      data-route="projets">Projets</a>
+          <a href="#/clients"      data-route="clients">Clients</a>
+          <a href="#/sites"        data-route="sites">Sites</a>
+          <a href="#/camions"      data-route="camions">Camions</a>
+          <a href="#/chauffeurs"   data-route="chauffeurs">Chauffeurs</a>
+          <a href="#/articles"     data-route="articles">Articles</a>
+          <a href="#/utilisateurs" data-route="utilisateurs">Utilisateurs</a>
+          <a href="#/reglages"     data-route="reglages">Réglages</a>
+        </nav>
+      </div>
+    </div>
   </div>
 
   <!-- ================================================== Feuille « choix de site » -->
@@ -436,62 +476,8 @@
         <h2 id="install-help-title">Installer l'application</h2>
         <button type="button" class="icon-btn" id="btn-install-help-close" aria-label="Fermer">✕</button>
       </div>
-
-      <!-- iOS / iPadOS depuis Safari -->
-      <div id="install-help-ios" class="install-help-block" hidden>
-        <p>Sur iPhone ou iPad, depuis <strong>Safari</strong> :</p>
-        <ol class="install-steps">
-          <li class="install-step">
-            <span class="install-step-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.7 2.6 15.3 0 18M12 3c-2.6 2.7-2.6 15.3 0 18"/></svg>
-            </span>
-            <span class="install-step-body"><strong><span class="install-step-num">1.</span> Ouvrir bon.kerlam.fr dans Safari</strong><span>Dans la barre d'adresse de Safari.</span></span>
-          </li>
-          <li class="install-step">
-            <span class="install-step-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M6 11H5a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7a1 1 0 0 0-1-1h-1"/></svg>
-            </span>
-            <span class="install-step-body"><strong><span class="install-step-num">2.</span> Toucher le bouton Partager</strong><span>Le carré avec une flèche vers le haut, en bas (ou en haut) de l'écran.</span></span>
-          </li>
-          <li class="install-step">
-            <span class="install-step-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M12 8v8M8 12h8"/></svg>
-            </span>
-            <span class="install-step-body"><strong><span class="install-step-num">3.</span> Choisir « Sur l'écran d'accueil »</strong><span>Faites défiler la liste si besoin.</span></span>
-          </li>
-          <li class="install-step">
-            <span class="install-step-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
-            </span>
-            <span class="install-step-body"><strong><span class="install-step-num">4.</span> Toucher « Ajouter »</strong><span>L'icône KERLAM apparaît sur votre écran d'accueil.</span></span>
-          </li>
-        </ol>
-      </div>
-
-      <!-- iOS mais navigateur intégré (pas Safari) -->
-      <div id="install-help-ios-inapp" class="install-help-block" hidden>
-        <p><strong>Ouvrez d'abord bon.kerlam.fr dans Safari.</strong></p>
-        <p class="muted">L'ajout à l'écran d'accueil n'est possible que depuis Safari, pas depuis ce navigateur intégré (Gmail, Chrome, Facebook, Instagram…). Copiez l'adresse <strong>bon.kerlam.fr</strong>, ouvrez Safari, puis collez-la.</p>
-      </div>
-
-      <!-- Android / autres : instructions manuelles -->
-      <div id="install-help-android" class="install-help-block" hidden>
-        <p>Pour installer l'application :</p>
-        <ol class="install-steps">
-          <li class="install-step">
-            <span class="install-step-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
-            </span>
-            <span class="install-step-body"><strong><span class="install-step-num">1.</span> Ouvrir le menu du navigateur</strong><span>L'icône ⋮ (Chrome / Edge), en haut à droite.</span></span>
-          </li>
-          <li class="install-step">
-            <span class="install-step-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>
-            </span>
-            <span class="install-step-body"><strong><span class="install-step-num">2.</span> Choisir « Installer l'application »</strong><span>Ou « Ajouter à l'écran d'accueil ».</span></span>
-          </li>
-        </ol>
-      </div>
+      <div id="install-help-body"><!-- rempli par assets/install.js selon l'appareil --></div>
+      <div id="install-help-all"></div>
     </div>
   </div>
 
@@ -558,8 +544,8 @@
   </template>
 
   <!-- ================================================================== Scripts -->
-  <script src="/assets/config.js"></script>
+  <script src="/assets/config.js?v=5"></script>
   <script src="/assets/vendor/supabase/supabase.js"></script>
-  <script type="module" src="/assets/app.js?v=4"></script>
+  <script type="module" src="/assets/app.js?v=5"></script>
 </body>
 </html>
