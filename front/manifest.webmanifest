@@ -10,11 +10,11 @@
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#F4F4F2",
-  "theme_color": "#FF9300",
+  "theme_color": "#FD8008",
   "icons": [
-    { "src": "/assets/icons/icon.svg", "sizes": "192x192", "type": "image/svg+xml", "purpose": "any" },
-    { "src": "/assets/icons/icon.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "any" },
-    { "src": "/assets/icons/maskable.svg", "sizes": "192x192", "type": "image/svg+xml", "purpose": "maskable" },
-    { "src": "/assets/icons/maskable.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "maskable" }
+    { "src": "/assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/assets/icons/maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/assets/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

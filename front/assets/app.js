@@ -24,6 +24,9 @@
 
 import {
   sb,
+  isDemoMode,
+  demoScreenParam,
+  demoThemeParam,
   getSession,
   onAuthStateChange,
   signInWithGoogle,
@@ -45,18 +48,65 @@ import {
   updateLigne,
   deleteLigne,
   listArticles,
+  listArticlesAll,
   listCamions,
   listClients,
   listProjets,
   listContacts,
   listSites,
+  listChauffeurs,
+  listUtilisateurs,
+  listReglages,
+  listLettresVoiture,
+  listPlanningLv,
+  createProjet,
+  updateProjet,
+  createClient,
+  updateClient,
+  createContact,
+  updateContact,
+  deleteContact,
+  createSite,
+  updateSite,
+  createCamion,
+  updateCamion,
+  createChauffeur,
+  updateChauffeur,
+  createArticle,
+  updateArticle,
+  rpcFusionnerArticle,
+  createUtilisateur,
+  updateUtilisateur,
+  upsertReglage,
+  getPermis,
+  upsertPermis,
+  listPermisCategories,
+  createPermisCategorie,
+  updatePermisCategorie,
+  deletePermisCategorie,
+  getFco,
+  upsertFco,
+  getCarteConducteur,
+  upsertCarteConducteur,
+  listCaces,
+  createCaces,
+  updateCaces,
+  deleteCaces,
+  rpcAlertesDocuments,
+  uploadChauffeurDoc,
+  signedUrlChauffeurDoc,
+  workerAlertes,
+  workerEnvoiGroupe,
+  workerChauffeurDepart,
+  searchAddress,
+  reverseAddress,
   rpcLvPoids,
   rpcPrefill,
   rpcSitesPour,
   rpcLvUndo,
   rpcSetDerniereUnite,
   todayIso,
-} from "./supabase-client.js";
+} from "./data.js";
 
 /* ============================================================== IndexedDB == */
 /* Deux object stores :
@@ -163,17 +213,29 @@ function scheduleFlush() {
   }, 1500);
 }
 
+const REMOTE_UPDATERS = {
+  lettres_voiture: updateLv,
+  tours: updateTour,
+  tour_lignes: updateLigne,
+  projets: updateProjet,
+  clients: updateClient,
+  contacts: updateContact,
+  sites: updateSite,
+  camions: updateCamion,
+  chauffeurs: updateChauffeur,
+  articles: updateArticle,
+  utilisateurs: updateUtilisateur,
+  permis: (id, patch) => upsertPermis(id, patch), // id ici = chauffeur_id (cf. wireDocAutosave)
+  fco: (id, patch) => upsertFco(id, patch),
+  carte_conducteur: (id, patch) => upsertCarteConducteur(id, patch),
+  permis_categories: updatePermisCategorie,
+  caces: updateCaces,
+};
+
 async function applyOp(op) {
-  switch (op.table) {
-    case "lettres_voiture":
-      return updateLv(op.id, op.patch);
-    case "tours":
-      return updateTour(op.id, op.patch);
-    case "tour_lignes":
-      return updateLigne(op.id, op.patch);
-    default:
-      throw new Error("Opération de file inconnue : " + op.table);
-  }
+  const fn = REMOTE_UPDATERS[op.table];
+  if (!fn) throw new Error("Opération de file inconnue : " + op.table);
+  return fn(op.id, op.patch);
 }
 
 async function flushQueue() {
@@ -213,19 +275,9 @@ function setSyncState(state) {
 
 async function patchRemote(table, id, patch) {
   try {
-    switch (table) {
-      case "lettres_voiture":
-        await updateLv(id, patch);
-        break;
-      case "tours":
-        await updateTour(id, patch);
-        break;
-      case "tour_lignes":
-        await updateLigne(id, patch);
-        break;
-      default:
-        throw new Error("Table inconnue: " + table);
-    }
+    const fn = REMOTE_UPDATERS[table];
+    if (!fn) throw new Error("Table inconnue: " + table);
+    await fn(id, patch);
   } catch (err) {
     if (isNetworkError(err)) {
       await enqueueWrite({ table, id, patch });
@@ -415,13 +467,17 @@ function updateNavLink(anchor, site) {
 const state = {
   session: null,
   profil: null,
+  roles: [],
   chauffeur: null,
-  refs: { camions: [], clients: [], projets: [], contacts: [], articles: [], sites: [] },
+  refs: { camions: [], clients: [], projets: [], contacts: [], articles: [], sites: [], chauffeurs: [] },
   lv: null,
   tours: [],
   lastPoids: null,
   prefillData: {},
   route: "dashboard",
+  reglages: {},
+  planningSelection: new Set(),
+  sitePickerTarget: null, // <select> actuellement ciblé par la feuille de choix de site
 };
 
 const ROUTES = [
@@ -429,6 +485,112 @@ const ROUTES = [
   "lv", "planning", "projets", "clients", "sites", "camions",
   "chauffeurs", "articles", "utilisateurs",
 ];
+
+function hasRole(role) {
+  return state.roles.includes(role);
+}
+
+/* --------------------------------------------------------- Helpers d'affichage */
+function formatDateFr(iso) {
+  if (!iso) return "—";
+  const [y, m, d] = String(iso).slice(0, 10).split("-");
+  if (!y || !m || !d) return "—";
+  return `${d}/${m}/${y}`;
+}
+
+function daysUntil(iso) {
+  if (!iso) return null;
+  const target = new Date(String(iso).slice(0, 10) + "T00:00:00");
+  if (isNaN(target.getTime())) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.round((target - today) / 86400000);
+}
+
+// Puce de statut d'échéance : vert si lointaine, orange (surface, texte anthracite)
+// si <= alerteJours, rouge si dépassée. Jamais de texte orange nu (cf. styles.css).
+function statusPillHtml(iso, alerteJours = 60) {
+  if (!iso) return "";
+  const j = daysUntil(iso);
+  if (j == null) return "";
+  if (j < 0) return `<span class="status-pill status-expired">Expiré (${escapeHtml(formatDateFr(iso))})</span>`;
+  if (j <= alerteJours) return `<span class="status-pill status-soon">Dans ${j} j (${escapeHtml(formatDateFr(iso))})</span>`;
+  return `<span class="status-pill status-ok">${escapeHtml(formatDateFr(iso))}</span>`;
+}
+
+function getAlerteJours() {
+  const v = state.reglages.alerte_jours;
+  const n = v != null ? parseInt(v, 10) : NaN;
+  return isNaN(n) ? 60 : n;
+}
+
+// Accordéon générique utilisé par tous les écrans bureau (Projets, Clients, Sites,
+// Camions, Chauffeurs, Articles, Utilisateurs) : une carte repliée affiche
+// titre + sous-titre + statut ; cliquer déplie le corps (formulaire autosave).
+function createAccordionCard({ title, subtitle = "", metaHtml = "", bodyBuilder, startOpen = false }) {
+  const card = document.createElement("article");
+  card.className = "entity-card" + (startOpen ? " is-open" : "");
+
+  const head = document.createElement("button");
+  head.type = "button";
+  head.className = "entity-card-head";
+  head.innerHTML = `
+    <span class="entity-card-title"><strong></strong><span></span></span>
+    <span class="entity-card-meta">${metaHtml}<span class="entity-card-chevron" aria-hidden="true">▾</span></span>
+  `;
+  head.querySelector(".entity-card-title strong").textContent = title;
+  head.querySelector(".entity-card-title span").textContent = subtitle;
+
+  const body = document.createElement("div");
+  body.className = "entity-card-body";
+
+  head.addEventListener("click", () => {
+    card.classList.toggle("is-open");
+  });
+
+  card.appendChild(head);
+  card.appendChild(body);
+  if (bodyBuilder) bodyBuilder(body, card);
+  return card;
+}
+
+function wireFilterInput(inputEl, onFilter) {
+  let t = null;
+  inputEl.addEventListener("input", () => {
+    clearTimeout(t);
+    t = setTimeout(() => onFilter(inputEl.value.trim().toLowerCase()), 200);
+  });
+}
+
+function fieldBlock(labelText, inputEl) {
+  const wrap = document.createElement("div");
+  wrap.className = "field";
+  const label = document.createElement("label");
+  label.textContent = labelText;
+  wrap.appendChild(label);
+  wrap.appendChild(inputEl);
+  return wrap;
+}
+
+function makeTextInput(type, value) {
+  const el = document.createElement("input");
+  el.type = type;
+  if (value != null) el.value = value;
+  return el;
+}
+
+function makeSelectInput(options, value, placeholder = "—") {
+  const el = document.createElement("select");
+  el.innerHTML = `<option value="">${escapeHtml(placeholder)}</option>`;
+  for (const opt of options) {
+    const o = document.createElement("option");
+    o.value = String(opt.value);
+    o.textContent = opt.label;
+    el.appendChild(o);
+  }
+  if (value != null) el.value = String(value);
+  return el;
+}
 
 /* -------------------------------------------------------------------- Utils == */
 function escapeHtml(str) {
@@ -469,15 +631,18 @@ async function getSiteOptionsList() {
 
 /* ============================================================ Référentiels == */
 async function loadRefs() {
-  const [camions, clients, projets, contacts, articles, sites] = await Promise.all([
+  const [camions, clients, projets, contacts, articles, sites, chauffeurs, reglages] = await Promise.all([
     listCamions().catch((e) => { reportIfVersionMismatch(e); return []; }),
     listClients().catch((e) => { reportIfVersionMismatch(e); return []; }),
     listProjets().catch((e) => { reportIfVersionMismatch(e); return []; }),
     listContacts().catch((e) => { reportIfVersionMismatch(e); return []; }),
     listArticles().catch((e) => { reportIfVersionMismatch(e); return []; }),
     listSites().catch((e) => { reportIfVersionMismatch(e); return []; }),
+    listChauffeurs().catch(() => []),
+    listReglages().catch(() => []),
   ]);
-  state.refs = { camions, clients, projets, contacts, articles, sites };
+  state.refs = { camions, clients, projets, contacts, articles, sites, chauffeurs };
+  state.reglages = Object.fromEntries(reglages.map((r) => [r.cle, r.valeur]));
   populateSelect(document.getElementById("f-camion"), camions, (c) => c.id, (c) => c.immatriculation);
   populateSelect(document.getElementById("f-client"), clients, (c) => c.id, (c) => c.raison_sociale);
   refreshProjetContactOptions();
@@ -923,6 +1088,17 @@ function navigate(route) {
   if (route === "today") loadToday();
   if (route === "mes-lv") loadMesLv();
   if (route === "controle") loadControle();
+  if (route === "dashboard") loadDashboard();
+  if (route === "reglages") loadReglagesBureau();
+  if (route === "lv") loadLvScreen();
+  if (route === "planning") loadPlanning();
+  if (route === "projets") loadProjetsScreen();
+  if (route === "clients") loadClientsScreen();
+  if (route === "sites") loadSitesScreen();
+  if (route === "camions") loadCamionsScreen();
+  if (route === "chauffeurs") loadChauffeursScreen();
+  if (route === "articles") loadArticlesScreen();
+  if (route === "utilisateurs") loadUtilisateursScreen();
 }
 
 /* =================================================================== UI statique == */
@@ -970,30 +1146,178 @@ function wireStaticUI() {
   navAppSel.addEventListener("change", (e) => setNavApp(e.target.value));
 
   document.getElementById("btn-google-login").addEventListener("click", async () => {
+    hideAuthError();
     try {
       await signInWithGoogle();
     } catch (err) {
-      const el = document.getElementById("auth-error");
-      el.hidden = false;
-      el.textContent = "Connexion impossible : " + (err && err.message ? err.message : "erreur inconnue");
+      showAuthError("Connexion impossible : " + (err && err.message ? err.message : "erreur inconnue"));
     }
   });
   document.getElementById("btn-logout-unauthorized").addEventListener("click", () => signOut());
   document.getElementById("btn-logout").addEventListener("click", () => signOut());
+
+  wireEmailOtpLogin();
+}
+
+/* =================================================================== Auth : OTP == */
+// Connexion par code à 6 chiffres envoyé par e-mail, en alternative à Google.
+// Trois étapes dans #screen-login : choix de méthode -> saisie e-mail ->
+// saisie du code (avec lien "Renvoyer le code" désactivé 60s). Le succès de
+// verifyEmailOtp() déclenche onAuthStateChange comme pour Google : la suite
+// (handleSessionChange) n'a rien de spécifique à gérer ici.
+let otpResendTimer = null;
+let otpEmail = "";
+
+function showLoginStep(step) {
+  document.getElementById("login-choice").hidden = step !== "choice";
+  document.getElementById("otp-request-form").hidden = step !== "otp-request";
+  document.getElementById("otp-verify-form").hidden = step !== "otp-verify";
+  hideAuthError();
+}
+
+function stopOtpResendCountdown() {
+  if (otpResendTimer) {
+    clearInterval(otpResendTimer);
+    otpResendTimer = null;
+  }
+}
+
+function startOtpResendCountdown(seconds = 60) {
+  const btn = document.getElementById("btn-resend-otp");
+  const suffix = document.getElementById("otp-resend-suffix");
+  const countdownEl = document.getElementById("otp-resend-countdown");
+  let remaining = seconds;
+  btn.disabled = true;
+  suffix.hidden = false;
+  countdownEl.textContent = String(remaining);
+  stopOtpResendCountdown();
+  otpResendTimer = setInterval(() => {
+    remaining -= 1;
+    if (remaining <= 0) {
+      stopOtpResendCountdown();
+      btn.disabled = false;
+      suffix.hidden = true;
+    } else {
+      countdownEl.textContent = String(remaining);
+    }
+  }, 1000);
+}
+
+function resetEmailOtpLogin() {
+  stopOtpResendCountdown();
+  otpEmail = "";
+  const codeInput = document.getElementById("f-otp-code");
+  if (codeInput) codeInput.value = "";
+  showLoginStep("choice");
+}
+
+function otpErrorMessage(err) {
+  const msg = (err && err.message) || "";
+  if (!navigator.onLine) {
+    return "Connexion réseau indisponible. Vérifiez votre connexion et réessayez.";
+  }
+  if (/expired|invalid|token/i.test(msg)) {
+    return "Code invalide ou expiré. Vérifiez le code reçu ou demandez-en un nouveau.";
+  }
+  if (/rate limit|too many/i.test(msg)) {
+    return "Trop de tentatives. Patientez quelques instants avant de réessayer.";
+  }
+  return "Une erreur est survenue : " + (msg || "erreur inconnue");
+}
+
+function wireEmailOtpLogin() {
+  document.getElementById("btn-show-otp").addEventListener("click", () => {
+    showLoginStep("otp-request");
+    document.getElementById("f-otp-email").focus();
+  });
+
+  document.getElementById("btn-back-to-choice").addEventListener("click", () => {
+    showLoginStep("choice");
+  });
+
+  document.getElementById("btn-change-email").addEventListener("click", () => {
+    stopOtpResendCountdown();
+    showLoginStep("otp-request");
+    document.getElementById("f-otp-email").focus();
+  });
+
+  document.getElementById("otp-request-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const emailInput = document.getElementById("f-otp-email");
+    const email = emailInput.value.trim();
+    if (!email) return;
+    const btn = document.getElementById("btn-send-otp");
+    hideAuthError();
+    btn.disabled = true;
+    try {
+      await sendEmailOtp(email);
+      otpEmail = email;
+      document.getElementById("otp-sent-to").textContent = `Code envoyé à ${email}`;
+      document.getElementById("f-otp-code").value = "";
+      showLoginStep("otp-verify");
+      startOtpResendCountdown(60);
+      document.getElementById("f-otp-code").focus();
+    } catch (err) {
+      showAuthError(otpErrorMessage(err));
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  document.getElementById("otp-verify-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const codeInput = document.getElementById("f-otp-code");
+    const code = codeInput.value.trim();
+    if (!code) return;
+    const btn = document.getElementById("btn-verify-otp");
+    hideAuthError();
+    btn.disabled = true;
+    try {
+      await verifyEmailOtp(otpEmail, code);
+      // onAuthStateChange se déclenche automatiquement (nouvelle session) et
+      // pilote la suite via handleSessionChange — rien à faire ici.
+    } catch (err) {
+      showAuthError(otpErrorMessage(err));
+      btn.disabled = false;
+    }
+  });
+
+  document.getElementById("btn-resend-otp").addEventListener("click", async () => {
+    const btn = document.getElementById("btn-resend-otp");
+    if (btn.disabled || !otpEmail) return;
+    hideAuthError();
+    try {
+      await sendEmailOtp(otpEmail);
+      startOtpResendCountdown(60);
+    } catch (err) {
+      showAuthError(otpErrorMessage(err));
+    }
+  });
 }
 
 /* ======================================================================== Auth == */
+function hideAuthError() {
+  const el = document.getElementById("auth-error");
+  el.hidden = true;
+  el.textContent = "";
+}
+
+function showAuthError(message) {
+  const el = document.getElementById("auth-error");
+  el.hidden = false;
+  el.textContent = message;
+}
+
 function showScreen(which) {
   document.getElementById("screen-login").hidden = which !== "login";
   document.getElementById("screen-unauthorized").hidden = which !== "unauthorized";
   document.getElementById("app-shell").hidden = which !== "app";
+  if (which === "login") resetEmailOtpLogin();
 }
 
 function showFatal(message) {
-  const el = document.getElementById("auth-error");
-  el.hidden = false;
-  el.textContent = message;
   showScreen("login");
+  showAuthError(message);
 }
 
 let lastHandledUserId;

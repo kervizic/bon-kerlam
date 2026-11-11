@@ -8,6 +8,15 @@
 # déjà créé par l'image officielle, on déplace le pid file et les dossiers
 # temporaires vers /tmp (inscriptible par un non-root), et on écoute sur le
 # port non privilégié 8080 (cf. front/nginx.conf).
+# Étape 1 : génération des icônes PWA « KL » (Sarpanch ExtraBold) au build.
+FROM python:3.12-slim AS icons
+RUN pip install --no-cache-dir pillow
+WORKDIR /w
+COPY build-assets/Sarpanch.ttf ./Sarpanch.ttf
+COPY scripts/gen-icons.py ./gen-icons.py
+RUN mkdir -p out && python gen-icons.py Sarpanch.ttf out
+
+# Étape 2 : nginx non-root servant les fichiers statiques.
 FROM nginx:1.27-alpine
 
 ARG APP_VERSION=0.0.0-dev
@@ -25,6 +34,8 @@ RUN sed -i -E 's/^user +nginx;//' /etc/nginx/nginx.conf \
 
 COPY front/nginx.conf /etc/nginx/conf.d/default.conf
 COPY front/ /usr/share/nginx/html/
+# Icônes générées à l'étape 1 (écrasent d'éventuels placeholders).
+COPY --from=icons /w/out/ /usr/share/nginx/html/assets/icons/
 
 # Petit fichier diagnostic : utile pour vérifier en prod quelle image tourne
 # (jamais caché côté nginx, cf. front/nginx.conf).
