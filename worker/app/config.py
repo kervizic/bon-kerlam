@@ -36,6 +36,11 @@ class Settings:
     # navigateur (génération PDF par l'utilisateur connecté, sans jeton IA).
     jwt_secret: str = os.environ.get("JWT_SECRET", "")
     jwt_aud: str = os.environ.get("JWT_AUD", "authenticated")
+    # Identité KERLAM imprimée sur le PDF (SIREN + adresse du siège, cf. Kbis).
+    kerlam_siren: str = os.environ.get("KERLAM_SIREN", "")
+    kerlam_adresse: str = os.environ.get(
+        "KERLAM_ADRESSE", "13 allée des Marguerites, 77410 Claye-Souilly"
+    )
 
 
 settings = Settings()

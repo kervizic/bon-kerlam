@@ -119,9 +119,10 @@ import {
   todayIso,
 } from "./data.js";
 
-import { initInstall } from "./install.js?v=8";
-import { UndoStack } from "./undo-stack.js?v=8";
-import { PdfCache, shouldCachePdf, formatGeneratedAt } from "./pdf-cache.js?v=8";
+import { initInstall } from "./install.js?v=9";
+import { UndoStack } from "./undo-stack.js?v=9";
+import { PdfCache, shouldCachePdf, formatGeneratedAt } from "./pdf-cache.js?v=9";
+import { statutLabel } from "./status-labels.js?v=9";
 
 /* ============================================================== IndexedDB == */
 /* Deux object stores :
@@ -1155,6 +1156,27 @@ function connectedChauffeurId() {
   return state.chauffeur && state.chauffeur.id != null ? state.chauffeur.id : null;
 }
 
+// Nom du client d'une lettre : via le projet rattaché, sinon l'expéditeur saisi.
+function lvClientName(lv) {
+  const projet = (state.refs.projets || []).find((p) => p.id === lv.projet_id);
+  if (projet) {
+    const client = (state.refs.clients || []).find((c) => c.id === projet.client_id);
+    if (client && client.raison_sociale) return client.raison_sociale;
+  }
+  return lv.expediteur || "";
+}
+
+// Titre d'une ligne : le numéro KER-xxxxx, ou pour un brouillon sans numéro
+// « Brouillon du JJ/MM » + client si connu.
+function lvRowTitle(lv) {
+  if (lv.numero) return lv.numero;
+  const d = formatDateFr(lv.date_etablissement);
+  const jjmm = d && d !== "—" ? d.slice(0, 5) : "";
+  const client = lvClientName(lv);
+  const base = jjmm ? `Brouillon du ${jjmm}` : "Brouillon";
+  return client ? `${base} — ${client}` : base;
+}
+
 // Construit une ligne de lettre de voiture : zone cliquable (ouvre la lettre) +
 // bouton icône PDF (export). Partagé par « Mes lettres de voiture » et la liste
 // bureau pour ne pas dupliquer le balisage.
@@ -1166,10 +1188,10 @@ function buildLvRow(lv, { dateText } = {}) {
   open.className = "lv-row-open";
   open.innerHTML = `
     <span class="lv-row-main">
-      <span class="lv-row-numero">${escapeHtml(lv.numero || "(brouillon)")}</span>
-      <span class="lv-row-date">${escapeHtml(dateText != null ? dateText : (lv.date_etablissement || ""))}</span>
+      <span class="lv-row-numero">${escapeHtml(lvRowTitle(lv))}</span>
+      <span class="lv-row-date">${escapeHtml(dateText != null ? dateText : formatDateFr(lv.date_etablissement))}</span>
     </span>
-    <span class="badge badge-${escapeHtml(lv.statut)}">${escapeHtml(lv.statut)}</span>`;
+    <span class="badge badge-${escapeHtml(lv.statut)}">${escapeHtml(statutLabel(lv.statut))}</span>`;
   open.addEventListener("click", () => openLvInToday(lv));
   const pdf = document.createElement("button");
   pdf.type = "button";

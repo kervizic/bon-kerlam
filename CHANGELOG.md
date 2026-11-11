@@ -4,6 +4,26 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.9] — 2026-11-11
+
+Lot 1b (finitions des retours beta.8). CI verte, images publiées, déployé.
+
+- **Statuts en français + pastilles de couleur** : plus aucun code brut affiché
+  (« preparee » → **Préparée**, « a_signer » → **À signer**, « en_cours » →
+  **En cours**, « envoyee » → **En attente de signature**, « signee » →
+  **Signée**, etc.). Libellés centralisés (`assets/status-labels.js`, testé) ; la
+  classe CSS de la pastille garde le code brut (couleur). **Test CI** : la passe
+  captures (Playwright) **échoue si un code de statut brut s'affiche** à l'écran.
+- **Dates au format français JJ/MM/AAAA** partout : listes (fin de l'ISO
+  2026-11-12) **et PDF** (« Établie le 11/11/2026 »).
+- **PDF — identité KERLAM** : **SIREN 838 377 331** (du Kbis) renseigné, mis en
+  **paramètre de configuration du worker** (`KERLAM_SIREN`) ; adresse du **siège**
+  (13 allée des Marguerites, 77410 Claye-Souilly) également configurable
+  (`KERLAM_ADRESSE`). **Logo du PDF en police Sarpanch 900** (même woff2 que
+  l'appli), KER #808080 / LAM #FD8008.
+- **Brouillon sans numéro** : affiché **« Brouillon du JJ/MM — client »** (date +
+  client si connu) au lieu de « (brouillon) ».
+
 ## [0.1.0-beta.8] — 2026-11-11
 
 Lot 1 des gros chantiers (retours Manu). CI verte, image publiée, déployée.

@@ -39,6 +39,14 @@ CHAUFFEUR_SCREENS = [
 ]
 
 overflow_failures: list[str] = []
+status_failures: list[str] = []
+
+# Codes bruts de bon.statut_lv : ne doivent JAMAIS s'afficher (on veut les
+# libellés français, cf. assets/status-labels.js).
+RAW_STATUS_CODES = [
+    "preparee", "en_cours", "cloturee", "a_signer",
+    "envoyee", "en_attente_signature", "signee", "facturee", "annulee",
+]
 
 
 def check_no_hscroll(page, label: str) -> None:
@@ -47,6 +55,15 @@ def check_no_hscroll(page, label: str) -> None:
     )
     if data["sw"] > data["iw"] + 1:
         overflow_failures.append(f"{label}: scrollWidth={data['sw']} > innerWidth={data['iw']}")
+
+
+def check_no_raw_status(page, label: str) -> None:
+    text = page.evaluate("() => document.body.innerText || ''")
+    low = text.lower()
+    import re
+    for code in RAW_STATUS_CODES:
+        if re.search(r"(?<![a-z])" + re.escape(code) + r"(?![a-z])", low):
+            status_failures.append(f"{label}: code de statut brut affiché « {code} »")
 
 
 def shoot(ctx, prefix, route, theme, label, *, role="", drawer=False, check=True):
@@ -64,6 +81,8 @@ def shoot(ctx, prefix, route, theme, label, *, role="", drawer=False, check=True
         print("  ", out)
         if check and not drawer:
             check_no_hscroll(page, f"{prefix}-{label}-{theme}")
+        if not drawer:
+            check_no_raw_status(page, f"{prefix}-{label}-{theme}")
     except Exception as exc:  # noqa: BLE001
         print(f"   !! {prefix}/{label}/{theme}: {exc}")
     finally:
@@ -147,13 +166,22 @@ def main() -> int:
 
     n = len(list(OUT.glob("*.png")))
     print(f"{n} captures dans {OUT}/")
+    rc = 0
     if overflow_failures:
         print("DÉBORDEMENT HORIZONTAL détecté :")
         for f in overflow_failures:
             print("  -", f)
-        return 1
-    print("OK : aucun débordement horizontal.")
-    return 0
+        rc = 1
+    else:
+        print("OK : aucun débordement horizontal.")
+    if status_failures:
+        print("CODE DE STATUT BRUT AFFICHÉ (utiliser un libellé français) :")
+        for f in status_failures:
+            print("  -", f)
+        rc = 1
+    else:
+        print("OK : aucun code de statut brut affiché.")
+    return rc
 
 
 if __name__ == "__main__":

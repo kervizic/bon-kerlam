@@ -76,3 +76,31 @@ def test_build_context_signee_depuis_statut():
     assert ("signee" == "signee") is True
     for statut in ("en_cours", "a_signer", "envoyee", "cloturee"):
         assert (statut == "signee") is False
+
+
+def test_format_siren():
+    assert pdf._format_siren("838377331") == "838 377 331"
+    assert pdf._format_siren("838 377 331") == "838 377 331"
+    assert pdf._format_siren("") == ""
+    assert pdf._format_siren("123") == "123"  # non-9 chiffres : tel quel
+
+
+def test_fr_date():
+    assert pdf._fr_date("2026-11-11") == "11/11/2026"
+    assert pdf._fr_date("2026-01-05T00:00:00") == "05/01/2026"
+    assert pdf._fr_date("") == ""
+    assert pdf._fr_date(None) == ""
+
+    import datetime
+    assert pdf._fr_date(datetime.date(2026, 3, 9)) == "09/03/2026"
+
+
+def test_pdf_date_francaise_et_siren():
+    ctx = _context()
+    ctx["lv"]["date_etablissement"] = "11/11/2026"  # tel que build_context le produit
+    ctx["transporteur"] = {"nom": "KERLAM", "adresse": "KERLAM — 13 allée des Marguerites, 77410 Claye-Souilly",
+                           "siren": "838 377 331"}
+    html = pdf.render_html(ctx)
+    assert "Établie le 11/11/2026" in html
+    assert "838 377 331" in html
+    assert "13 allée des Marguerites" in html

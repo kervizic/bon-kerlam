@@ -3,10 +3,17 @@
 <head>
 <meta charset="utf-8">
 <style>
+  /* Logo KERLAM : même police que l'appli (Sarpanch 900), résolue via base_url. */
+  @font-face {
+    font-family: "Sarpanch";
+    src: url("sarpanch-900.woff2") format("woff2");
+    font-weight: 900;
+    font-style: normal;
+  }
   @page { size: A4; margin: 14mm 14mm 10mm 14mm; }
   * { box-sizing: border-box; }
   body { font-family: "Helvetica Neue", Arial, sans-serif; color: #2B2B2B; font-size: 10.5pt; }
-  .logo { font-family: "Sarpanch", Arial, sans-serif; font-weight: 800; font-size: 22pt; letter-spacing: 0.5pt; }
+  .logo { font-family: "Sarpanch", Arial, sans-serif; font-weight: 900; font-size: 24pt; letter-spacing: 0.5pt; }
   .logo .ker { color: #808080; } .logo .lam { color: #FD8008; }
   .row { display: flex; justify-content: space-between; align-items: flex-start; }
   .box { border: 1px solid #808080; padding: 6px 8px; margin-top: 6px; }

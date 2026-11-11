@@ -13,6 +13,7 @@ from typing import Any
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from . import db
+from .config import settings
 
 _TPL_DIR = os.path.join(os.path.dirname(__file__), "templates")
 _env = Environment(
@@ -20,10 +21,31 @@ _env = Environment(
     autoescape=select_autoescape(["html"]),
 )
 
+
+def _format_siren(raw: str) -> str:
+    """SIREN groupé « 838 377 331 » (9 chiffres) ; sinon valeur telle quelle."""
+    digits = "".join(c for c in str(raw or "") if c.isdigit())
+    if len(digits) == 9:
+        return f"{digits[0:3]} {digits[3:6]} {digits[6:9]}"
+    return raw or ""
+
+
+def _fr_date(value) -> str:
+    """Date au format français JJ/MM/AAAA (depuis une date ou une chaîne ISO)."""
+    if not value:
+        return ""
+    s = str(value)[:10]
+    parts = s.split("-")
+    if len(parts) == 3 and len(parts[0]) == 4:
+        y, m, d = parts
+        return f"{d}/{m}/{y}"
+    return s
+
+
 TRANSPORTEUR = {
     "nom": "KERLAM",
-    "adresse": "KERLAM — 15 Rue Victor Drouet, 77410 Claye-Souilly",
-    "siren": os.environ.get("KERLAM_SIREN", ""),
+    "adresse": f"KERLAM — {settings.kerlam_adresse}",
+    "siren": _format_siren(settings.kerlam_siren),
 }
 
 
@@ -49,6 +71,10 @@ def build_context(lv_id: int) -> dict[str, Any]:
     # Destinataire identique à l'expéditeur => nom en entier dans les deux champs.
     if lv["dest_identique"] and lv["expediteur"]:
         lv["destinataire"] = lv["expediteur"]
+
+    # Dates au format français JJ/MM/AAAA (le template ne reformate pas).
+    lv["date_etablissement"] = _fr_date(lv.get("date_etablissement"))
+    lv["date_prise_en_charge"] = _fr_date(lv.get("date_prise_en_charge"))
 
     tours = db.query(
         """
@@ -85,4 +111,6 @@ def render_html(context: dict[str, Any]) -> str:
 def render_pdf(context: dict[str, Any]) -> bytes:
     from weasyprint import HTML  # import paresseux (dépendances système)
 
-    return HTML(string=render_html(context)).write_pdf()
+    # base_url = dossier des gabarits : permet au @font-face de résoudre
+    # l'URL relative vers sarpanch-900.woff2 (logo KERLAM du PDF).
+    return HTML(string=render_html(context), base_url=_TPL_DIR + os.sep).write_pdf()
