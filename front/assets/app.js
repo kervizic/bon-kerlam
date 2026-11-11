@@ -1,11 +1,13 @@
 /* app.js — coquille applicative bon.kerlam.fr (module ES).
  *
- * Honnêteté du périmètre : les vues "Aujourd'hui" (saisie du jour) et "Contrôle"
- * (lecture hors-ligne) sont câblées de bout en bout sur le vrai contrat Supabase
- * (cf. supabase/migrations/0001..0007). "Mes LV" est fonctionnelle (liste réelle,
- * ouverture dans l'éditeur du jour). Le reste des écrans du menu bureau (Planning,
- * Projets, Clients, Sites, Camions, Chauffeurs, Articles, Utilisateurs) est un
- * stub « À venir » — pas de CRUD construit pour cette livraison.
+ * Depuis la 0.1.0-beta.3, tous les écrans du menu bureau (Tableau de bord,
+ * Planning, Projets, Clients + Contacts, Sites, Camions, Chauffeurs + documents
+ * réglementaires, Articles, Utilisateurs, Réglages) sont du vrai CRUD autosave
+ * sur le schéma `api` (via assets/data.js), au même niveau que "Aujourd'hui" /
+ * "Mes LV" / "Contrôle". L'accès aux données passe TOUJOURS par `./data.js`
+ * (jamais directement par supabase-client.js) : c'est cette façade qui bascule
+ * silencieusement vers le jeu de données fictif du mode démo (`?demo=1`, cf.
+ * assets/demo-data.js) sans qu'aucun code ici n'ait besoin de le savoir.
  *
  * Limitations connues (volontaires, documentées dans README.md) :
  * - Le choix d'appli de navigation (Google Maps / Waze / Plans) est une
@@ -15,11 +17,20 @@
  * - L'undo "serveur" (création/suppression de tour ou de ligne) s'appuie sur
  *   api.lv_undo, qui défait le dernier changement tracé en audit côté Postgres ;
  *   son "redo" recharge simplement l'état courant (pas de vrai rejouable
- *   côté serveur). L'undo "champ" (saisie de texte/select) est lui pleinement
- *   réversible côté client.
+ *   côté serveur). L'undo "champ" (saisie de texte/select), lui, est pleinement
+ *   réversible côté client (undo ET redo), y compris sur tous les nouveaux
+ *   écrans bureau qui réutilisent wireAutosaveField.
  * - Ctrl+Z / Ctrl+Maj+Z sont interceptés globalement pour piloter la pile
  *   d'undo applicative : l'undo natif du navigateur dans un champ texte est
  *   donc volontairement désactivé au profit de cette pile.
+ * - La fusion d'articles (bouton "Fusionner avec…") n'a pas d'équivalent RPC
+ *   côté SQL (cf. supabase/migrations) : stub bureau qui l'indique clairement
+ *   plutôt que de faire semblant.
+ * - Les endpoints bon-worker (/worker/signature/envoi-groupe,
+ *   /worker/chauffeur/{id}/depart) exigent un jeton IA dédié (X-AI-Token, cf.
+ *   worker/app/auth.py) non disponible depuis ce shell navigateur ; l'appel est
+ *   tenté avec le jeton de session Supabase et échoue proprement (message clair)
+ *   si le serveur le refuse — c'est un point d'intégration hors périmètre front.
  */
 
 import {
@@ -95,7 +106,6 @@ import {
   rpcAlertesDocuments,
   uploadChauffeurDoc,
   signedUrlChauffeurDoc,
-  workerAlertes,
   workerEnvoiGroupe,
   workerChauffeurDepart,
   searchAddress,
@@ -692,20 +702,30 @@ async function loadDashboard() {
       if (j != null && j <= alerteJours) rows.push({ sujet: `Camion ${c.immatriculation}`, detail: label, date, j });
     }
   }
+  // Les fiches chauffeur portent des colonnes "rapides" fco_echeance/carte_echeance
+  // (historiques, cf. 0001_schema_bon.sql) ET des tables détaillées bon.fco /
+  // bon.carte_conducteur (cf. 0011_driver_documents.sql) exposées par
+  // api.alertes_documents(). On évite de compter deux fois la même échéance pour
+  // le même chauffeur quand les deux sources existent.
+  const docAlertKeys = new Set();
+  let docs = [];
+  try {
+    docs = await rpcAlertesDocuments();
+  } catch (e) {
+    /* RLS bureau uniquement : ignore silencieusement si vide/erreur */
+  }
+  for (const d of docs) {
+    rows.push({ sujet: d.chauffeur, detail: `${d.type_document}${d.detail ? " — " + d.detail : ""}`, date: d.echeance, j: d.jours_restants });
+    if (/^FCO/.test(d.type_document)) docAlertKeys.add(d.chauffeur_id + "|fco");
+    if (/^Carte conducteur/.test(d.type_document)) docAlertKeys.add(d.chauffeur_id + "|carte");
+  }
   for (const c of state.refs.chauffeurs) {
     if (c.date_sortie) continue;
-    for (const [label, date] of [["FCO / code 95", c.fco_echeance], ["Carte conducteur", c.carte_echeance]]) {
+    for (const [label, date, key] of [["FCO / code 95", c.fco_echeance, "fco"], ["Carte conducteur", c.carte_echeance, "carte"]]) {
+      if (docAlertKeys.has(c.id + "|" + key)) continue; // déjà couvert par le document détaillé
       const j = daysUntil(date);
       if (j != null && j <= alerteJours) rows.push({ sujet: c.nom, detail: label, date, j });
     }
-  }
-  try {
-    const docs = await rpcAlertesDocuments();
-    for (const d of docs) {
-      rows.push({ sujet: d.chauffeur, detail: `${d.type_document}${d.detail ? " — " + d.detail : ""}`, date: d.echeance, j: d.jours_restants });
-    }
-  } catch (e) {
-    /* RLS bureau uniquement : ignore silencieusement si vide/erreur */
   }
 
   if (!rows.length) {
@@ -1157,9 +1177,16 @@ function loadReglagesBureau() {
 }
 
 function wireReglagesBureauFields() {
-  wireReglageField(document.getElementById("r-signature-auto"), "signature_envoi_auto", (v) => (v ? "true" : "false"));
-  document.getElementById("r-signature-auto").addEventListener("change", (e) => {
-    e.target.dispatchEvent(new Event("input"));
+  // Case à cocher : pas de wireReglageField (qui lit .value, pas .checked) —
+  // même traitement manuel que f-dest-identique ailleurs dans ce fichier.
+  const autoEl = document.getElementById("r-signature-auto");
+  autoEl.addEventListener("change", async () => {
+    try {
+      await upsertReglage("signature_envoi_auto", autoEl.checked ? "true" : "false");
+      state.reglages.signature_envoi_auto = autoEl.checked ? "true" : "false";
+    } catch (e) {
+      alert("Échec : " + (e.message || e));
+    }
   });
   wireReglageField(document.getElementById("r-documenso-cc"), "documenso_cc_contact");
   wireReglageField(document.getElementById("r-alerte-jours"), "alerte_jours", toIntOrNull);
@@ -2562,7 +2589,28 @@ async function renderSitePickerList(query) {
 }
 
 /* ========================================================================= Routage == */
-function navigate(route) {
+const ROUTE_LOADERS = {
+  today: loadToday,
+  "mes-lv": loadMesLv,
+  controle: loadControle,
+  dashboard: loadDashboard,
+  reglages: loadReglagesBureau,
+  lv: loadLvScreen,
+  planning: loadPlanning,
+  projets: loadProjetsScreen,
+  clients: loadClientsScreen,
+  sites: loadSitesScreen,
+  camions: loadCamionsScreen,
+  chauffeurs: loadChauffeursScreen,
+  articles: loadArticlesScreen,
+  utilisateurs: loadUtilisateursScreen,
+};
+
+// Async et retourne la promesse du chargement de route : les appelants qui ont
+// besoin d'attendre un rendu complet (ex. les deep-links `?demo=1&screen=...`)
+// peuvent faire `await navigate(...)` plutôt que de rappeler le loader en double
+// (ce qui créait une course et des doublons de carte de tour en mode démo).
+async function navigate(route) {
   if (!ROUTES.includes(route)) route = "dashboard";
   state.route = route;
   document.querySelectorAll(".view").forEach((el) => {
@@ -2578,20 +2626,8 @@ function navigate(route) {
     history.replaceState(null, "", "#/" + route);
   } catch (e) {}
 
-  if (route === "today") loadToday();
-  if (route === "mes-lv") loadMesLv();
-  if (route === "controle") loadControle();
-  if (route === "dashboard") loadDashboard();
-  if (route === "reglages") loadReglagesBureau();
-  if (route === "lv") loadLvScreen();
-  if (route === "planning") loadPlanning();
-  if (route === "projets") loadProjetsScreen();
-  if (route === "clients") loadClientsScreen();
-  if (route === "sites") loadSitesScreen();
-  if (route === "camions") loadCamionsScreen();
-  if (route === "chauffeurs") loadChauffeursScreen();
-  if (route === "articles") loadArticlesScreen();
-  if (route === "utilisateurs") loadUtilisateursScreen();
+  const loader = ROUTE_LOADERS[route];
+  if (loader) await loader();
 }
 
 /* =================================================================== UI statique == */
@@ -2650,6 +2686,46 @@ function wireStaticUI() {
   document.getElementById("btn-logout").addEventListener("click", () => signOut());
 
   wireEmailOtpLogin();
+  wireReglagesBureauFields();
+
+  // -------------------------------------------------------- Feuille « choix de site »
+  document.getElementById("btn-site-picker-close").addEventListener("click", closeSitePicker);
+  document.getElementById("site-picker-sheet").addEventListener("click", (e) => {
+    if (e.target.id === "site-picker-sheet") closeSitePicker();
+  });
+  wireFilterInput(document.getElementById("site-picker-search"), (q) => renderSitePickerList(q));
+  document.getElementById("btn-site-picker-new").addEventListener("click", async () => {
+    try {
+      const site = await createSite({ nom: "Nouveau site", portee: "commun", statut: "actif" });
+      state.refs.sites.push(site);
+      if (state.sitePickerTarget) {
+        state.sitePickerTarget.value = String(site.id);
+        state.sitePickerTarget.dispatchEvent(new Event("change"));
+      }
+      closeSitePicker();
+      navigate("sites");
+    } catch (e) {
+      alert("Création impossible : " + (e.message || e));
+    }
+  });
+
+  // --------------------------------------------------------------- Planning : envoi
+  document.getElementById("btn-envoi-groupe").addEventListener("click", async () => {
+    const ids = Array.from(state.planningSelection);
+    if (!ids.length) return;
+    const btn = document.getElementById("btn-envoi-groupe");
+    btn.disabled = true;
+    try {
+      const res = await workerEnvoiGroupe(ids);
+      alert(`Envoi déclenché manuellement pour ${res.lv ? res.lv.length : ids.length} LV (Documenso hors périmètre bêta).`);
+      state.planningSelection = new Set();
+      refreshPlanningSelectionUi();
+      await loadPlanning();
+    } catch (e) {
+      alert("Le service bon-worker n'a pas répondu (jeton IA requis côté serveur) : " + (e.message || e));
+      btn.disabled = false;
+    }
+  });
 }
 
 /* =================================================================== Auth : OTP == */
@@ -2845,7 +2921,7 @@ async function handleSessionChange(session) {
     return;
   }
 
-  if (profil.role === "chauffeur") {
+  if (hasRole("chauffeur")) {
     try {
       state.chauffeur = await getChauffeurByEmail(profil.email);
     } catch (err) {
@@ -2853,28 +2929,57 @@ async function handleSessionChange(session) {
     }
   }
 
-  document.getElementById("profil-badge").textContent = `${profil.nom || profil.email} · ${profil.role}`;
+  document.body.classList.toggle("has-bureau", hasRole("bureau"));
+  document.body.classList.toggle("has-chauffeur", hasRole("chauffeur"));
+
+  document.getElementById("profil-badge").textContent = `${profil.nom || profil.email} · ${state.roles.join(" + ") || profil.role}`;
   showScreen("app");
 
   await loadRefs();
   const navAppSel = document.getElementById("f-nav-app");
   if (navAppSel) navAppSel.value = getNavApp();
 
-  let initialRoute = (window.location.hash || "#/dashboard").replace(/^#\//, "") || "dashboard";
   if (isDemoMode() && demoScreenParam()) {
-    const map = {
-      aujourdhui: "today", tour: "today", "site-picker": "sites",
-      "tableau-de-bord": "dashboard", chauffeurs: "chauffeurs", "mes-lv": "mes-lv",
-      planning: "planning", projets: "projets", clients: "clients", sites: "sites",
-      camions: "camions", articles: "articles", utilisateurs: "utilisateurs", reglages: "reglages",
-    };
-    initialRoute = map[demoScreenParam()] || demoScreenParam();
+    await openDemoScreen(demoScreenParam());
+    return;
   }
+  const initialRoute = (window.location.hash || "#/dashboard").replace(/^#\//, "") || "dashboard";
   navigate(initialRoute);
+}
+
+// Deep-links `?demo=1&screen=...` (cf. front/README.md et la mission CI
+// screenshots). `tour` et `site-picker` ont besoin d'un petit script en plus
+// d'un simple changement de route : on attend que "Aujourd'hui" ait fini de
+// charger son brouillon de démo avant, respectivement, de laisser le tour
+// visible tel quel, ou d'ouvrir la feuille de choix de site par-dessus.
+async function openDemoScreen(name) {
+  const map = {
+    aujourdhui: "today", "mes-lv": "mes-lv", "tableau-de-bord": "dashboard",
+    chauffeurs: "chauffeurs", planning: "planning", projets: "projets",
+    clients: "clients", sites: "sites", camions: "camions", articles: "articles",
+    utilisateurs: "utilisateurs", reglages: "reglages",
+  };
+  if (name === "tour") {
+    await navigate("today");
+    return;
+  }
+  if (name === "site-picker") {
+    await navigate("today");
+    const firstPicker = document.querySelector("#tours-list .f-site-chargement");
+    openSitePicker(firstPicker || document.getElementById("f-camion"));
+    return;
+  }
+  await navigate(map[name] || name);
 }
 
 async function boot() {
   wireStaticUI();
+
+  // `?theme=clair|sombre` (uniquement actif sous ?demo=1, cf. demoThemeParam())
+  // force le thème pour les captures CI, par-dessus la préférence localStorage.
+  if (isDemoMode() && demoThemeParam()) {
+    applyTheme(demoThemeParam());
+  }
 
   if (!sb && !isDemoMode()) {
     showFatal("Configuration Supabase manquante ou invalide (assets/config.js).");

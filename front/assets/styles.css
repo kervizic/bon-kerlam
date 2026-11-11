@@ -105,6 +105,13 @@ html[data-theme="sombre"] {
 
 * { box-sizing: border-box; }
 
+/* Garde-fou : des règles auteur comme `.screen-auth{display:flex}` ou
+   `.app-shell{display:flex}` ont la même spécificité que la règle UA
+   `[hidden]{display:none}` mais gagnent quand même (origine auteur > UA) —
+   sans cette règle, un écran masqué par `hidden` restait visuellement affiché
+   (bug préexistant : écran de connexion peint derrière/au-dessus de l'app). */
+[hidden] { display: none !important; }
+
 html, body { margin: 0; padding: 0; }
 
 body {
@@ -347,7 +354,7 @@ a { color: var(--c-blue); }
 .field-checkbox label { flex-direction: row; align-items: center; display: flex; gap: 8px; font-weight: 500; }
 
 input[type="text"], input[type="date"], input[type="time"], input[type="number"],
-input[type="email"], select, textarea {
+input[type="email"], input[type="tel"], input[type="search"], select, textarea {
   min-height: var(--control-h);
   font-size: 16px;
   padding: 0 14px;

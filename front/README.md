@@ -15,11 +15,16 @@ front/
   assets/
     app.js                  logique applicative (module ES, point d'entrée)
     app-version.js          mise à jour forcée du shell
+    data.js                  façade données : bascule transparente entre
+                              supabase-client.js (réel) et demo-data.js (mode
+                              démo `?demo=1`) — app.js ne connaît que data.js
+    demo-data.js             jeu de données fictif pour le mode démo
     config.js                config de DEV (placeholders localhost)
     config.example.js        modèle de config de déploiement
     supabase-client.js       client supabase-js configuré + helpers data/RPC
-    styles.css                design system
-    icons/icon.svg, maskable.svg
+    styles.css                design system (+ @font-face Sarpanch)
+    fonts/sarpanch-800-latin(-ext).woff2, OFL.txt
+    icons/icon-*.png, maskable-*.png, favicon*, apple-touch-180.png
     vendor/supabase/supabase.js  supabase-js vendoré (UMD, pinned)
 ```
 
@@ -85,34 +90,65 @@ Deux déclencheurs supplémentaires par rapport à kertec :
 
 ## Implémenté vs stub
 
-**Construit de bout en bout** (vrai contrat Supabase, pas de pseudo-code) :
+**Construit de bout en bout** (vrai contrat Supabase via `assets/data.js`, pas
+de pseudo-code) :
 - Coquille : auth, routage, thème (auto/clair/sombre), indicateur de synchro,
-  undo/redo, file IndexedDB hors-ligne.
+  undo/redo (champ : undo ET redo pleinement fonctionnels), file IndexedDB
+  hors-ligne, gestion multi-rôle (`roles[]` chauffeur + bureau cumulables).
 - **Aujourd'hui** : pré-remplissage (`api.prefill`), formulaire d'en-tête
   autosave, tours (sites, heure de départ, icône de navigation vers
-  Google Maps/Waze/Plans selon la préférence locale), lignes d'article
-  (article/quantité/unité), jauge de poids en direct (`api.lv_poids`),
+  Google Maps/Waze/Plans selon la préférence locale, feuille de choix de site
+  « 5 derniers / chantiers / communs / recherche / + Nouveau site »), lignes
+  d'article (article/quantité/unité), jauge de poids en direct (`api.lv_poids`),
   attribution du numéro `KER-#####` au premier tour.
-- **Mes LV** : vraie liste (`api.lettres_voiture`), ouverture dans l'éditeur
-  du jour.
+- **Mes LV** / **LV** : vraie liste (`api.lettres_voiture`), recherche,
+  ouverture dans l'éditeur du jour.
 - **Contrôle** : rendu depuis le dernier instantané IndexedDB — fonctionne
   réellement sans réseau.
+- **Tableau de bord** : synthèse (compteurs) + alertes d'échéance (camions CT/
+  chrono, chauffeurs FCO/carte, documents réglementaires via
+  `api.alertes_documents()`), expiré en rouge / proche en orange (surface,
+  texte anthracite — jamais de texte orange nu, cf. règle WCAG dans
+  `styles.css`).
+- **Planning** : LV préparées par le bureau (`preparee=true`), sélection
+  multiple + bouton **« Envoi groupé en signature »** (jamais automatique,
+  POST `/worker/signature/envoi-groupe`).
+- **Projets, Clients + Contacts, Sites, Camions, Chauffeurs, Articles,
+  Utilisateurs** : CRUD autosave complet (créer/éditer/désactiver), filtre de
+  recherche. Sites : autocomplétion d'adresse (`api-adresse.data.gouv.fr`) +
+  géolocalisation « 📍 ma position » + lat/lon éditables. Chauffeurs : panneau
+  documents réglementaires bureau-only (permis + catégories, FCO, carte
+  conducteur, CACES), upload de scans vers le bucket privé `chauffeur-docs`,
+  URL signée à la consultation, action « Départ du salarié ». Articles :
+  `commentaire_interne` visible en appli, action « Fusionner avec… » (stub
+  explicite : aucune fonction SQL dédiée n'existe encore côté serveur).
+  Utilisateurs : rôles multiples (puces chauffeur/bureau).
 - **Réglages** : thème + préférence d'appli de navigation (locale) +
-  déconnexion.
-
-**Stub « À venir »** (placeholder volontaire, pas de CRUD construit) : LV
-(liste/recherche complète), Planning, Projets, Clients, Sites, Camions,
-Chauffeurs, Articles, Utilisateurs.
+  réglages bureau (`api.reglages` : envoi auto, copie Documenso, seuils
+  d'alerte) + déconnexion.
+- **Mode démo** (`?demo=1`) : bypass total de l'authentification, profil
+  fictif bureau+chauffeur, jeu de données entièrement fictif
+  (`assets/demo-data.js`), aucun appel réseau. Deep-links `?screen=...` et
+  `?theme=clair|sombre` pour les captures CI (cf. `assets/data.js`).
 
 **Limitations connues** :
 - La préférence d'appli de navigation est locale au navigateur
   (`localStorage`), pas persistée sur `bon.chauffeurs.nav_app` : la RLS
   réserve l'écriture de ce référentiel au rôle bureau (cf.
   `supabase/migrations/0004_rls.sql`, policy `chauffeurs_write`).
-- Pas d'autocomplétion d'adresse via `api-adresse.data.gouv.fr` dans cette
-  livraison (CSP et Dockerfile l'autorisent déjà, câblage à faire).
-- Pas de vrai « redo » serveur pour les changements structurels (voir
-  ci-dessus).
+- Pas de vrai « redo » serveur pour les changements structurels
+  (création/suppression de tour ou de ligne) : l'undo serveur s'appuie sur
+  `api.lv_undo` (audit log Postgres, non rejouable en sens inverse) ; le redo
+  champ-par-champ, lui, est pleinement fonctionnel.
+- Carte avec épingle déplaçable sur l'écran Sites : non implémentée (bonus
+  explicitement optionnel dans la spec) — lat/lon restent éditables en
+  nombre, ce qui est le comportement de repli prévu.
+- Les endpoints `bon-worker` appelés depuis ce front
+  (`/worker/signature/envoi-groupe`, `/worker/chauffeur/{id}/depart`) exigent
+  côté serveur un jeton IA dédié (`X-AI-Token`, cf. `worker/app/auth.py`) que
+  ce shell navigateur ne détient pas ; l'appel est tenté avec le jeton de
+  session Supabase et échoue proprement (message explicite) si le serveur le
+  refuse — point d'intégration à traiter hors périmètre front.
 
 ## Déploiement : comment `config.js` est injecté
 
