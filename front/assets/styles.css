@@ -162,6 +162,31 @@ a { color: var(--c-blue); }
 .auth-error { color: var(--c-red); margin-top: 16px; }
 .auth-email { color: var(--text-muted); font-size: 14px; word-break: break-all; }
 
+.login-choice { display: flex; flex-direction: column; gap: 14px; }
+
+.auth-divider {
+  display: flex; align-items: center; gap: 10px;
+  margin: 0; color: var(--text-muted); font-size: 13px;
+}
+.auth-divider::before, .auth-divider::after {
+  content: ""; flex: 1; height: 1px; background: var(--border);
+}
+
+.otp-form { display: flex; flex-direction: column; gap: 14px; text-align: left; }
+.otp-form .field { margin-bottom: 0; }
+.otp-resend { margin: 0; text-align: center; }
+
+.btn-link {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 44px;
+  background: none; border: none;
+  color: var(--c-orange-dark);
+  font-size: 15px; font-weight: 600;
+  cursor: pointer; text-decoration: underline;
+}
+.btn-link:hover, .btn-link:focus-visible { color: var(--c-orange); }
+.btn-link:disabled { color: var(--text-muted); text-decoration: none; cursor: default; }
+
 /* -------------------------------------------------------------- Coquille app */
 .app-shell { display: flex; flex-direction: column; min-height: 100vh; }
 
@@ -277,7 +302,7 @@ a { color: var(--c-blue); }
 .field-checkbox label { flex-direction: row; align-items: center; display: flex; gap: 8px; font-weight: 500; }
 
 input[type="text"], input[type="date"], input[type="time"], input[type="number"],
-select, textarea {
+input[type="email"], select, textarea {
   min-height: var(--control-h);
   font-size: 16px;
   padding: 0 14px;

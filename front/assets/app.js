@@ -27,6 +27,8 @@ import {
   getSession,
   onAuthStateChange,
   signInWithGoogle,
+  sendEmailOtp,
+  verifyEmailOtp,
   signOut,
   getProfil,
   getChauffeurByEmail,

@@ -10,8 +10,8 @@
   <!-- Empreinte de version du shell (cf. assets/app-version.js). Bumper `app-rev`
        à chaque déploiement backend devant forcer un refresh (sinon le bump d'un
        `?v=` d'asset suffit). -->
-  <meta name="app-version" content="0.1.0-beta.1">
-  <meta name="app-rev" content="1">
+  <meta name="app-version" content="0.1.0-beta.2">
+  <meta name="app-rev" content="2">
 
   <link rel="icon" type="image/svg+xml" href="/assets/icons/icon.svg">
   <link rel="apple-touch-icon" href="/assets/icons/icon.svg">
@@ -23,8 +23,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="mobile-web-app-capable" content="yes">
 
-  <link rel="stylesheet" href="/assets/styles.css?v=1">
-  <script src="/assets/app-version.js?v=1" defer></script>
+  <link rel="stylesheet" href="/assets/styles.css?v=2">
+  <script src="/assets/app-version.js?v=2" defer></script>
 </head>
 <body>
   <a href="#main" class="skip-link">Aller au contenu</a>
@@ -34,15 +34,47 @@
     <div class="auth-card">
       <div class="logo logo-lg" aria-hidden="true"><span class="logo-ker">KER</span><span class="logo-lam">LAM</span></div>
       <p class="auth-tagline">Lettres de voiture</p>
-      <button id="btn-google-login" class="btn btn-primary btn-block" type="button">
-        <svg class="google-g" viewBox="0 0 48 48" width="20" height="20" aria-hidden="true" focusable="false">
-          <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.9 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.3 17.7 9.5 24 9.5z"/>
-          <path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.2 5.3-4.6 7l7.2 5.6c4.2-3.9 6.1-9.6 6.1-17.1z"/>
-          <path fill="#FBBC05" d="M10.5 28.3c-.6-1.7-.9-3.5-.9-5.3s.3-3.6.9-5.3l-7.9-6.1C1 14.8 0 19.2 0 23s1 8.2 2.6 11.4l7.9-6.1z"/>
-          <path fill="#34A853" d="M24 46c6.3 0 11.6-2.1 15.5-5.6l-7.2-5.6c-2.1 1.5-4.9 2.4-8.3 2.4-6.3 0-11.6-3.8-13.5-9.1l-7.9 6.1C6.5 40.6 14.6 46 24 46z"/>
-        </svg>
-        Se connecter avec Google
-      </button>
+
+      <div id="login-choice" class="login-choice">
+        <button id="btn-google-login" class="btn btn-primary btn-block" type="button">
+          <svg class="google-g" viewBox="0 0 48 48" width="20" height="20" aria-hidden="true" focusable="false">
+            <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.9 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.3 17.7 9.5 24 9.5z"/>
+            <path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.2 5.3-4.6 7l7.2 5.6c4.2-3.9 6.1-9.6 6.1-17.1z"/>
+            <path fill="#FBBC05" d="M10.5 28.3c-.6-1.7-.9-3.5-.9-5.3s.3-3.6.9-5.3l-7.9-6.1C1 14.8 0 19.2 0 23s1 8.2 2.6 11.4l7.9-6.1z"/>
+            <path fill="#34A853" d="M24 46c6.3 0 11.6-2.1 15.5-5.6l-7.2-5.6c-2.1 1.5-4.9 2.4-8.3 2.4-6.3 0-11.6-3.8-13.5-9.1l-7.9 6.1C6.5 40.6 14.6 46 24 46z"/>
+          </svg>
+          Continuer avec Google
+        </button>
+
+        <p class="auth-divider"><span>ou</span></p>
+
+        <button id="btn-show-otp" class="btn btn-secondary btn-block" type="button">
+          Recevoir un code par mail
+        </button>
+      </div>
+
+      <form id="otp-request-form" class="otp-form" autocomplete="off" hidden>
+        <div class="field">
+          <label for="f-otp-email">Adresse e-mail</label>
+          <input type="email" id="f-otp-email" name="email" autocomplete="email" inputmode="email" placeholder="prenom.nom@kerlam.fr" required>
+        </div>
+        <button id="btn-send-otp" class="btn btn-primary btn-block" type="submit">Recevoir le code</button>
+        <button id="btn-back-to-choice" class="btn-link" type="button">← Retour</button>
+      </form>
+
+      <form id="otp-verify-form" class="otp-form" autocomplete="off" hidden>
+        <p id="otp-sent-to" class="auth-tagline"></p>
+        <div class="field">
+          <label for="f-otp-code">Code reçu par e-mail</label>
+          <input type="text" id="f-otp-code" name="code" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="6" placeholder="123456" required>
+        </div>
+        <button id="btn-verify-otp" class="btn btn-primary btn-block" type="submit">Valider</button>
+        <p class="otp-resend">
+          <button id="btn-resend-otp" class="btn-link" type="button" disabled>Renvoyer le code<span id="otp-resend-suffix"> (<span id="otp-resend-countdown">60</span>s)</span></button>
+        </p>
+        <button id="btn-change-email" class="btn-link" type="button">← Changer d'adresse</button>
+      </form>
+
       <p id="auth-error" class="auth-error" role="alert" hidden></p>
     </div>
   </section>
@@ -311,6 +343,6 @@
   <!-- ================================================================== Scripts -->
   <script src="/assets/config.js"></script>
   <script src="/assets/vendor/supabase/supabase.js"></script>
-  <script type="module" src="/assets/app.js?v=1"></script>
+  <script type="module" src="/assets/app.js?v=2"></script>
 </body>
 </html>

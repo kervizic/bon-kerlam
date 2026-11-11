@@ -60,6 +60,29 @@ export async function signOut() {
   return requireClient().auth.signOut();
 }
 
+// Deuxième méthode de connexion : code à 6 chiffres envoyé par e-mail (OTP).
+// `shouldCreateUser: true` autorise la création du compte auth au premier
+// envoi ; l'autorisation réelle reste pilotée par la liste blanche
+// bon.utilisateurs (cf. getProfil) — un compte auth créé sans y figurer
+// tombera sur l'écran "Accès non autorisé" comme avec Google.
+export async function sendEmailOtp(email) {
+  const { error } = await requireClient().auth.signInWithOtp({
+    email,
+    options: { shouldCreateUser: true },
+  });
+  if (error) throw error;
+}
+
+export async function verifyEmailOtp(email, code) {
+  const { data, error } = await requireClient().auth.verifyOtp({
+    email,
+    token: code,
+    type: "email",
+  });
+  if (error) throw error;
+  return data; // { session, user }
+}
+
 // --------------------------------------------------------------- Profil -----
 
 // api.profil : vide (aucune ligne) si l'e-mail connecté n'est pas sur la liste
