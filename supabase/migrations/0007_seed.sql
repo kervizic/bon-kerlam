@@ -1,7 +1,7 @@
 -- @migration:     0007_seed
 -- @description:   Données de départ publiques : articles KERLAM + sites communs
---                 YPREMA. lat/lon laissés NULL : géocodés via la BAN au premier
---                 démarrage du worker. Idempotent.
+--                 YPREMA + dépôts KERLAM/Veolia. lat/lon laissés NULL : géocodés
+--                 via la BAN au premier démarrage du worker. Idempotent.
 -- @role:          superuser
 -- @transactional: true
 -- @baseline:      false
@@ -34,5 +34,14 @@ FROM (VALUES
   ('YPREMA Massy',         '11 route de la Bonde, ZI de la Bonde, 91300 Massy',     'plateforme'),
   ('YPREMA Trappes',       'Allée Basile Levraud, 78190 Trappes',                   'plateforme'),
   ('YPREMA Gennevilliers', '7 route du Môle Central, Port de Gennevilliers, 92230 Gennevilliers', 'plateforme')
+) AS v(nom, adresse, type)
+WHERE NOT EXISTS (SELECT 1 FROM bon.sites s WHERE s.nom = v.nom AND s.portee = 'commun');
+
+-- Dépôts KERLAM / Veolia (sites communs hors YPREMA) --------------------------
+INSERT INTO bon.sites (nom, adresse, type, portee, statut, created_by)
+SELECT v.nom, v.adresse, v.type, 'commun', 'actif', 'seed'
+FROM (VALUES
+  ('KERLAM Villevaudé',                        '2 rue des Plantes, 77410 Villevaudé',     'dépôt KERLAM'),
+  ('Veolia Noisy-le-Grand (usine des Terres)', '2 rue de la Plaine, 93160 Noisy-le-Grand', 'dépôt matériaux et décharge')
 ) AS v(nom, adresse, type)
 WHERE NOT EXISTS (SELECT 1 FROM bon.sites s WHERE s.nom = v.nom AND s.portee = 'commun');
