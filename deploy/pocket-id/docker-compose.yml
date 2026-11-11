@@ -1,0 +1,24 @@
+# docker-compose du fournisseur d'identite Pocket ID (https://id.kerlam.fr).
+# Pocket ID emet les tokens OIDC consommes par bon.kerlam.fr (et sign.kerlam.fr).
+#
+# Bind sur 127.0.0.1 uniquement : comme pour bon, Docker contourne ufw ; nginx
+# fait le TLS et le reverse proxy devant ce conteneur.
+
+services:
+  pocket-id:
+    # Version EPINGLEE. Verifier / mettre a jour vers la derniere version stable
+    # avant deploiement : https://github.com/pocket-id/pocket-id/releases
+    image: ghcr.io/pocket-id/pocket-id:v1.6.0
+    container_name: pocket-id
+    restart: unless-stopped
+    # Port interne de Pocket ID : 1411. On l'expose sur le loopback en 8096.
+    # (Si une future version change le port interne, ajuster la partie droite.)
+    ports:
+      - "127.0.0.1:8096:1411"
+    mem_limit: 128m
+    env_file: .env
+    environment:
+      APP_URL: https://id.kerlam.fr
+    volumes:
+      # Base SQLite et donnees persistantes de Pocket ID.
+      - ./data:/app/data
