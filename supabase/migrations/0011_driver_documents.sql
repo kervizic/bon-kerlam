@@ -185,20 +185,21 @@ BEGIN
   END LOOP;
 END $$;
 
--- Bucket Storage PRIVÉ + politiques BUREAU uniquement. Garde : seulement si le
--- schéma storage existe (présent sur supabase/postgres, absent en test SQL pur).
+-- Politique Storage BUREAU uniquement sur le bucket privé « chauffeur-docs ».
+-- Le bucket lui-même est créé via l'API Storage au déploiement (le schéma de
+-- storage.buckets varie selon la version de l'image). Bloc tolérant : il ne doit
+-- jamais faire échouer la migration (absent en test SQL pur ; quirks d'image).
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'storage') THEN
-    INSERT INTO storage.buckets (id, name, public)
-    VALUES ('chauffeur-docs', 'chauffeur-docs', false)
-    ON CONFLICT (id) DO NOTHING;
-
-    DROP POLICY IF EXISTS chauffeur_docs_bureau ON storage.objects;
-    CREATE POLICY chauffeur_docs_bureau ON storage.objects FOR ALL TO authenticated
-      USING (bucket_id = 'chauffeur-docs' AND bon.is_bureau())
-      WITH CHECK (bucket_id = 'chauffeur-docs' AND bon.is_bureau());
-    GRANT EXECUTE ON FUNCTION bon.is_bureau() TO authenticated;
+    BEGIN
+      DROP POLICY IF EXISTS chauffeur_docs_bureau ON storage.objects;
+      CREATE POLICY chauffeur_docs_bureau ON storage.objects FOR ALL TO authenticated
+        USING (bucket_id = 'chauffeur-docs' AND bon.is_bureau())
+        WITH CHECK (bucket_id = 'chauffeur-docs' AND bon.is_bureau());
+    EXCEPTION WHEN OTHERS THEN
+      RAISE NOTICE 'Politique storage non posée (%) : à (re)créer au déploiement.', SQLERRM;
+    END;
   END IF;
 END $$;
 
