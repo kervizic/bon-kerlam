@@ -189,6 +189,8 @@ jobs:
       image: mcr.microsoft.com/playwright/python:v1.55.0-noble
     steps:
       - uses: actions/checkout@v4
+      - name: Dépendance playwright (alignée sur les navigateurs de l'image)
+        run: pip install --break-system-packages playwright==1.55.0
       - name: Service du front
         run: |
           python -m http.server 8080 --directory front &
