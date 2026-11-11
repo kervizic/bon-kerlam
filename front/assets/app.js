@@ -656,6 +656,75 @@ function refreshProjetContactOptions() {
   populateSelect(document.getElementById("f-contact"), contacts, (c) => c.id, (c) => c.nom);
 }
 
+/* ========================================================== Tableau de bord == */
+async function loadDashboard() {
+  const welcomeEl = document.getElementById("dashboard-welcome");
+  const nom = (state.profil && (state.profil.nom || state.profil.email)) || "";
+  welcomeEl.textContent = nom ? `Bonjour ${nom}.` : "";
+
+  document.getElementById("dashboard-driver-cards").hidden = !hasRole("chauffeur");
+  const bureauEl = document.getElementById("dashboard-bureau");
+  bureauEl.hidden = !hasRole("bureau");
+  if (!hasRole("bureau")) return;
+
+  const tilesEl = document.getElementById("dashboard-tiles");
+  const alertsEl = document.getElementById("dashboard-alerts");
+
+  const today = todayIso();
+  let lvToday = [];
+  try {
+    lvToday = await listLettresVoiture({ date: today });
+  } catch (e) {
+    reportIfVersionMismatch(e);
+  }
+  tilesEl.innerHTML = `
+    <div class="dash-tile"><strong>${lvToday.length}</strong><span>LV aujourd'hui</span></div>
+    <div class="dash-tile"><strong>${state.refs.camions.length}</strong><span>Camions actifs</span></div>
+    <div class="dash-tile"><strong>${state.refs.chauffeurs.filter((c) => c.actif).length}</strong><span>Chauffeurs actifs</span></div>
+  `;
+
+  const alerteJours = getAlerteJours();
+  const rows = [];
+  for (const c of state.refs.camions) {
+    if (!c.actif) continue;
+    for (const [label, date] of [["Contrôle technique", c.ct_echeance], ["Chronotachygraphe", c.chrono_echeance]]) {
+      const j = daysUntil(date);
+      if (j != null && j <= alerteJours) rows.push({ sujet: `Camion ${c.immatriculation}`, detail: label, date, j });
+    }
+  }
+  for (const c of state.refs.chauffeurs) {
+    if (c.date_sortie) continue;
+    for (const [label, date] of [["FCO / code 95", c.fco_echeance], ["Carte conducteur", c.carte_echeance]]) {
+      const j = daysUntil(date);
+      if (j != null && j <= alerteJours) rows.push({ sujet: c.nom, detail: label, date, j });
+    }
+  }
+  try {
+    const docs = await rpcAlertesDocuments();
+    for (const d of docs) {
+      rows.push({ sujet: d.chauffeur, detail: `${d.type_document}${d.detail ? " — " + d.detail : ""}`, date: d.echeance, j: d.jours_restants });
+    }
+  } catch (e) {
+    /* RLS bureau uniquement : ignore silencieusement si vide/erreur */
+  }
+
+  if (!rows.length) {
+    alertsEl.innerHTML = '<p class="muted">Aucune échéance proche.</p>';
+    return;
+  }
+  rows.sort((a, b) => (a.j ?? 0) - (b.j ?? 0));
+  alertsEl.innerHTML = rows
+    .map((r) => {
+      const expired = r.j != null && r.j < 0;
+      return `
+      <div class="dash-alert-row ${expired ? "is-expired" : "is-soon"}">
+        <span class="dash-alert-main">${escapeHtml(r.sujet)}<span>${escapeHtml(r.detail)}</span></span>
+        <span class="dash-alert-status">${escapeHtml(formatDateFr(r.date))}${r.j != null ? ` (${r.j} j)` : ""}</span>
+      </div>`;
+    })
+    .join("");
+}
+
 /* ===================================================== Formulaire d'en-tête == */
 function fillHeaderForm(data) {
   const d = data || {};
@@ -811,6 +880,10 @@ async function renderTourCard(entry) {
 
   wireAutosaveField(chargementSel, { table: "tours", id: tour.id, field: "site_chargement_id", transform: toIntOrNull });
   wireAutosaveField(dechargementSel, { table: "tours", id: tour.id, field: "site_dechargement_id", transform: toIntOrNull });
+
+  const pickerBtns = node.querySelectorAll(".btn-site-picker");
+  pickerBtns[0].addEventListener("click", () => openSitePicker(chargementSel));
+  pickerBtns[1].addEventListener("click", () => openSitePicker(dechargementSel));
 
   const heureInput = node.querySelector(".f-heure-depart");
   heureInput.value = tour.heure_depart ? new Date(tour.heure_depart).toISOString().slice(11, 16) : "";
@@ -981,19 +1054,13 @@ async function loadMesLv() {
   const listEl = document.getElementById("mes-lv-list");
   listEl.innerHTML = '<p class="muted">Chargement…</p>';
   try {
-    if (!sb) throw new Error("Client non initialisé");
-    const { data, error } = await sb
-      .from("lettres_voiture")
-      .select("*")
-      .order("date_etablissement", { ascending: false })
-      .limit(30);
-    if (error) throw error;
+    const data = await listLettresVoiture();
     if (!data || !data.length) {
       listEl.innerHTML = '<p class="muted">Aucune lettre de voiture.</p>';
       return;
     }
     listEl.innerHTML = "";
-    for (const lv of data) {
+    for (const lv of data.slice(0, 30)) {
       const row = document.createElement("button");
       row.type = "button";
       row.className = "lv-row";
@@ -1066,6 +1133,1432 @@ function renderControleHtml(s) {
     ${poids ? `<p><strong>Charge :</strong> ${poids.masse_totale_t} t${poids.ptac_t ? ` / ${poids.ptac_t} t (${Math.round((poids.ratio || 0) * 100)}%)` : ""}</p>` : ""}
     ${toursHtml}
   `;
+}
+
+/* =============================================================== Réglages bureau == */
+function wireReglageField(el, cle, transform) {
+  autosaveField(el, {
+    save: async (value) => {
+      const v = transform ? transform(value) : value;
+      await upsertReglage(cle, v == null ? null : String(v));
+      state.reglages[cle] = v == null ? null : String(v);
+    },
+  });
+}
+
+function loadReglagesBureau() {
+  const section = document.getElementById("reglages-bureau");
+  section.hidden = !hasRole("bureau");
+  if (!hasRole("bureau")) return;
+  document.getElementById("r-signature-auto").checked = state.reglages.signature_envoi_auto === "true";
+  document.getElementById("r-documenso-cc").value = state.reglages.documenso_cc_contact || "";
+  document.getElementById("r-alerte-jours").value = state.reglages.alerte_jours || "";
+  document.getElementById("r-retard-carte").value = state.reglages.carte_conducteur_retard_jours || "";
+}
+
+function wireReglagesBureauFields() {
+  wireReglageField(document.getElementById("r-signature-auto"), "signature_envoi_auto", (v) => (v ? "true" : "false"));
+  document.getElementById("r-signature-auto").addEventListener("change", (e) => {
+    e.target.dispatchEvent(new Event("input"));
+  });
+  wireReglageField(document.getElementById("r-documenso-cc"), "documenso_cc_contact");
+  wireReglageField(document.getElementById("r-alerte-jours"), "alerte_jours", toIntOrNull);
+  wireReglageField(document.getElementById("r-retard-carte"), "carte_conducteur_retard_jours", toIntOrNull);
+}
+
+/* =========================================================================== LV == */
+async function loadLvScreen() {
+  const listEl = document.getElementById("list-lv");
+  listEl.innerHTML = '<p class="muted">Chargement…</p>';
+  const render = async (query) => {
+    let rows = [];
+    try {
+      rows = await listLettresVoiture({ query });
+    } catch (e) {
+      reportIfVersionMismatch(e);
+    }
+    if (!rows.length) {
+      listEl.innerHTML = '<p class="entity-empty">Aucune lettre de voiture.</p>';
+      return;
+    }
+    listEl.innerHTML = "";
+    for (const lv of rows) {
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "lv-row";
+      row.innerHTML = `
+        <span class="lv-row-main">
+          <span class="lv-row-numero">${escapeHtml(lv.numero || "(brouillon)")}</span>
+          <span class="lv-row-date">${escapeHtml(formatDateFr(lv.date_etablissement))}</span>
+        </span>
+        <span class="badge badge-${escapeHtml(lv.statut)}">${escapeHtml(lv.statut)}</span>
+      `;
+      row.addEventListener("click", () => openLvInToday(lv));
+      listEl.appendChild(row);
+    }
+  };
+  wireFilterInput(document.getElementById("filter-lv"), render);
+  await render("");
+}
+
+/* ===================================================================== Planning == */
+async function loadPlanning() {
+  const listEl = document.getElementById("list-planning");
+  listEl.innerHTML = '<p class="muted">Chargement…</p>';
+  state.planningSelection = new Set();
+  refreshPlanningSelectionUi();
+  let rows = [];
+  try {
+    rows = await listPlanningLv();
+  } catch (e) {
+    reportIfVersionMismatch(e);
+  }
+  if (!rows.length) {
+    listEl.innerHTML = '<p class="entity-empty">Aucune LV préparée.</p>';
+    return;
+  }
+  listEl.innerHTML = "";
+  for (const lv of rows) listEl.appendChild(wirePlanningCard(renderPlanningCard(lv), lv));
+}
+
+function refreshPlanningSelectionUi() {
+  const n = state.planningSelection.size;
+  document.getElementById("planning-selection-count").textContent = `${n} sélectionnée(s)`;
+  document.getElementById("btn-envoi-groupe").disabled = n === 0;
+}
+
+function renderPlanningCard(lv) {
+  const client = state.refs.projets.find((p) => p.id === lv.projet_id);
+  const clientNom = client ? (state.refs.clients.find((c) => c.id === client.client_id) || {}).raison_sociale : "";
+  return createAccordionCard({
+    title: lv.numero || `LV préparée — ${formatDateFr(lv.date_etablissement)}`,
+    subtitle: clientNom || "Client non défini",
+    metaHtml: `<label class="field-checkbox" style="margin:0;" onclick="event.stopPropagation()">
+      <input type="checkbox" class="planning-select" data-lv-id="${lv.id}"> Envoyer
+    </label>`,
+    bodyBuilder: (body) => {
+      const grid = document.createElement("div");
+      grid.className = "field-grid";
+
+      const dateInput = makeTextInput("date", lv.date_etablissement);
+      wireAutosaveField(dateInput, { table: "lettres_voiture", id: lv.id, field: "date_etablissement" });
+      grid.appendChild(fieldBlock("Date d'établissement", dateInput));
+
+      const camionSel = makeSelectInput(state.refs.camions.map((c) => ({ value: c.id, label: c.immatriculation })), lv.camion_id, "Camion…");
+      wireAutosaveField(camionSel, { table: "lettres_voiture", id: lv.id, field: "camion_id", transform: toIntOrNull });
+      grid.appendChild(fieldBlock("Camion", camionSel));
+
+      const chauffeurSel = makeSelectInput(state.refs.chauffeurs.map((c) => ({ value: c.id, label: c.nom })), lv.chauffeur_id, "Chauffeur…");
+      wireAutosaveField(chauffeurSel, { table: "lettres_voiture", id: lv.id, field: "chauffeur_id", transform: toIntOrNull });
+      grid.appendChild(fieldBlock("Chauffeur", chauffeurSel));
+
+      const projetSel = makeSelectInput(state.refs.projets.map((p) => ({ value: p.id, label: p.nom || p.ref_contrat || `Projet #${p.id}` })), lv.projet_id, "Projet…");
+      wireAutosaveField(projetSel, { table: "lettres_voiture", id: lv.id, field: "projet_id", transform: toIntOrNull });
+      grid.appendChild(fieldBlock("Projet", projetSel));
+
+      body.appendChild(grid);
+    },
+  });
+}
+
+function wirePlanningCard(card, lv) {
+  const checkbox = card.querySelector(".planning-select");
+  checkbox.addEventListener("click", (e) => e.stopPropagation());
+  checkbox.addEventListener("change", () => {
+    if (checkbox.checked) state.planningSelection.add(String(lv.id));
+    else state.planningSelection.delete(String(lv.id));
+    refreshPlanningSelectionUi();
+  });
+  return card;
+}
+
+/* ===================================================================== Projets == */
+async function loadProjetsScreen() {
+  const listEl = document.getElementById("list-projets");
+  listEl.innerHTML = '<p class="muted">Chargement…</p>';
+  let rows = [];
+  try {
+    rows = await listProjets();
+  } catch (e) {
+    reportIfVersionMismatch(e);
+  }
+  const render = (query) => {
+    const filtered = !query
+      ? rows
+      : rows.filter((p) => {
+          const client = state.refs.clients.find((c) => c.id === p.client_id);
+          return (
+            (p.nom || "").toLowerCase().includes(query) ||
+            (p.ref_contrat || "").toLowerCase().includes(query) ||
+            (client && client.raison_sociale.toLowerCase().includes(query))
+          );
+        });
+    listEl.innerHTML = "";
+    if (!filtered.length) {
+      listEl.innerHTML = '<p class="entity-empty">Aucun projet.</p>';
+      return;
+    }
+    for (const p of filtered) listEl.appendChild(renderProjetCard(p));
+  };
+  wireFilterInput(document.getElementById("filter-projets"), render);
+  render("");
+
+  document.getElementById("btn-new-projet").onclick = async () => {
+    if (!state.refs.clients.length) {
+      alert("Créez d'abord un client.");
+      return;
+    }
+    try {
+      const projet = await createProjet({ client_id: state.refs.clients[0].id, nom: "Nouveau projet", statut: "actif" });
+      rows.unshift(projet);
+      listEl.prepend(renderProjetCard(projet, true));
+    } catch (e) {
+      alert("Création impossible : " + (e.message || e));
+    }
+  };
+}
+
+function renderProjetCard(p, startOpen = false) {
+  const client = state.refs.clients.find((c) => c.id === p.client_id);
+  return createAccordionCard({
+    title: p.nom || p.ref_contrat || `Projet #${p.id}`,
+    subtitle: client ? client.raison_sociale : "—",
+    metaHtml: `<span class="badge badge-${escapeHtml(p.statut || "actif")}">${escapeHtml(p.statut || "actif")}</span>`,
+    startOpen,
+    bodyBuilder: (body) => {
+      const grid = document.createElement("div");
+      grid.className = "field-grid";
+
+      const nomInput = makeTextInput("text", p.nom);
+      wireAutosaveField(nomInput, { table: "projets", id: p.id, field: "nom" });
+      grid.appendChild(fieldBlock("Nom du projet", nomInput));
+
+      const clientSel = makeSelectInput(state.refs.clients.map((c) => ({ value: c.id, label: c.raison_sociale })), p.client_id, "Client…");
+      wireAutosaveField(clientSel, { table: "projets", id: p.id, field: "client_id", transform: toIntOrNull });
+      grid.appendChild(fieldBlock("Client", clientSel));
+
+      const refContratInput = makeTextInput("text", p.ref_contrat);
+      wireAutosaveField(refContratInput, { table: "projets", id: p.id, field: "ref_contrat" });
+      grid.appendChild(fieldBlock("Référence contrat", refContratInput));
+
+      const refOmInput = makeTextInput("text", p.ref_ordre_mission);
+      wireAutosaveField(refOmInput, { table: "projets", id: p.id, field: "ref_ordre_mission" });
+      grid.appendChild(fieldBlock("Référence ordre de mission", refOmInput));
+
+      const ligneRegieInput = makeTextInput("text", p.ligne_regie);
+      wireAutosaveField(ligneRegieInput, { table: "projets", id: p.id, field: "ligne_regie" });
+      grid.appendChild(fieldBlock("Ligne de régie", ligneRegieInput));
+
+      const tarifInput = makeTextInput("number", p.tarif);
+      tarifInput.step = "0.01";
+      wireAutosaveField(tarifInput, { table: "projets", id: p.id, field: "tarif", transform: toFloatOrNull });
+      grid.appendChild(fieldBlock("Tarif", tarifInput));
+
+      const contacts = state.refs.contacts.filter((c) => c.client_id === p.client_id);
+      const contactSel = makeSelectInput(contacts.map((c) => ({ value: c.id, label: c.nom })), p.contact_id, "Contact…");
+      wireAutosaveField(contactSel, { table: "projets", id: p.id, field: "contact_id", transform: toIntOrNull });
+      grid.appendChild(fieldBlock("Contact par défaut", contactSel));
+
+      const debutInput = makeTextInput("date", p.date_debut);
+      wireAutosaveField(debutInput, { table: "projets", id: p.id, field: "date_debut" });
+      grid.appendChild(fieldBlock("Date de début", debutInput));
+
+      const finInput = makeTextInput("date", p.date_fin);
+      wireAutosaveField(finInput, { table: "projets", id: p.id, field: "date_fin" });
+      grid.appendChild(fieldBlock("Date de fin", finInput));
+
+      const statutSel = makeSelectInput(
+        [{ value: "actif", label: "Actif" }, { value: "termine", label: "Terminé" }, { value: "suspendu", label: "Suspendu" }],
+        p.statut,
+        "Statut…"
+      );
+      wireAutosaveField(statutSel, { table: "projets", id: p.id, field: "statut" });
+      grid.appendChild(fieldBlock("Statut", statutSel));
+
+      body.appendChild(grid);
+    },
+  });
+}
+
+/* ===================================================================== Clients == */
+async function loadClientsScreen() {
+  const listEl = document.getElementById("list-clients");
+  listEl.innerHTML = '<p class="muted">Chargement…</p>';
+  let rows = [];
+  try {
+    rows = await listClients();
+  } catch (e) {
+    reportIfVersionMismatch(e);
+  }
+  const render = (query) => {
+    const filtered = !query ? rows : rows.filter((c) => c.raison_sociale.toLowerCase().includes(query));
+    listEl.innerHTML = "";
+    if (!filtered.length) {
+      listEl.innerHTML = '<p class="entity-empty">Aucun client.</p>';
+      return;
+    }
+    for (const c of filtered) listEl.appendChild(renderClientCard(c));
+  };
+  wireFilterInput(document.getElementById("filter-clients"), render);
+  render("");
+
+  document.getElementById("btn-new-client").onclick = async () => {
+    try {
+      const client = await createClient({ raison_sociale: "Nouveau client", actif: true });
+      state.refs.clients.push(client);
+      rows.unshift(client);
+      listEl.prepend(renderClientCard(client, true));
+    } catch (e) {
+      alert("Création impossible : " + (e.message || e));
+    }
+  };
+}
+
+function renderClientCard(c, startOpen = false) {
+  return createAccordionCard({
+    title: c.raison_sociale,
+    subtitle: c.siren || "",
+    metaHtml: c.actif ? "" : '<span class="status-pill status-expired">Inactif</span>',
+    startOpen,
+    bodyBuilder: (body) => {
+      const grid = document.createElement("div");
+      grid.className = "field-grid";
+
+      const nomInput = makeTextInput("text", c.raison_sociale);
+      wireAutosaveField(nomInput, { table: "clients", id: c.id, field: "raison_sociale" });
+      grid.appendChild(fieldBlock("Raison sociale", nomInput));
+
+      const adresseInput = makeTextInput("text", c.adresse);
+      wireAutosaveField(adresseInput, { table: "clients", id: c.id, field: "adresse" });
+      grid.appendChild(fieldBlock("Adresse", adresseInput));
+
+      const sirenInput = makeTextInput("text", c.siren);
+      wireAutosaveField(sirenInput, { table: "clients", id: c.id, field: "siren" });
+      grid.appendChild(fieldBlock("SIREN", sirenInput));
+
+      const actifWrap = document.createElement("div");
+      actifWrap.className = "field field-checkbox";
+      const actifLabel = document.createElement("label");
+      const actifInput = document.createElement("input");
+      actifInput.type = "checkbox";
+      actifInput.checked = c.actif !== false;
+      actifLabel.appendChild(actifInput);
+      actifLabel.append(" Client actif");
+      actifWrap.appendChild(actifLabel);
+      actifInput.addEventListener("change", async () => {
+        try {
+          await updateClient(c.id, { actif: actifInput.checked });
+          c.actif = actifInput.checked;
+        } catch (e) {
+          alert("Échec : " + (e.message || e));
+        }
+      });
+      grid.appendChild(actifWrap);
+
+      body.appendChild(grid);
+
+      // ---------------------------------------------------------------- Contacts
+      const contactsTitle = document.createElement("div");
+      contactsTitle.className = "sheet-section-title";
+      contactsTitle.textContent = "Contacts";
+      body.appendChild(contactsTitle);
+
+      const contactsList = document.createElement("div");
+      contactsList.className = "entity-list";
+      body.appendChild(contactsList);
+
+      const renderContacts = () => {
+        contactsList.innerHTML = "";
+        const contacts = state.refs.contacts.filter((ct) => ct.client_id === c.id);
+        if (!contacts.length) {
+          contactsList.innerHTML = '<p class="entity-empty">Aucun contact.</p>';
+        }
+        for (const contact of contacts) contactsList.appendChild(renderContactRow(contact, c, renderContacts));
+      };
+      renderContacts();
+
+      const addContactBtn = document.createElement("button");
+      addContactBtn.type = "button";
+      addContactBtn.className = "btn btn-secondary btn-sm";
+      addContactBtn.textContent = "+ Contact";
+      addContactBtn.style.marginTop = "8px";
+      addContactBtn.addEventListener("click", async () => {
+        try {
+          const contact = await createContact({ client_id: c.id, nom: "Nouveau contact", email: "a-completer@kerlam.fr", signataire: false });
+          state.refs.contacts.push(contact);
+          renderContacts();
+        } catch (e) {
+          alert("Création impossible : " + (e.message || e));
+        }
+      });
+      body.appendChild(addContactBtn);
+    },
+  });
+}
+
+function renderContactRow(contact, client, onDeleted) {
+  const card = createAccordionCard({
+    title: contact.nom,
+    subtitle: contact.email,
+    metaHtml: contact.signataire ? '<span class="status-pill status-ok">Signataire</span>' : "",
+    bodyBuilder: (body) => {
+      const grid = document.createElement("div");
+      grid.className = "field-grid";
+
+      const nomInput = makeTextInput("text", contact.nom);
+      wireAutosaveField(nomInput, { table: "contacts", id: contact.id, field: "nom" });
+      grid.appendChild(fieldBlock("Nom", nomInput));
+
+      const telInput = makeTextInput("tel", contact.tel);
+      wireAutosaveField(telInput, { table: "contacts", id: contact.id, field: "tel" });
+      grid.appendChild(fieldBlock("Téléphone", telInput));
+
+      const emailInput = makeTextInput("email", contact.email);
+      emailInput.required = true;
+      wireAutosaveField(emailInput, { table: "contacts", id: contact.id, field: "email" });
+      grid.appendChild(fieldBlock("E-mail (obligatoire)", emailInput));
+
+      const fonctionInput = makeTextInput("text", contact.fonction);
+      wireAutosaveField(fonctionInput, { table: "contacts", id: contact.id, field: "fonction" });
+      grid.appendChild(fieldBlock("Fonction", fonctionInput));
+
+      const signWrap = document.createElement("div");
+      signWrap.className = "field field-checkbox";
+      const signLabel = document.createElement("label");
+      const signInput = document.createElement("input");
+      signInput.type = "checkbox";
+      signInput.checked = !!contact.signataire;
+      signLabel.appendChild(signInput);
+      signLabel.append(" Habilité à signer");
+      signWrap.appendChild(signLabel);
+      signInput.addEventListener("change", async () => {
+        try {
+          await updateContact(contact.id, { signataire: signInput.checked });
+          contact.signataire = signInput.checked;
+        } catch (e) {
+          alert("Échec : " + (e.message || e));
+        }
+      });
+      grid.appendChild(signWrap);
+
+      body.appendChild(grid);
+
+      const delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.className = "btn btn-secondary btn-sm";
+      delBtn.textContent = "🗑 Supprimer ce contact";
+      delBtn.addEventListener("click", async () => {
+        if (!confirm(`Supprimer le contact ${contact.nom} ?`)) return;
+        try {
+          await deleteContact(contact.id);
+          state.refs.contacts = state.refs.contacts.filter((c) => c.id !== contact.id);
+          onDeleted();
+        } catch (e) {
+          alert("Échec : " + (e.message || e));
+        }
+      });
+      body.appendChild(delBtn);
+    },
+  });
+  return card;
+}
+
+/* ======================================================================= Sites == */
+async function loadSitesScreen() {
+  const listEl = document.getElementById("list-sites");
+  listEl.innerHTML = '<p class="muted">Chargement…</p>';
+  let rows = [];
+  try {
+    rows = await listSites();
+  } catch (e) {
+    reportIfVersionMismatch(e);
+  }
+  const render = (query) => {
+    const filtered = !query ? rows : rows.filter((s) => (s.nom + " " + (s.adresse || "")).toLowerCase().includes(query));
+    listEl.innerHTML = "";
+    if (!filtered.length) {
+      listEl.innerHTML = '<p class="entity-empty">Aucun site.</p>';
+      return;
+    }
+    for (const s of filtered) listEl.appendChild(renderSiteCard(s));
+  };
+  wireFilterInput(document.getElementById("filter-sites"), render);
+  render("");
+
+  document.getElementById("btn-new-site").onclick = async () => {
+    try {
+      const site = await createSite({ nom: "Nouveau site", portee: "commun", statut: "actif" });
+      state.refs.sites.push(site);
+      rows.unshift(site);
+      listEl.prepend(renderSiteCard(site, true));
+    } catch (e) {
+      alert("Création impossible : " + (e.message || e));
+    }
+  };
+}
+
+function renderSiteCard(s, startOpen = false) {
+  return createAccordionCard({
+    title: s.nom,
+    subtitle: s.adresse || "",
+    metaHtml: `<span class="badge badge-${s.portee === "chantier" ? "preparee" : "en_cours"}">${escapeHtml(s.portee)}</span>${s.statut === "termine" ? '<span class="status-pill status-expired">Terminé</span>' : ""}`,
+    startOpen,
+    bodyBuilder: (body) => {
+      const grid = document.createElement("div");
+      grid.className = "field-grid";
+
+      const nomInput = makeTextInput("text", s.nom);
+      wireAutosaveField(nomInput, { table: "sites", id: s.id, field: "nom" });
+      grid.appendChild(fieldBlock("Nom", nomInput));
+
+      const porteeSel = makeSelectInput([{ value: "commun", label: "Commun" }, { value: "chantier", label: "Chantier" }], s.portee);
+      grid.appendChild(fieldBlock("Portée", porteeSel));
+
+      const clientBlock = fieldBlock("Client (chantier uniquement)", makeSelectInput(state.refs.clients.map((c) => ({ value: c.id, label: c.raison_sociale })), s.client_id, "Client…"));
+      const clientSel = clientBlock.querySelector("select");
+      clientBlock.hidden = s.portee !== "chantier";
+      grid.appendChild(clientBlock);
+
+      porteeSel.addEventListener("change", async () => {
+        clientBlock.hidden = porteeSel.value !== "chantier";
+        try {
+          const patch = { portee: porteeSel.value };
+          if (porteeSel.value === "commun") patch.client_id = null;
+          await updateSite(s.id, patch);
+          Object.assign(s, patch);
+        } catch (e) {
+          alert("Échec : " + (e.message || e));
+        }
+      });
+      wireAutosaveField(clientSel, { table: "sites", id: s.id, field: "client_id", transform: toIntOrNull });
+
+      // ----------------------------------------------------------- Adresse + autocomplétion
+      const addrWrap = document.createElement("div");
+      addrWrap.className = "field autocomplete-wrap";
+      const addrLabel = document.createElement("label");
+      addrLabel.textContent = "Adresse";
+      const addrInput = makeTextInput("text", s.adresse);
+      const suggestList = document.createElement("ul");
+      suggestList.className = "autocomplete-list";
+      suggestList.hidden = true;
+      addrWrap.append(addrLabel, addrInput, suggestList);
+      grid.appendChild(addrWrap);
+
+      const latInput = makeTextInput("number", s.lat);
+      latInput.step = "0.00001";
+      const lonInput = makeTextInput("number", s.lon);
+      lonInput.step = "0.00001";
+      grid.appendChild(fieldBlock("Latitude", latInput));
+      grid.appendChild(fieldBlock("Longitude", lonInput));
+
+      wireAutosaveField(addrInput, { table: "sites", id: s.id, field: "adresse" });
+      wireAutosaveField(latInput, { table: "sites", id: s.id, field: "lat", transform: toFloatOrNull });
+      wireAutosaveField(lonInput, { table: "sites", id: s.id, field: "lon", transform: toFloatOrNull });
+
+      wireAddressAutocomplete(addrInput, suggestList, (picked) => {
+        addrInput.value = picked.label;
+        addrInput.dispatchEvent(new Event("input"));
+        latInput.value = picked.lat;
+        latInput.dispatchEvent(new Event("input"));
+        lonInput.value = picked.lon;
+        lonInput.dispatchEvent(new Event("input"));
+      });
+
+      const geolocRow = document.createElement("div");
+      geolocRow.className = "geoloc-row";
+      const geolocBtn = document.createElement("button");
+      geolocBtn.type = "button";
+      geolocBtn.className = "btn btn-secondary btn-sm";
+      geolocBtn.textContent = "📍 ma position";
+      geolocBtn.addEventListener("click", () => handleGeolocateSite(latInput, lonInput, addrInput));
+      geolocRow.appendChild(geolocBtn);
+      grid.appendChild(geolocRow);
+
+      const statutSel = makeSelectInput([{ value: "actif", label: "Actif" }, { value: "termine", label: "Terminé" }], s.statut);
+      wireAutosaveField(statutSel, { table: "sites", id: s.id, field: "statut" });
+      grid.appendChild(fieldBlock("Statut", statutSel));
+
+      body.appendChild(grid);
+    },
+  });
+}
+
+function wireAddressAutocomplete(inputEl, listEl, onPick) {
+  let timer = null;
+  inputEl.addEventListener("input", () => {
+    clearTimeout(timer);
+    const q = inputEl.value;
+    timer = setTimeout(async () => {
+      if (!q || q.trim().length < 3) {
+        listEl.hidden = true;
+        return;
+      }
+      let results = [];
+      try {
+        results = await searchAddress(q);
+      } catch (e) {
+        /* réseau indisponible : pas de suggestion, pas d'erreur bloquante */
+      }
+      if (!results.length) {
+        listEl.hidden = true;
+        return;
+      }
+      listEl.innerHTML = "";
+      for (const r of results) {
+        const li = document.createElement("li");
+        li.className = "autocomplete-item";
+        li.textContent = r.label;
+        li.addEventListener("click", () => {
+          onPick(r);
+          listEl.hidden = true;
+        });
+        listEl.appendChild(li);
+      }
+      listEl.hidden = false;
+    }, 300);
+  });
+  inputEl.addEventListener("blur", () => setTimeout(() => (listEl.hidden = true), 150));
+}
+
+function handleGeolocateSite(latInput, lonInput, addrInput) {
+  if (!navigator.geolocation) {
+    alert("Géolocalisation non disponible sur cet appareil.");
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    async (pos) => {
+      const { latitude, longitude } = pos.coords;
+      latInput.value = latitude;
+      latInput.dispatchEvent(new Event("input"));
+      lonInput.value = longitude;
+      lonInput.dispatchEvent(new Event("input"));
+      try {
+        const rev = await reverseAddress(latitude, longitude);
+        if (rev) {
+          addrInput.value = rev.label;
+          addrInput.dispatchEvent(new Event("input"));
+        }
+      } catch (e) {
+        /* l'utilisateur vérifie/complète l'adresse manuellement */
+      }
+    },
+    () => alert("Impossible d'obtenir la position (autorisation refusée ?)."),
+    { enableHighAccuracy: true, timeout: 10000 }
+  );
+}
+
+/* ===================================================================== Camions == */
+async function loadCamionsScreen() {
+  const listEl = document.getElementById("list-camions");
+  listEl.innerHTML = '<p class="muted">Chargement…</p>';
+  let rows = [];
+  try {
+    rows = await listCamions();
+  } catch (e) {
+    reportIfVersionMismatch(e);
+  }
+  const render = (query) => {
+    const filtered = !query ? rows : rows.filter((c) => c.immatriculation.toLowerCase().includes(query));
+    listEl.innerHTML = "";
+    if (!filtered.length) {
+      listEl.innerHTML = '<p class="entity-empty">Aucun camion.</p>';
+      return;
+    }
+    for (const c of filtered) listEl.appendChild(renderCamionCard(c));
+  };
+  wireFilterInput(document.getElementById("filter-camions"), render);
+  render("");
+
+  document.getElementById("btn-new-camion").onclick = async () => {
+    const immat = prompt("Immatriculation du nouveau camion :");
+    if (!immat) return;
+    try {
+      const camion = await createCamion({ immatriculation: immat.toUpperCase(), actif: true });
+      state.refs.camions.push(camion);
+      rows.unshift(camion);
+      listEl.prepend(renderCamionCard(camion, true));
+    } catch (e) {
+      alert("Création impossible : " + (e.message || e));
+    }
+  };
+}
+
+function renderCamionCard(c, startOpen = false) {
+  const alerteJours = getAlerteJours();
+  return createAccordionCard({
+    title: c.immatriculation,
+    subtitle: c.type || "",
+    metaHtml: (statusPillHtml(c.ct_echeance, alerteJours) || "") + (c.actif ? "" : '<span class="status-pill status-expired">Inactif</span>'),
+    startOpen,
+    bodyBuilder: (body) => {
+      const grid = document.createElement("div");
+      grid.className = "field-grid";
+
+      const immatInput = makeTextInput("text", c.immatriculation);
+      wireAutosaveField(immatInput, { table: "camions", id: c.id, field: "immatriculation", transform: (v) => (v ? v.toUpperCase() : null) });
+      grid.appendChild(fieldBlock("Immatriculation", immatInput));
+
+      const typeInput = makeTextInput("text", c.type);
+      wireAutosaveField(typeInput, { table: "camions", id: c.id, field: "type" });
+      grid.appendChild(fieldBlock("Type", typeInput));
+
+      const ptacInput = makeTextInput("number", c.ptac_kg);
+      wireAutosaveField(ptacInput, { table: "camions", id: c.id, field: "ptac_kg", transform: toIntOrNull });
+      grid.appendChild(fieldBlock("PTAC (kg)", ptacInput));
+
+      const videInput = makeTextInput("number", c.poids_vide_kg);
+      wireAutosaveField(videInput, { table: "camions", id: c.id, field: "poids_vide_kg", transform: toIntOrNull });
+      grid.appendChild(fieldBlock("Poids à vide (kg)", videInput));
+
+      const volInput = makeTextInput("number", c.volume_benne_m3);
+      volInput.step = "0.1";
+      wireAutosaveField(volInput, { table: "camions", id: c.id, field: "volume_benne_m3", transform: toFloatOrNull });
+      grid.appendChild(fieldBlock("Volume benne (m³)", volInput));
+
+      const ctInput = makeTextInput("date", c.ct_echeance);
+      wireAutosaveField(ctInput, { table: "camions", id: c.id, field: "ct_echeance" });
+      grid.appendChild(fieldBlock("Échéance contrôle technique", ctInput));
+
+      const chronoInput = makeTextInput("date", c.chrono_echeance);
+      wireAutosaveField(chronoInput, { table: "camions", id: c.id, field: "chrono_echeance" });
+      grid.appendChild(fieldBlock("Échéance chronotachygraphe", chronoInput));
+
+      const actifWrap = document.createElement("div");
+      actifWrap.className = "field field-checkbox";
+      const actifLabel = document.createElement("label");
+      const actifInput = document.createElement("input");
+      actifInput.type = "checkbox";
+      actifInput.checked = c.actif !== false;
+      actifLabel.append(actifInput, " Camion en service");
+      actifWrap.appendChild(actifLabel);
+      actifInput.addEventListener("change", async () => {
+        try {
+          await updateCamion(c.id, { actif: actifInput.checked });
+          c.actif = actifInput.checked;
+        } catch (e) {
+          alert("Échec : " + (e.message || e));
+        }
+      });
+      grid.appendChild(actifWrap);
+
+      body.appendChild(grid);
+    },
+  });
+}
+
+/* ================================================================== Chauffeurs == */
+async function loadChauffeursScreen() {
+  const listEl = document.getElementById("list-chauffeurs");
+  listEl.innerHTML = '<p class="muted">Chargement…</p>';
+  let rows = [];
+  try {
+    rows = await listChauffeurs();
+  } catch (e) {
+    reportIfVersionMismatch(e);
+  }
+  const render = (query) => {
+    const filtered = !query ? rows : rows.filter((c) => c.nom.toLowerCase().includes(query) || (c.email || "").toLowerCase().includes(query));
+    listEl.innerHTML = "";
+    if (!filtered.length) {
+      listEl.innerHTML = '<p class="entity-empty">Aucun chauffeur.</p>';
+      return;
+    }
+    for (const c of filtered) listEl.appendChild(renderChauffeurCard(c));
+  };
+  wireFilterInput(document.getElementById("filter-chauffeurs"), render);
+  render("");
+
+  document.getElementById("btn-new-chauffeur").onclick = async () => {
+    const nom = prompt("Nom du nouveau chauffeur :");
+    if (!nom) return;
+    try {
+      const chauffeur = await createChauffeur({ nom, actif: true });
+      state.refs.chauffeurs.push(chauffeur);
+      rows.unshift(chauffeur);
+      listEl.prepend(renderChauffeurCard(chauffeur, true));
+    } catch (e) {
+      alert("Création impossible : " + (e.message || e));
+    }
+  };
+}
+
+function renderChauffeurCard(c, startOpen = false) {
+  const alerteJours = getAlerteJours();
+  return createAccordionCard({
+    title: c.nom,
+    subtitle: c.email || "",
+    metaHtml: (statusPillHtml(c.fco_echeance, alerteJours) || "") + (c.date_sortie ? '<span class="status-pill status-expired">Parti le ' + escapeHtml(formatDateFr(c.date_sortie)) + "</span>" : ""),
+    startOpen,
+    bodyBuilder: (body) => {
+      const grid = document.createElement("div");
+      grid.className = "field-grid";
+
+      const nomInput = makeTextInput("text", c.nom);
+      wireAutosaveField(nomInput, { table: "chauffeurs", id: c.id, field: "nom" });
+      grid.appendChild(fieldBlock("Nom", nomInput));
+
+      const telInput = makeTextInput("tel", c.tel);
+      wireAutosaveField(telInput, { table: "chauffeurs", id: c.id, field: "tel" });
+      grid.appendChild(fieldBlock("Téléphone", telInput));
+
+      const emailInput = makeTextInput("email", c.email);
+      wireAutosaveField(emailInput, { table: "chauffeurs", id: c.id, field: "email" });
+      grid.appendChild(fieldBlock("E-mail (connexion Google)", emailInput));
+
+      const camionSel = makeSelectInput(state.refs.camions.map((cam) => ({ value: cam.id, label: cam.immatriculation })), c.camion_id, "Camion attribué…");
+      wireAutosaveField(camionSel, { table: "chauffeurs", id: c.id, field: "camion_id", transform: toIntOrNull });
+      grid.appendChild(fieldBlock("Camion attribué", camionSel));
+
+      const fcoInput = makeTextInput("date", c.fco_echeance);
+      wireAutosaveField(fcoInput, { table: "chauffeurs", id: c.id, field: "fco_echeance" });
+      grid.appendChild(fieldBlock("Échéance FCO / code 95", fcoInput));
+
+      const carteInput = makeTextInput("date", c.carte_echeance);
+      wireAutosaveField(carteInput, { table: "chauffeurs", id: c.id, field: "carte_echeance" });
+      grid.appendChild(fieldBlock("Échéance carte conducteur", carteInput));
+
+      const navSel = makeSelectInput(
+        [{ value: "google_maps", label: "Google Maps" }, { value: "waze", label: "Waze" }, { value: "apple_plans", label: "Plans (Apple)" }],
+        c.nav_app
+      );
+      wireAutosaveField(navSel, { table: "chauffeurs", id: c.id, field: "nav_app" });
+      grid.appendChild(fieldBlock("Application de navigation", navSel));
+
+      const themeSel = makeSelectInput([{ value: "auto", label: "Auto" }, { value: "clair", label: "Clair" }, { value: "sombre", label: "Sombre" }], c.theme);
+      wireAutosaveField(themeSel, { table: "chauffeurs", id: c.id, field: "theme" });
+      grid.appendChild(fieldBlock("Thème", themeSel));
+
+      const actifWrap = document.createElement("div");
+      actifWrap.className = "field field-checkbox";
+      const actifLabel = document.createElement("label");
+      const actifInput = document.createElement("input");
+      actifInput.type = "checkbox";
+      actifInput.checked = c.actif !== false;
+      actifLabel.append(actifInput, " Chauffeur en service");
+      actifWrap.appendChild(actifLabel);
+      actifInput.addEventListener("change", async () => {
+        try {
+          await updateChauffeur(c.id, { actif: actifInput.checked });
+          c.actif = actifInput.checked;
+        } catch (e) {
+          alert("Échec : " + (e.message || e));
+        }
+      });
+      grid.appendChild(actifWrap);
+
+      body.appendChild(grid);
+
+      if (hasRole("bureau")) {
+        const departBtn = document.createElement("button");
+        departBtn.type = "button";
+        departBtn.className = "btn btn-secondary";
+        departBtn.textContent = "Départ du salarié";
+        departBtn.addEventListener("click", async () => {
+          if (!confirm(`Confirmer le départ de ${c.nom} ? Les scans de documents seront purgés.`)) return;
+          try {
+            await workerChauffeurDepart(c.id);
+            c.date_sortie = todayIso();
+            alert("Départ enregistré, documents purgés.");
+            await loadChauffeursScreen();
+          } catch (e) {
+            alert("Le service bon-worker n'a pas répondu (jeton IA requis côté serveur) : " + (e.message || e));
+          }
+        });
+        body.appendChild(departBtn);
+
+        buildChauffeurDocsPanel(body, c);
+      }
+    },
+  });
+}
+
+/* --------------------------------------------- Documents réglementaires (bureau) */
+function buildChauffeurDocsPanel(container, chauffeur) {
+  const wrap = document.createElement("div");
+  wrap.innerHTML = '<div class="sheet-section-title" style="margin-top:18px;">Documents réglementaires (bureau)</div>';
+  container.appendChild(wrap);
+
+  const panel = document.createElement("div");
+  panel.innerHTML = '<p class="muted">Chargement des documents…</p>';
+  container.appendChild(panel);
+
+  (async () => {
+    let permis, fco, carte, cacesList, categories;
+    try {
+      [permis, fco, carte, cacesList, categories] = await Promise.all([
+        getPermis(chauffeur.id).catch(() => null),
+        getFco(chauffeur.id).catch(() => null),
+        getCarteConducteur(chauffeur.id).catch(() => null),
+        listCaces(chauffeur.id).catch(() => []),
+        listPermisCategories(chauffeur.id).catch(() => []),
+      ]);
+    } catch (e) {
+      panel.innerHTML = '<p class="muted">Documents indisponibles.</p>';
+      return;
+    }
+    panel.innerHTML = "";
+    panel.appendChild(buildPermisSection(chauffeur, permis, categories));
+    panel.appendChild(buildFcoSection(chauffeur, fco));
+    panel.appendChild(buildCarteConducteurSection(chauffeur, carte));
+    panel.appendChild(buildCacesSection(chauffeur, cacesList));
+  })();
+}
+
+function docScanUploadRow(chauffeurId, docKind, side, currentPath, onSaved) {
+  const row = document.createElement("span");
+  row.className = "upload-row";
+  const label = document.createElement("label");
+  label.className = "upload-label";
+  label.textContent = currentPath ? `${side} ✓` : `Scan ${side}`;
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/*,application/pdf";
+  label.appendChild(input);
+  input.addEventListener("change", async () => {
+    const file = input.files[0];
+    if (!file) return;
+    const path = `${chauffeurId}/${docKind}-${side}-${Date.now()}-${file.name}`;
+    try {
+      await uploadChauffeurDoc(path, file);
+      await onSaved(path);
+      label.textContent = `${side} ✓`;
+    } catch (e) {
+      alert("Échec de l'envoi du scan : " + (e.message || e));
+    }
+  });
+  row.appendChild(label);
+  if (currentPath) {
+    const viewBtn = document.createElement("button");
+    viewBtn.type = "button";
+    viewBtn.className = "btn btn-secondary btn-sm";
+    viewBtn.textContent = "Voir";
+    viewBtn.addEventListener("click", async () => {
+      try {
+        const url = await signedUrlChauffeurDoc(currentPath);
+        window.open(url, "_blank", "noopener");
+      } catch (e) {
+        alert("Impossible d'ouvrir le scan : " + (e.message || e));
+      }
+    });
+    row.appendChild(viewBtn);
+  }
+  return row;
+}
+
+function buildPermisSection(chauffeur, permis, categories) {
+  const p = permis || {};
+  const section = document.createElement("div");
+  section.className = "doc-section";
+  section.innerHTML = '<div class="doc-section-title">Permis de conduire</div>';
+
+  const row1 = document.createElement("div");
+  row1.className = "doc-row";
+  const numInput = makeTextInput("text", p.numero);
+  wireAutosaveField(numInput, { table: "permis", id: chauffeur.id, field: "numero" });
+  row1.appendChild(fieldBlock("Numéro", numInput));
+  const visiteInput = makeTextInput("date", p.visite_medicale);
+  wireAutosaveField(visiteInput, { table: "permis", id: chauffeur.id, field: "visite_medicale" });
+  row1.appendChild(fieldBlock("Visite médicale", visiteInput));
+  section.appendChild(row1);
+
+  const catsTitle = document.createElement("div");
+  catsTitle.className = "sheet-section-title";
+  catsTitle.textContent = "Catégories";
+  section.appendChild(catsTitle);
+  const catsList = document.createElement("div");
+  catsList.className = "doc-cat-list";
+  section.appendChild(catsList);
+
+  const renderCats = (cats) => {
+    catsList.innerHTML = "";
+    for (const cat of cats) {
+      const tpl = document.getElementById("tpl-doc-cat-row");
+      const node = tpl.content.firstElementChild.cloneNode(true);
+      const codeInput = node.querySelector(".f-cat-code");
+      const validiteInput = node.querySelector(".f-cat-validite");
+      codeInput.value = cat.categorie || "";
+      validiteInput.value = cat.validite || "";
+      wireAutosaveField(codeInput, { table: "permis_categories", id: cat.id, field: "categorie" });
+      wireAutosaveField(validiteInput, { table: "permis_categories", id: cat.id, field: "validite" });
+      node.querySelector(".btn-delete-cat").addEventListener("click", async () => {
+        try {
+          await deletePermisCategorie(cat.id);
+          node.remove();
+        } catch (e) {
+          alert("Échec : " + (e.message || e));
+        }
+      });
+      catsList.appendChild(node);
+    }
+  };
+  renderCats(categories || []);
+
+  const addCatBtn = document.createElement("button");
+  addCatBtn.type = "button";
+  addCatBtn.className = "btn btn-secondary btn-sm";
+  addCatBtn.textContent = "+ Catégorie";
+  addCatBtn.addEventListener("click", async () => {
+    try {
+      const cat = await createPermisCategorie(chauffeur.id, "B", null);
+      const tpl = document.getElementById("tpl-doc-cat-row");
+      const node = tpl.content.firstElementChild.cloneNode(true);
+      node.querySelector(".f-cat-code").value = cat.categorie;
+      wireAutosaveField(node.querySelector(".f-cat-code"), { table: "permis_categories", id: cat.id, field: "categorie" });
+      wireAutosaveField(node.querySelector(".f-cat-validite"), { table: "permis_categories", id: cat.id, field: "validite" });
+      node.querySelector(".btn-delete-cat").addEventListener("click", async () => {
+        await deletePermisCategorie(cat.id).catch(() => {});
+        node.remove();
+      });
+      catsList.appendChild(node);
+    } catch (e) {
+      alert("Échec : " + (e.message || e));
+    }
+  });
+  section.appendChild(addCatBtn);
+
+  const uploadRow = document.createElement("div");
+  uploadRow.className = "doc-row";
+  uploadRow.appendChild(docScanUploadRow(chauffeur.id, "permis", "recto", p.scan_recto, async (path) => {
+    await upsertPermis(chauffeur.id, { scan_recto: path });
+    p.scan_recto = path;
+  }));
+  uploadRow.appendChild(docScanUploadRow(chauffeur.id, "permis", "verso", p.scan_verso, async (path) => {
+    await upsertPermis(chauffeur.id, { scan_verso: path });
+    p.scan_verso = path;
+  }));
+  section.appendChild(uploadRow);
+
+  return section;
+}
+
+function buildFcoSection(chauffeur, fco) {
+  const f = fco || {};
+  const section = document.createElement("div");
+  section.className = "doc-section";
+  section.innerHTML = '<div class="doc-section-title">FCO / code 95</div>';
+
+  const row = document.createElement("div");
+  row.className = "doc-row";
+  const numInput = makeTextInput("text", f.numero);
+  wireAutosaveField(numInput, { table: "fco", id: chauffeur.id, field: "numero" });
+  row.appendChild(fieldBlock("Numéro", numInput));
+  const delivInput = makeTextInput("date", f.delivrance);
+  wireAutosaveField(delivInput, { table: "fco", id: chauffeur.id, field: "delivrance" });
+  row.appendChild(fieldBlock("Délivrance", delivInput));
+  const expInput = makeTextInput("date", f.expiration);
+  wireAutosaveField(expInput, { table: "fco", id: chauffeur.id, field: "expiration" });
+  row.appendChild(fieldBlock("Expiration", expInput));
+  section.appendChild(row);
+
+  const uploadRow = document.createElement("div");
+  uploadRow.className = "doc-row";
+  uploadRow.appendChild(docScanUploadRow(chauffeur.id, "fco", "recto", f.scan_recto, async (path) => upsertFco(chauffeur.id, { scan_recto: path })));
+  uploadRow.appendChild(docScanUploadRow(chauffeur.id, "fco", "verso", f.scan_verso, async (path) => upsertFco(chauffeur.id, { scan_verso: path })));
+  section.appendChild(uploadRow);
+
+  return section;
+}
+
+function buildCarteConducteurSection(chauffeur, carte) {
+  const cc = carte || {};
+  const section = document.createElement("div");
+  section.className = "doc-section";
+  section.innerHTML = '<div class="doc-section-title">Carte conducteur (chronotachygraphe)</div>';
+
+  const row = document.createElement("div");
+  row.className = "doc-row";
+  const numInput = makeTextInput("text", cc.numero);
+  wireAutosaveField(numInput, { table: "carte_conducteur", id: chauffeur.id, field: "numero" });
+  row.appendChild(fieldBlock("Numéro", numInput));
+  const expInput = makeTextInput("date", cc.expiration);
+  wireAutosaveField(expInput, { table: "carte_conducteur", id: chauffeur.id, field: "expiration" });
+  row.appendChild(fieldBlock("Expiration", expInput));
+  const dlInput = makeTextInput("date", cc.dernier_telechargement);
+  wireAutosaveField(dlInput, { table: "carte_conducteur", id: chauffeur.id, field: "dernier_telechargement" });
+  row.appendChild(fieldBlock("Dernier téléchargement", dlInput));
+  section.appendChild(row);
+
+  const uploadRow = document.createElement("div");
+  uploadRow.className = "doc-row";
+  uploadRow.appendChild(docScanUploadRow(chauffeur.id, "carte", "recto", cc.scan_recto, async (path) => upsertCarteConducteur(chauffeur.id, { scan_recto: path })));
+  uploadRow.appendChild(docScanUploadRow(chauffeur.id, "carte", "verso", cc.scan_verso, async (path) => upsertCarteConducteur(chauffeur.id, { scan_verso: path })));
+  section.appendChild(uploadRow);
+
+  return section;
+}
+
+function buildCacesSection(chauffeur, cacesList) {
+  const section = document.createElement("div");
+  section.className = "doc-section";
+  section.innerHTML = '<div class="doc-section-title">CACES</div>';
+
+  const list = document.createElement("div");
+  list.className = "doc-cat-list";
+  section.appendChild(list);
+
+  const renderRow = (c) => {
+    const tpl = document.getElementById("tpl-caces-row");
+    const node = tpl.content.firstElementChild.cloneNode(true);
+    const typeInput = node.querySelector(".f-caces-type");
+    const catInput = node.querySelector(".f-caces-categories");
+    const expInput = node.querySelector(".f-caces-expiration");
+    typeInput.value = c.type || "";
+    catInput.value = (c.categories || []).join(", ");
+    expInput.value = c.expiration || "";
+    wireAutosaveField(typeInput, { table: "caces", id: c.id, field: "type" });
+    wireAutosaveField(catInput, { table: "caces", id: c.id, field: "categories", transform: (v) => (v ? v.split(",").map((s) => s.trim()).filter(Boolean) : []) });
+    wireAutosaveField(expInput, { table: "caces", id: c.id, field: "expiration" });
+    node.querySelector(".btn-delete-caces").addEventListener("click", async () => {
+      try {
+        await deleteCaces(c.id);
+        node.remove();
+      } catch (e) {
+        alert("Échec : " + (e.message || e));
+      }
+    });
+    list.appendChild(node);
+  };
+  for (const c of cacesList || []) renderRow(c);
+
+  const addBtn = document.createElement("button");
+  addBtn.type = "button";
+  addBtn.className = "btn btn-secondary btn-sm";
+  addBtn.textContent = "+ CACES";
+  addBtn.addEventListener("click", async () => {
+    try {
+      const c = await createCaces(chauffeur.id, { type: "R482", categories: [], expiration: null });
+      renderRow(c);
+    } catch (e) {
+      alert("Échec : " + (e.message || e));
+    }
+  });
+  section.appendChild(addBtn);
+
+  return section;
+}
+
+/* =================================================================== Articles == */
+async function loadArticlesScreen() {
+  const listEl = document.getElementById("list-articles");
+  listEl.innerHTML = '<p class="muted">Chargement…</p>';
+  let rows = [];
+  try {
+    rows = await listArticlesAll();
+  } catch (e) {
+    reportIfVersionMismatch(e);
+  }
+  const render = (query) => {
+    const filtered = !query ? rows : rows.filter((a) => a.nom.toLowerCase().includes(query));
+    listEl.innerHTML = "";
+    if (!filtered.length) {
+      listEl.innerHTML = '<p class="entity-empty">Aucun article.</p>';
+      return;
+    }
+    for (const a of filtered) listEl.appendChild(renderArticleCard(a, rows));
+  };
+  wireFilterInput(document.getElementById("filter-articles"), render);
+  render("");
+
+  document.getElementById("btn-new-article").onclick = async () => {
+    const nom = prompt("Nom du nouvel article :");
+    if (!nom) return;
+    try {
+      const article = await createArticle({ nom, unites: ["t"], actif: true });
+      state.refs.articles.push(article);
+      rows.unshift(article);
+      listEl.prepend(renderArticleCard(article, rows, true));
+    } catch (e) {
+      alert("Création impossible : " + (e.message || e));
+    }
+  };
+}
+
+function renderArticleCard(a, allRows, startOpen = false) {
+  return createAccordionCard({
+    title: a.nom,
+    subtitle: a.commentaire_interne ? a.commentaire_interne.slice(0, 60) : "",
+    metaHtml: a.actif ? "" : '<span class="status-pill status-expired">Inactif</span>',
+    startOpen,
+    bodyBuilder: (body) => {
+      const grid = document.createElement("div");
+      grid.className = "field-grid";
+
+      const nomInput = makeTextInput("text", a.nom);
+      wireAutosaveField(nomInput, { table: "articles", id: a.id, field: "nom" });
+      grid.appendChild(fieldBlock("Nom (imprimé sur la LV)", nomInput));
+
+      const comInput = document.createElement("textarea");
+      comInput.value = a.commentaire_interne || "";
+      comInput.rows = 2;
+      wireAutosaveField(comInput, { table: "articles", id: a.id, field: "commentaire_interne" });
+      grid.appendChild(fieldBlock("Commentaire interne (jamais imprimé)", comInput));
+
+      const densiteInput = makeTextInput("number", a.densite_t_m3);
+      densiteInput.step = "0.0001";
+      wireAutosaveField(densiteInput, { table: "articles", id: a.id, field: "densite_t_m3", transform: toFloatOrNull });
+      grid.appendChild(fieldBlock("Densité (t/m³)", densiteInput));
+
+      const poidsUInput = makeTextInput("number", a.poids_unitaire_t);
+      poidsUInput.step = "0.0001";
+      wireAutosaveField(poidsUInput, { table: "articles", id: a.id, field: "poids_unitaire_t", transform: toFloatOrNull });
+      grid.appendChild(fieldBlock("Poids unitaire (t/unité)", poidsUInput));
+
+      body.appendChild(grid);
+
+      const unitesTitle = document.createElement("div");
+      unitesTitle.className = "sheet-section-title";
+      unitesTitle.textContent = "Unités disponibles";
+      body.appendChild(unitesTitle);
+      const chipRow = document.createElement("div");
+      chipRow.className = "chip-row";
+      const currentUnites = new Set(a.unites || []);
+      for (const [value, label] of [["t", "tonne"], ["m3", "m³"], ["unite", "unité"]]) {
+        const chip = document.createElement("label");
+        chip.className = "chip-check" + (currentUnites.has(value) ? " is-checked" : "");
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = currentUnites.has(value);
+        chip.append(cb, " " + label);
+        cb.addEventListener("change", async () => {
+          if (cb.checked) currentUnites.add(value);
+          else currentUnites.delete(value);
+          chip.classList.toggle("is-checked", cb.checked);
+          try {
+            await updateArticle(a.id, { unites: Array.from(currentUnites) });
+            a.unites = Array.from(currentUnites);
+          } catch (e) {
+            alert("Échec : " + (e.message || e));
+          }
+        });
+        chipRow.appendChild(chip);
+      }
+      body.appendChild(chipRow);
+
+      const actifWrap = document.createElement("div");
+      actifWrap.className = "field field-checkbox";
+      actifWrap.style.marginTop = "12px";
+      const actifLabel = document.createElement("label");
+      const actifInput = document.createElement("input");
+      actifInput.type = "checkbox";
+      actifInput.checked = a.actif !== false;
+      actifLabel.append(actifInput, " Article actif");
+      actifWrap.appendChild(actifLabel);
+      actifInput.addEventListener("change", async () => {
+        try {
+          await updateArticle(a.id, { actif: actifInput.checked });
+          a.actif = actifInput.checked;
+        } catch (e) {
+          alert("Échec : " + (e.message || e));
+        }
+      });
+      body.appendChild(actifWrap);
+
+      const fusionBtn = document.createElement("button");
+      fusionBtn.type = "button";
+      fusionBtn.className = "btn btn-secondary";
+      fusionBtn.style.marginTop = "10px";
+      fusionBtn.textContent = "Fusionner avec…";
+      fusionBtn.addEventListener("click", () => handleFusionArticle(a, allRows));
+      body.appendChild(fusionBtn);
+    },
+  });
+}
+
+async function handleFusionArticle(article, allRows) {
+  const others = allRows.filter((r) => r.id !== article.id);
+  if (!others.length) {
+    alert("Aucun autre article à fusionner.");
+    return;
+  }
+  const choice = prompt(
+    "Fusionner « " + article.nom + " » avec quel article ? Tapez le nom exact :\n" + others.map((o) => "- " + o.nom).join("\n")
+  );
+  if (!choice) return;
+  const target = others.find((o) => o.nom.toLowerCase() === choice.trim().toLowerCase());
+  if (!target) {
+    alert("Article introuvable.");
+    return;
+  }
+  try {
+    await rpcFusionnerArticle(article.id, target.id);
+    alert("Fusion effectuée.");
+  } catch (e) {
+    alert(
+      "Fusion non disponible dans cette bêta : aucune fonction serveur dédiée n'existe encore " +
+        "(cf. supabase/migrations). Demandez au bureau de fusionner manuellement en désactivant " +
+        "« " + article.nom + " » et en reportant ses lignes sur « " + target.nom + " »."
+    );
+  }
+}
+
+/* =============================================================== Utilisateurs == */
+async function loadUtilisateursScreen() {
+  const listEl = document.getElementById("list-utilisateurs");
+  listEl.innerHTML = '<p class="muted">Chargement…</p>';
+  let rows = [];
+  try {
+    rows = await listUtilisateurs();
+  } catch (e) {
+    reportIfVersionMismatch(e);
+  }
+  const render = (query) => {
+    const filtered = !query ? rows : rows.filter((u) => u.email.toLowerCase().includes(query) || (u.nom || "").toLowerCase().includes(query));
+    listEl.innerHTML = "";
+    if (!filtered.length) {
+      listEl.innerHTML = '<p class="entity-empty">Aucun utilisateur.</p>';
+      return;
+    }
+    for (const u of filtered) listEl.appendChild(renderUtilisateurCard(u));
+  };
+  wireFilterInput(document.getElementById("filter-utilisateurs"), render);
+  render("");
+
+  document.getElementById("btn-new-utilisateur").onclick = async () => {
+    const email = prompt("E-mail du nouvel utilisateur :");
+    if (!email) return;
+    try {
+      const u = await createUtilisateur({ email, role: "chauffeur", roles: ["chauffeur"], actif: true });
+      rows.unshift(u);
+      listEl.prepend(renderUtilisateurCard(u, true));
+    } catch (e) {
+      alert("Création impossible : " + (e.message || e));
+    }
+  };
+}
+
+function renderUtilisateurCard(u, startOpen = false) {
+  return createAccordionCard({
+    title: u.email,
+    subtitle: u.nom || "",
+    metaHtml: (u.roles || []).map((r) => `<span class="badge badge-en_cours">${escapeHtml(r)}</span>`).join(""),
+    startOpen,
+    bodyBuilder: (body) => {
+      const grid = document.createElement("div");
+      grid.className = "field-grid";
+
+      const emailInput = makeTextInput("email", u.email);
+      wireAutosaveField(emailInput, { table: "utilisateurs", id: u.id, field: "email" });
+      grid.appendChild(fieldBlock("E-mail", emailInput));
+
+      const nomInput = makeTextInput("text", u.nom);
+      wireAutosaveField(nomInput, { table: "utilisateurs", id: u.id, field: "nom" });
+      grid.appendChild(fieldBlock("Nom", nomInput));
+
+      body.appendChild(grid);
+
+      const rolesTitle = document.createElement("div");
+      rolesTitle.className = "sheet-section-title";
+      rolesTitle.textContent = "Rôles";
+      body.appendChild(rolesTitle);
+      const chipRow = document.createElement("div");
+      chipRow.className = "chip-row";
+      const currentRoles = new Set(u.roles || []);
+      for (const [value, label] of [["chauffeur", "Chauffeur"], ["bureau", "Bureau"]]) {
+        const chip = document.createElement("label");
+        chip.className = "chip-check" + (currentRoles.has(value) ? " is-checked" : "");
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = currentRoles.has(value);
+        chip.append(cb, " " + label);
+        cb.addEventListener("change", async () => {
+          if (cb.checked) currentRoles.add(value);
+          else currentRoles.delete(value);
+          chip.classList.toggle("is-checked", cb.checked);
+          const rolesArr = Array.from(currentRoles);
+          try {
+            await updateUtilisateur(u.id, { roles: rolesArr, role: rolesArr.includes("bureau") ? "bureau" : rolesArr.includes("chauffeur") ? "chauffeur" : "desactive" });
+            u.roles = rolesArr;
+          } catch (e) {
+            alert("Échec : " + (e.message || e));
+          }
+        });
+        chipRow.appendChild(chip);
+      }
+      body.appendChild(chipRow);
+
+      const actifWrap = document.createElement("div");
+      actifWrap.className = "field field-checkbox";
+      actifWrap.style.marginTop = "12px";
+      const actifLabel = document.createElement("label");
+      const actifInput = document.createElement("input");
+      actifInput.type = "checkbox";
+      actifInput.checked = u.actif !== false;
+      actifLabel.append(actifInput, " Compte actif");
+      actifWrap.appendChild(actifLabel);
+      actifInput.addEventListener("change", async () => {
+        try {
+          await updateUtilisateur(u.id, { actif: actifInput.checked });
+          u.actif = actifInput.checked;
+        } catch (e) {
+          alert("Échec : " + (e.message || e));
+        }
+      });
+      body.appendChild(actifWrap);
+    },
+  });
+}
+
+/* =============================================================== Choix de site == */
+function openSitePicker(targetSelect) {
+  state.sitePickerTarget = targetSelect;
+  const sheet = document.getElementById("site-picker-sheet");
+  sheet.hidden = false;
+  document.getElementById("site-picker-search").value = "";
+  renderSitePickerList("");
+}
+function closeSitePicker() {
+  document.getElementById("site-picker-sheet").hidden = true;
+  state.sitePickerTarget = null;
+}
+async function renderSitePickerList(query) {
+  const listEl = document.getElementById("site-picker-list");
+  const clientId = document.getElementById("f-client").value;
+  let ranked = [];
+  try {
+    ranked = state.chauffeur && clientId ? await rpcSitesPour(state.chauffeur.id, parseInt(clientId, 10)) : [];
+  } catch (e) {
+    /* on retombe sur la liste plate */
+  }
+  const needle = (query || "").toLowerCase();
+  const all = state.refs.sites.filter((s) => !needle || (s.nom + " " + (s.adresse || "")).toLowerCase().includes(needle));
+
+  const sections = [];
+  if (ranked.length) {
+    sections.push({
+      title: "5 derniers / suggérés",
+      items: ranked.filter((s) => !needle || s.nom.toLowerCase().includes(needle)).slice(0, 5),
+    });
+  }
+  const chantiers = all.filter((s) => s.portee === "chantier" && (!clientId || String(s.client_id) === clientId));
+  sections.push({ title: "Chantiers du client", items: chantiers });
+  const communs = all.filter((s) => s.portee === "commun");
+  sections.push({ title: "Sites communs", items: communs });
+
+  listEl.innerHTML = "";
+  let any = false;
+  for (const section of sections) {
+    if (!section.items.length) continue;
+    any = true;
+    const titleEl = document.createElement("div");
+    titleEl.className = "sheet-section-title";
+    titleEl.textContent = section.title;
+    listEl.appendChild(titleEl);
+    for (const site of section.items) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "sheet-item";
+      btn.innerHTML = `${escapeHtml(site.nom)}<span>${escapeHtml(site.adresse || "")}</span>`;
+      btn.addEventListener("click", () => {
+        if (state.sitePickerTarget) {
+          state.sitePickerTarget.value = String(site.id);
+          state.sitePickerTarget.dispatchEvent(new Event("change"));
+        }
+        closeSitePicker();
+      });
+      listEl.appendChild(btn);
+    }
+  }
+  if (!any) listEl.innerHTML = '<p class="entity-empty">Aucun site trouvé.</p>';
 }
 
 /* ========================================================================= Routage == */
@@ -1340,6 +2833,11 @@ async function handleSessionChange(session) {
     reportIfVersionMismatch(err);
   }
   state.profil = profil;
+  state.roles = profil
+    ? (Array.isArray(profil.roles) && profil.roles.length
+        ? profil.roles
+        : (profil.role ? [profil.role] : []))
+    : [];
 
   if (!profil) {
     document.getElementById("unauthorized-email").textContent = session.user.email || "";
@@ -1362,14 +2860,23 @@ async function handleSessionChange(session) {
   const navAppSel = document.getElementById("f-nav-app");
   if (navAppSel) navAppSel.value = getNavApp();
 
-  const initialRoute = (window.location.hash || "#/dashboard").replace(/^#\//, "") || "dashboard";
+  let initialRoute = (window.location.hash || "#/dashboard").replace(/^#\//, "") || "dashboard";
+  if (isDemoMode() && demoScreenParam()) {
+    const map = {
+      aujourdhui: "today", tour: "today", "site-picker": "sites",
+      "tableau-de-bord": "dashboard", chauffeurs: "chauffeurs", "mes-lv": "mes-lv",
+      planning: "planning", projets: "projets", clients: "clients", sites: "sites",
+      camions: "camions", articles: "articles", utilisateurs: "utilisateurs", reglages: "reglages",
+    };
+    initialRoute = map[demoScreenParam()] || demoScreenParam();
+  }
   navigate(initialRoute);
 }
 
 async function boot() {
   wireStaticUI();
 
-  if (!sb) {
+  if (!sb && !isDemoMode()) {
     showFatal("Configuration Supabase manquante ou invalide (assets/config.js).");
     return;
   }
