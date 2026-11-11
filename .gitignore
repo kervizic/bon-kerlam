@@ -1,0 +1,27 @@
+# Secrets & env
+.env
+.env.*
+!.env.example
+deploy/**/.env
+!deploy/**/.env.example
+
+# Data / runtime
+data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite3
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
