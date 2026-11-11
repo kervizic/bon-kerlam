@@ -1,0 +1,20 @@
+{
+  "id": "/",
+  "name": "KERLAM — Lettres de voiture",
+  "short_name": "bon KERLAM",
+  "description": "Lettres de voiture dématérialisées KERLAM : saisie chauffeur, contrôle bureau, signature.",
+  "lang": "fr-FR",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F4F4F2",
+  "theme_color": "#FF9300",
+  "icons": [
+    { "src": "/assets/icons/icon.svg", "sizes": "192x192", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/assets/icons/icon.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/assets/icons/maskable.svg", "sizes": "192x192", "type": "image/svg+xml", "purpose": "maskable" },
+    { "src": "/assets/icons/maskable.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="auto">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>bon.kerlam.fr — Lettres de voiture</title>
+  <meta name="description" content="Lettres de voiture dématérialisées KERLAM : saisie chauffeur, contrôle bureau, signature.">
+  <meta name="robots" content="noindex, nofollow">
+
+  <!-- Empreinte de version du shell (cf. assets/app-version.js). Bumper `app-rev`
+       à chaque déploiement backend devant forcer un refresh (sinon le bump d'un
+       `?v=` d'asset suffit). -->
+  <meta name="app-version" content="0.1.0-beta.1">
+  <meta name="app-rev" content="1">
+
+  <link rel="icon" type="image/svg+xml" href="/assets/icons/icon.svg">
+  <link rel="apple-touch-icon" href="/assets/icons/icon.svg">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#FF9300">
+  <meta name="color-scheme" content="light dark">
+  <meta name="apple-mobile-web-app-title" content="bon KERLAM">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="mobile-web-app-capable" content="yes">
+
+  <link rel="stylesheet" href="/assets/styles.css?v=1">
+  <script src="/assets/app-version.js?v=1" defer></script>
+</head>
+<body>
+  <a href="#main" class="skip-link">Aller au contenu</a>
+
+  <!-- ===================================================== Écran de connexion -->
+  <section id="screen-login" class="screen screen-auth" hidden>
+    <div class="auth-card">
+      <div class="logo logo-lg" aria-hidden="true"><span class="logo-ker">KER</span><span class="logo-lam">LAM</span></div>
+      <p class="auth-tagline">Lettres de voiture</p>
+      <button id="btn-google-login" class="btn btn-primary btn-block" type="button">
+        <svg class="google-g" viewBox="0 0 48 48" width="20" height="20" aria-hidden="true" focusable="false">
+          <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.9 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.3 17.7 9.5 24 9.5z"/>
+          <path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.2 5.3-4.6 7l7.2 5.6c4.2-3.9 6.1-9.6 6.1-17.1z"/>
+          <path fill="#FBBC05" d="M10.5 28.3c-.6-1.7-.9-3.5-.9-5.3s.3-3.6.9-5.3l-7.9-6.1C1 14.8 0 19.2 0 23s1 8.2 2.6 11.4l7.9-6.1z"/>
+          <path fill="#34A853" d="M24 46c6.3 0 11.6-2.1 15.5-5.6l-7.2-5.6c-2.1 1.5-4.9 2.4-8.3 2.4-6.3 0-11.6-3.8-13.5-9.1l-7.9 6.1C6.5 40.6 14.6 46 24 46z"/>
+        </svg>
+        Se connecter avec Google
+      </button>
+      <p id="auth-error" class="auth-error" role="alert" hidden></p>
+    </div>
+  </section>
+
+  <!-- ============================================== Écran "Accès non autorisé" -->
+  <section id="screen-unauthorized" class="screen screen-auth" hidden>
+    <div class="auth-card">
+      <div class="logo logo-lg" aria-hidden="true"><span class="logo-ker">KER</span><span class="logo-lam">LAM</span></div>
+      <h1>Accès non autorisé</h1>
+      <p>Votre compte n'est pas (encore) activé pour bon.kerlam.fr.<br>Contactez le bureau.</p>
+      <p id="unauthorized-email" class="auth-email"></p>
+      <button id="btn-logout-unauthorized" class="btn btn-secondary btn-block" type="button">Se déconnecter</button>
+    </div>
+  </section>
+
+  <!-- ========================================================= Coquille de l'app -->
+  <div id="app-shell" class="app-shell" hidden>
+
+    <header class="topbar">
+      <div class="logo" aria-hidden="true"><span class="logo-ker">KER</span><span class="logo-lam">LAM</span></div>
+
+      <div class="topbar-actions">
+        <button id="btn-undo" class="icon-btn" type="button" title="Annuler (Ctrl+Z)" aria-label="Annuler" disabled>↶</button>
+        <button id="btn-redo" class="icon-btn" type="button" title="Rétablir (Ctrl+Maj+Z)" aria-label="Rétablir" disabled>↷</button>
+        <span id="sync-indicator" class="sync-indicator sync-saved" aria-live="polite" role="status">Enregistré</span>
+        <button id="btn-theme" class="icon-btn" type="button" title="Changer le thème" aria-label="Changer le thème">◐</button>
+        <span id="profil-badge" class="profil-badge"></span>
+      </div>
+    </header>
+
+    <div class="app-body">
+      <nav class="side-nav" aria-label="Navigation principale">
+        <ul>
+          <li><a href="#/dashboard"    data-route="dashboard">Tableau de bord</a></li>
+          <li><a href="#/lv"           data-route="lv">LV</a></li>
+          <li><a href="#/planning"     data-route="planning">Planning</a></li>
+          <li><a href="#/projets"      data-route="projets">Projets</a></li>
+          <li><a href="#/clients"      data-route="clients">Clients</a></li>
+          <li><a href="#/sites"        data-route="sites">Sites</a></li>
+          <li><a href="#/camions"      data-route="camions">Camions</a></li>
+          <li><a href="#/chauffeurs"   data-route="chauffeurs">Chauffeurs</a></li>
+          <li><a href="#/articles"     data-route="articles">Articles</a></li>
+          <li><a href="#/utilisateurs" data-route="utilisateurs">Utilisateurs</a></li>
+          <li><a href="#/reglages"     data-route="reglages">Réglages</a></li>
+        </ul>
+      </nav>
+
+      <main id="main" class="main-content">
+
+        <!-- ------------------------------------------------------- Tableau de bord -->
+        <section id="view-dashboard" class="view" data-view="dashboard" hidden>
+          <div class="view-header"><h1>Tableau de bord</h1></div>
+          <p id="dashboard-welcome" class="dashboard-welcome"></p>
+          <div class="dashboard-cards">
+            <a class="dashboard-card" data-route="today" href="#/today">
+              <strong>LV du jour</strong>
+              <span>Ouvrir la lettre de voiture d'aujourd'hui</span>
+            </a>
+            <a class="dashboard-card" data-route="mes-lv" href="#/mes-lv">
+              <strong>Mes LV</strong>
+              <span>Historique de mes lettres de voiture</span>
+            </a>
+            <a class="dashboard-card" data-route="controle" href="#/controle">
+              <strong>Contrôle</strong>
+              <span>Lecture hors-ligne, vérification terrain</span>
+            </a>
+          </div>
+        </section>
+
+        <!-- ------------------------------------------------------------ Aujourd'hui -->
+        <section id="view-today" class="view" data-view="today" hidden>
+          <div class="view-header">
+            <h1>Aujourd'hui</h1>
+            <span id="lv-numero" class="lv-numero">—</span>
+          </div>
+
+          <form id="lv-header-form" class="lv-header-form" autocomplete="off">
+            <div class="field">
+              <label for="f-date">Date d'établissement</label>
+              <input type="date" id="f-date" name="date_etablissement">
+            </div>
+            <div class="field">
+              <label for="f-camion">Camion</label>
+              <select id="f-camion" name="camion_id"><option value="">—</option></select>
+            </div>
+            <div class="field">
+              <label for="f-client">Client</label>
+              <select id="f-client" name="client_id"><option value="">—</option></select>
+            </div>
+            <div class="field">
+              <label for="f-projet">Projet</label>
+              <select id="f-projet" name="projet_id"><option value="">—</option></select>
+            </div>
+            <div class="field">
+              <label for="f-contact">Contact</label>
+              <select id="f-contact" name="contact_id"><option value="">—</option></select>
+            </div>
+            <div class="field">
+              <label for="f-expediteur">Expéditeur</label>
+              <input type="text" id="f-expediteur" name="expediteur" placeholder="Raison sociale expéditeur">
+            </div>
+            <div class="field field-checkbox">
+              <label><input type="checkbox" id="f-dest-identique" name="dest_identique" checked> Destinataire identique à l'expéditeur</label>
+            </div>
+            <div class="field" id="field-destinataire-wrap" hidden>
+              <label for="f-destinataire">Destinataire</label>
+              <input type="text" id="f-destinataire" name="destinataire">
+            </div>
+            <div class="field">
+              <label for="f-heures-regie">Heures régie</label>
+              <input type="text" id="f-heures-regie" name="heures_regie" placeholder="ex. 7h30 - 16h00">
+            </div>
+          </form>
+
+          <div class="weight-gauge" id="weight-gauge">
+            <div class="weight-gauge-head">
+              <strong>Charge estimée</strong>
+              <span id="weight-gauge-text">—</span>
+            </div>
+            <div class="weight-gauge-bar"><div class="weight-gauge-fill" id="weight-gauge-fill"></div></div>
+            <p id="weight-gauge-note" class="weight-gauge-note"></p>
+          </div>
+
+          <div id="tours-list" class="tours-list"></div>
+          <button type="button" id="btn-add-tour" class="btn btn-secondary btn-block">+ Ajouter un tour</button>
+        </section>
+
+        <!-- -------------------------------------------------------------- Mes LV -->
+        <section id="view-mes-lv" class="view" data-view="mes-lv" hidden>
+          <div class="view-header"><h1>Mes LV</h1></div>
+          <div id="mes-lv-list" class="mes-lv-list">
+            <p class="muted">Chargement…</p>
+          </div>
+        </section>
+
+        <!-- -------------------------------------------------------------- Contrôle -->
+        <section id="view-controle" class="view" data-view="controle" hidden>
+          <div class="view-header">
+            <h1>Contrôle</h1>
+            <button type="button" id="btn-controle-refresh" class="btn btn-secondary btn-sm">Actualiser</button>
+          </div>
+          <p id="controle-status" class="muted"></p>
+          <div id="controle-content" class="controle-content"></div>
+        </section>
+
+        <!-- --------------------------------------------------------------- Réglages -->
+        <section id="view-reglages" class="view" data-view="reglages" hidden>
+          <div class="view-header"><h1>Réglages</h1></div>
+
+          <fieldset class="field-group">
+            <legend>Thème</legend>
+            <label class="radio-row"><input type="radio" name="theme" value="auto" id="theme-auto"> Auto (système)</label>
+            <label class="radio-row"><input type="radio" name="theme" value="clair" id="theme-clair"> Clair</label>
+            <label class="radio-row"><input type="radio" name="theme" value="sombre" id="theme-sombre"> Sombre</label>
+          </fieldset>
+
+          <fieldset class="field-group">
+            <legend>Application de navigation</legend>
+            <select id="f-nav-app">
+              <option value="google_maps">Google Maps</option>
+              <option value="waze">Waze</option>
+              <option value="apple_plans">Plans (Apple)</option>
+            </select>
+          </fieldset>
+
+          <button type="button" id="btn-logout" class="btn btn-secondary btn-block">Se déconnecter</button>
+        </section>
+
+        <!-- ------------------------------------------------- Vues « À venir » (stubs) -->
+        <section id="view-lv" class="view" data-view="lv" hidden>
+          <div class="view-header"><h1>LV</h1></div>
+          <div class="placeholder-card"><p>À venir — liste et recherche de toutes les lettres de voiture.</p></div>
+        </section>
+        <section id="view-planning" class="view" data-view="planning" hidden>
+          <div class="view-header"><h1>Planning</h1></div>
+          <div class="placeholder-card"><p>À venir — préparation des tournées par le bureau.</p></div>
+        </section>
+        <section id="view-projets" class="view" data-view="projets" hidden>
+          <div class="view-header"><h1>Projets</h1></div>
+          <div class="placeholder-card"><p>À venir — gestion des projets et contrats clients.</p></div>
+        </section>
+        <section id="view-clients" class="view" data-view="clients" hidden>
+          <div class="view-header"><h1>Clients</h1></div>
+          <div class="placeholder-card"><p>À venir — fiches clients et contacts.</p></div>
+        </section>
+        <section id="view-sites" class="view" data-view="sites" hidden>
+          <div class="view-header"><h1>Sites</h1></div>
+          <div class="placeholder-card"><p>À venir — référentiel des sites communs et chantiers.</p></div>
+        </section>
+        <section id="view-camions" class="view" data-view="camions" hidden>
+          <div class="view-header"><h1>Camions</h1></div>
+          <div class="placeholder-card"><p>À venir — flotte, PTAC, échéances contrôle technique.</p></div>
+        </section>
+        <section id="view-chauffeurs" class="view" data-view="chauffeurs" hidden>
+          <div class="view-header"><h1>Chauffeurs</h1></div>
+          <div class="placeholder-card"><p>À venir — fiches chauffeurs, FCO, carte conducteur.</p></div>
+        </section>
+        <section id="view-articles" class="view" data-view="articles" hidden>
+          <div class="view-header"><h1>Articles</h1></div>
+          <div class="placeholder-card"><p>À venir — référentiel des articles et densités.</p></div>
+        </section>
+        <section id="view-utilisateurs" class="view" data-view="utilisateurs" hidden>
+          <div class="view-header"><h1>Utilisateurs</h1></div>
+          <div class="placeholder-card"><p>À venir — liste blanche des comptes et rôles.</p></div>
+        </section>
+
+      </main>
+    </div>
+
+    <nav class="bottom-bar" aria-label="Navigation mobile">
+      <button type="button" class="bottom-bar-item" data-route="today">
+        <span class="bb-icon" aria-hidden="true">📅</span><span class="bb-label">Aujourd'hui</span>
+      </button>
+      <button type="button" class="bottom-bar-item" data-route="mes-lv">
+        <span class="bb-icon" aria-hidden="true">📄</span><span class="bb-label">Mes LV</span>
+      </button>
+      <button type="button" class="bottom-bar-item" data-route="controle">
+        <span class="bb-icon" aria-hidden="true">✓</span><span class="bb-label">Contrôle</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- ===================================================================== Templates -->
+  <template id="tpl-tour">
+    <article class="tour-card">
+      <header class="tour-card-head">
+        <strong class="tour-card-title"></strong>
+        <button type="button" class="icon-btn btn-delete-tour" aria-label="Supprimer le tour">🗑</button>
+      </header>
+      <div class="field">
+        <label>Site de chargement</label>
+        <div class="site-row">
+          <select class="f-site-chargement"><option value="">Choisir un site…</option></select>
+          <a class="icon-btn nav-link" target="_blank" rel="noopener" aria-label="Ouvrir dans l'app de navigation" hidden>🧭</a>
+        </div>
+      </div>
+      <div class="field">
+        <label>Site de déchargement</label>
+        <div class="site-row">
+          <select class="f-site-dechargement"><option value="">Choisir un site…</option></select>
+          <a class="icon-btn nav-link" target="_blank" rel="noopener" aria-label="Ouvrir dans l'app de navigation" hidden>🧭</a>
+        </div>
+      </div>
+      <div class="field">
+        <label>Heure de départ</label>
+        <input type="time" class="f-heure-depart">
+      </div>
+      <div class="lignes-list"></div>
+      <button type="button" class="btn btn-secondary btn-sm btn-add-ligne">+ Ligne d'article</button>
+    </article>
+  </template>
+
+  <template id="tpl-ligne">
+    <div class="ligne-row">
+      <select class="f-ligne-article"><option value="">Article…</option></select>
+      <input type="number" class="f-ligne-quantite" placeholder="Qté" step="0.001" inputmode="decimal">
+      <select class="f-ligne-unite">
+        <option value="t">t</option>
+        <option value="m3">m³</option>
+        <option value="unite">unité</option>
+      </select>
+      <button type="button" class="icon-btn btn-delete-ligne" aria-label="Supprimer la ligne">🗑</button>
+    </div>
+  </template>
+
+  <!-- ================================================================== Scripts -->
+  <script src="/assets/config.js"></script>
+  <script src="/assets/vendor/supabase/supabase.js"></script>
+  <script type="module" src="/assets/app.js?v=1"></script>
+</body>
+</html>
