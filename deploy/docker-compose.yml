@@ -90,8 +90,6 @@ services:
       # Hook « before user created » (refus des e-mails non listés) si disponible.
       GOTRUE_HOOK_BEFORE_USER_CREATED_ENABLED: ${GOTRUE_HOOK_BEFORE_USER_CREATED_ENABLED:-false}
       GOTRUE_HOOK_BEFORE_USER_CREATED_URI: ${GOTRUE_HOOK_BEFORE_USER_CREATED_URI}
-    volumes:
-      - ./email/otp_fr.html:/etc/gotrue/otp_fr.html:ro
       GOTRUE_JWT_ADMIN_ROLES: service_role
       GOTRUE_JWT_AUD: authenticated
       GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
@@ -105,6 +103,8 @@ services:
       GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI: ${API_EXTERNAL_URL}/auth/v1/callback
       # Restriction de domaine (hd) optionnelle, désactivée par défaut.
       GOTRUE_EXTERNAL_GOOGLE_HD: ${GOOGLE_HD}
+    volumes:
+      - ./email/otp_fr.html:/etc/gotrue/otp_fr.html:ro
 
   rest:
     container_name: bon-rest
