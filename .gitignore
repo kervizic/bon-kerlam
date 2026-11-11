@@ -30,3 +30,8 @@ htmlcov/
 *.swp
 .idea/
 .vscode/
+
+# Scripts d'init DB (config, pas des données) : versionnés
+!deploy/volumes/
+!deploy/volumes/db/
+!deploy/volumes/db/*.sql
