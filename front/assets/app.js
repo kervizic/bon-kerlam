@@ -86,6 +86,16 @@ import {
   createArticle,
   updateArticle,
   rpcFusionnerArticle,
+  listPrestations,
+  listPrestationsAll,
+  listMateriels,
+  createPrestation,
+  updatePrestation,
+  getPrestationsLv,
+  createPrestationLigne,
+  updatePrestationLigne,
+  deletePrestationLigne,
+  rpcDernierePrestation,
   createUtilisateur,
   updateUtilisateur,
   upsertReglage,
@@ -120,11 +130,11 @@ import {
   todayIso,
 } from "./data.js";
 
-import { initInstall } from "./install.js?v=12";
-import { UndoStack } from "./undo-stack.js?v=12";
-import { PdfCache, shouldCachePdf, formatGeneratedAt } from "./pdf-cache.js?v=12";
-import { statutLabel } from "./status-labels.js?v=12";
-import { canGroupForSignature } from "./signature-group.js?v=12";
+import { initInstall } from "./install.js?v=13";
+import { UndoStack } from "./undo-stack.js?v=13";
+import { PdfCache, shouldCachePdf, formatGeneratedAt } from "./pdf-cache.js?v=13";
+import { statutLabel } from "./status-labels.js?v=13";
+import { canGroupForSignature } from "./signature-group.js?v=13";
 
 /* ============================================================== IndexedDB == */
 /* Deux object stores :
@@ -256,6 +266,8 @@ const REMOTE_UPDATERS = {
   lettres_voiture: updateLv,
   tours: updateTour,
   tour_lignes: updateLigne,
+  lv_prestations: updatePrestationLigne,
+  prestations: updatePrestation,
   projets: updateProjet,
   clients: updateClient,
   contacts: updateContact,
@@ -495,7 +507,9 @@ const state = {
   profil: null,
   roles: [],
   chauffeur: null,
-  refs: { camions: [], clients: [], projets: [], contacts: [], articles: [], sites: [], chauffeurs: [] },
+  refs: { camions: [], clients: [], projets: [], contacts: [], articles: [], sites: [], chauffeurs: [], prestations: [], materiels: [] },
+  prestations: [], // lignes de prestation de la lettre courante
+  pendingPrestation: null, // prestation reportée en attente de persistance (nouvelle lettre)
   lv: null,
   tours: [],
   prefillData: {},
@@ -509,7 +523,7 @@ const state = {
 const ROUTES = [
   "dashboard", "today", "mes-lv", "reglages",
   "lv", "planning", "projets", "clients", "sites", "camions",
-  "chauffeurs", "articles", "utilisateurs",
+  "chauffeurs", "articles", "prestations", "utilisateurs",
 ];
 
 function hasRole(role) {
@@ -724,7 +738,7 @@ async function getSiteOptionsList() {
 
 /* ============================================================ Référentiels == */
 async function loadRefs() {
-  const [camions, clients, projets, contacts, articles, sites, chauffeurs, reglages] = await Promise.all([
+  const [camions, clients, projets, contacts, articles, sites, chauffeurs, prestations, materiels, reglages] = await Promise.all([
     listCamions().catch((e) => { reportIfVersionMismatch(e); return []; }),
     listClients().catch((e) => { reportIfVersionMismatch(e); return []; }),
     listProjets().catch((e) => { reportIfVersionMismatch(e); return []; }),
@@ -732,9 +746,11 @@ async function loadRefs() {
     listArticles().catch((e) => { reportIfVersionMismatch(e); return []; }),
     listSites().catch((e) => { reportIfVersionMismatch(e); return []; }),
     listChauffeurs().catch(() => []),
+    listPrestations().catch(() => []),
+    listMateriels().catch(() => []),
     listReglages().catch(() => []),
   ]);
-  state.refs = { camions, clients, projets, contacts, articles, sites, chauffeurs };
+  state.refs = { camions, clients, projets, contacts, articles, sites, chauffeurs, prestations, materiels };
   state.reglages = Object.fromEntries(reglages.map((r) => [r.cle, r.valeur]));
   populateSelect(document.getElementById("f-camion"), camions, (c) => c.id, (c) => c.immatriculation);
   populateSelect(document.getElementById("f-client"), clients, (c) => c.id, (c) => c.raison_sociale);
@@ -920,6 +936,9 @@ async function ensureLv() {
   const lv = await createLv(fields);
   state.lv = lv;
   renderLvNumero();
+  // Report automatique (H) : dès que la lettre existe réellement, on persiste la
+  // prestation reprise de la dernière lettre du chauffeur (le cas échéant).
+  await promotePendingPrestation();
   return lv.id;
 }
 
@@ -967,6 +986,7 @@ async function loadToday() {
   state.lv = lv;
   fillHeaderForm(lv || state.prefillData);
   renderLvNumero();
+  await loadPrestationsFor(lv);
   await loadToursFor(lv);
 }
 
@@ -1133,6 +1153,169 @@ async function addTour() {
   } catch (err) {
     console.error(err);
     alert("Impossible de créer le tour pour le moment (hors ligne ?). La création nécessite un aller-retour réseau.");
+  }
+}
+
+/* ========================================================= Prestations (H) == */
+// Bloc « Prestations » à part, AVANT les tours. Une ligne = prestation + quantité
+// + unité + matériel (déduit du camion de la lettre, modifiable). À chaque
+// nouvelle lettre, la PREMIÈRE prestation de la dernière lettre du chauffeur est
+// reprise (modifiable / supprimable) — cf. promotePendingPrestation().
+
+function defaultMaterielForLv() {
+  const camId = state.lv ? state.lv.camion_id : (state.prefillData && state.prefillData.camion_id);
+  if (camId == null) return null;
+  const cam = (state.refs.camions || []).find((c) => String(c.id) === String(camId));
+  return cam && cam.materiel_id != null ? cam.materiel_id : null;
+}
+
+async function loadPrestationsFor(lv) {
+  const listEl = document.getElementById("prestations-list");
+  if (!listEl) return;
+  listEl.innerHTML = "";
+  state.prestations = [];
+  state.pendingPrestation = null;
+  if (lv) {
+    let lignes = [];
+    try {
+      lignes = await getPrestationsLv(lv.id);
+    } catch (err) {
+      reportIfVersionMismatch(err);
+    }
+    for (const ligne of lignes) {
+      state.prestations.push(ligne);
+      renderPrestationRow(ligne, false);
+    }
+    return;
+  }
+  // Nouvelle lettre : report automatique de la première prestation du chauffeur.
+  const chauffeurId = state.chauffeur ? state.chauffeur.id : null;
+  if (!chauffeurId) return;
+  let prefill = null;
+  try {
+    prefill = await rpcDernierePrestation(chauffeurId);
+  } catch (err) {
+    /* pas bloquant */
+  }
+  if (prefill && (prefill.prestation_id != null || prefill.unite)) {
+    state.pendingPrestation = {
+      prestation_id: prefill.prestation_id != null ? prefill.prestation_id : null,
+      quantite: prefill.quantite != null ? prefill.quantite : null,
+      unite: prefill.unite || null,
+      materiel_id: prefill.materiel_id != null ? prefill.materiel_id : defaultMaterielForLv(),
+    };
+    renderPrestationRow(state.pendingPrestation, true);
+  }
+}
+
+function renderPrestationRow(ligne, pending) {
+  const listEl = document.getElementById("prestations-list");
+  const tpl = document.getElementById("tpl-prestation");
+  const node = tpl.content.firstElementChild.cloneNode(true);
+  if (!pending) node.dataset.prestationId = ligne.id;
+
+  const prestSel = node.querySelector(".f-prestation-prestation");
+  populateSelect(prestSel, state.refs.prestations, (p) => p.id, (p) => p.libelle, "Prestation…");
+  prestSel.value = ligne.prestation_id != null ? String(ligne.prestation_id) : "";
+
+  const qteInput = node.querySelector(".f-prestation-quantite");
+  qteInput.value = ligne.quantite != null ? ligne.quantite : "";
+
+  const uniteSel = node.querySelector(".f-prestation-unite");
+  uniteSel.value = ligne.unite || "jour";
+
+  const materielSel = node.querySelector(".f-prestation-materiel");
+  populateSelect(materielSel, state.refs.materiels, (m) => m.id, (m) => m.libelle, "Matériel…");
+  materielSel.value = ligne.materiel_id != null ? String(ligne.materiel_id) : "";
+
+  // Choisir une prestation applique son unité par défaut (catalogue).
+  prestSel.addEventListener("change", () => {
+    const p = (state.refs.prestations || []).find((x) => String(x.id) === prestSel.value);
+    if (p && p.unite_defaut && uniteSel.value !== p.unite_defaut) {
+      uniteSel.value = p.unite_defaut;
+      uniteSel.dispatchEvent(new Event("change"));
+    }
+  });
+
+  if (pending) {
+    const promote = async () => {
+      state.pendingPrestation = {
+        prestation_id: toIntOrNull(prestSel.value),
+        quantite: toFloatOrNull(qteInput.value),
+        unite: uniteSel.value || null,
+        materiel_id: toIntOrNull(materielSel.value),
+      };
+      try {
+        await ensureLv(); // crée la lettre puis persiste la prestation reprise
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    [prestSel, qteInput, uniteSel, materielSel].forEach((el) => el.addEventListener("change", promote));
+    node.querySelector(".btn-delete-prestation").addEventListener("click", () => {
+      state.pendingPrestation = null;
+      node.remove();
+    });
+  } else {
+    wireAutosaveField(prestSel, { table: "lv_prestations", id: ligne.id, field: "prestation_id", transform: toIntOrNull });
+    wireAutosaveField(qteInput, { table: "lv_prestations", id: ligne.id, field: "quantite", transform: toFloatOrNull });
+    wireAutosaveField(uniteSel, { table: "lv_prestations", id: ligne.id, field: "unite" });
+    wireAutosaveField(materielSel, { table: "lv_prestations", id: ligne.id, field: "materiel_id", transform: toIntOrNull });
+    node.querySelector(".btn-delete-prestation").addEventListener("click", () => handleDeletePrestation(ligne, node));
+  }
+  listEl.appendChild(node);
+  return node;
+}
+
+// Persiste la prestation reportée dès que la lettre existe (appelé par ensureLv).
+async function promotePendingPrestation() {
+  if (!state.pendingPrestation || !state.lv) return;
+  const p = state.pendingPrestation;
+  state.pendingPrestation = null;
+  try {
+    await createPrestationLigne({
+      lv_id: state.lv.id,
+      prestation_id: p.prestation_id,
+      quantite: p.quantite,
+      unite: p.unite,
+      materiel_id: p.materiel_id,
+      ordre: 1,
+    });
+    await loadPrestationsFor(state.lv); // remplace la ligne « en attente » par la persistée
+    pushServerUndo();
+  } catch (err) {
+    console.error(err);
+    state.pendingPrestation = p; // on ne perd pas la saisie en cas d'échec
+  }
+}
+
+async function handleAddPrestation() {
+  try {
+    const lvId = await ensureLv();
+    const ligne = await createPrestationLigne({
+      lv_id: lvId,
+      unite: "jour",
+      materiel_id: defaultMaterielForLv(),
+      ordre: state.prestations.length + 1,
+    });
+    state.prestations.push(ligne);
+    renderPrestationRow(ligne, false);
+    renderLvNumero();
+    pushServerUndo();
+  } catch (err) {
+    console.error(err);
+    alert("Impossible d'ajouter la prestation pour le moment (hors ligne ?). La création nécessite un aller-retour réseau.");
+  }
+}
+
+async function handleDeletePrestation(ligne, node) {
+  try {
+    await deletePrestationLigne(ligne.id);
+    state.prestations = state.prestations.filter((p) => p.id !== ligne.id);
+    node.remove();
+    pushServerUndo();
+  } catch (err) {
+    console.error(err);
   }
 }
 
@@ -1435,6 +1618,7 @@ async function openLvInToday(lv) {
   state.lv = lv;
   fillHeaderForm(lv);
   renderLvNumero();
+  await loadPrestationsFor(lv);
   await loadToursFor(lv);
   navigate("today");
 }
@@ -2864,6 +3048,97 @@ async function renderSitePickerList(query) {
   if (!any) listEl.innerHTML = '<p class="entity-empty">Aucun site trouvé.</p>';
 }
 
+/* ================================================================ Prestations == */
+async function loadPrestationsScreen() {
+  const listEl = document.getElementById("list-prestations");
+  listEl.innerHTML = '<p class="muted">Chargement…</p>';
+  let rows = [];
+  try {
+    rows = await listPrestationsAll();
+  } catch (e) {
+    reportIfVersionMismatch(e);
+  }
+  const render = (query) => {
+    const filtered = !query ? rows : rows.filter((p) => (p.libelle || "").toLowerCase().includes(query));
+    listEl.innerHTML = "";
+    if (!filtered.length) {
+      listEl.innerHTML = '<p class="entity-empty">Aucune prestation.</p>';
+      return;
+    }
+    for (const p of filtered) listEl.appendChild(renderPrestationCard(p));
+  };
+  wireFilterInput(document.getElementById("filter-prestations"), render);
+  render("");
+
+  document.getElementById("btn-new-prestation").onclick = async () => {
+    const libelle = prompt("Libellé de la nouvelle prestation :");
+    if (!libelle) return;
+    try {
+      const prestation = await createPrestation({ libelle, unite_defaut: "jour", actif: true });
+      state.refs.prestations.push(prestation);
+      rows.unshift(prestation);
+      listEl.prepend(renderPrestationCard(prestation, true));
+    } catch (e) {
+      alert("Création impossible : " + (e.message || e));
+    }
+  };
+}
+
+function renderPrestationCard(p, startOpen = false) {
+  return createAccordionCard({
+    title: p.libelle,
+    subtitle: p.unite_defaut ? "Unité par défaut : " + p.unite_defaut : "",
+    metaHtml: p.actif === false ? '<span class="status-pill status-expired">Inactive</span>' : "",
+    startOpen,
+    bodyBuilder: (body) => {
+      const grid = document.createElement("div");
+      grid.className = "field-grid";
+
+      const libInput = makeTextInput("text", p.libelle);
+      wireAutosaveField(libInput, { table: "prestations", id: p.id, field: "libelle" });
+      grid.appendChild(fieldBlock("Libellé (imprimé sur la lettre de voiture)", libInput));
+
+      const uniteSel = document.createElement("select");
+      for (const [value, label] of [["jour", "jour"], ["heure", "heure"], ["unite", "unité"]]) {
+        const opt = document.createElement("option");
+        opt.value = value;
+        opt.textContent = label;
+        uniteSel.appendChild(opt);
+      }
+      uniteSel.value = p.unite_defaut || "jour";
+      wireAutosaveField(uniteSel, { table: "prestations", id: p.id, field: "unite_defaut" });
+      grid.appendChild(fieldBlock("Unité par défaut", uniteSel));
+
+      const comInput = document.createElement("textarea");
+      comInput.value = p.commentaire_interne || "";
+      comInput.rows = 2;
+      wireAutosaveField(comInput, { table: "prestations", id: p.id, field: "commentaire_interne" });
+      grid.appendChild(fieldBlock("Commentaire interne (jamais imprimé)", comInput));
+
+      body.appendChild(grid);
+
+      const actifWrap = document.createElement("div");
+      actifWrap.className = "field field-checkbox";
+      actifWrap.style.marginTop = "12px";
+      const actifLabel = document.createElement("label");
+      const actifInput = document.createElement("input");
+      actifInput.type = "checkbox";
+      actifInput.checked = p.actif !== false;
+      actifLabel.append(actifInput, " Prestation active");
+      actifWrap.appendChild(actifLabel);
+      actifInput.addEventListener("change", async () => {
+        try {
+          await updatePrestation(p.id, { actif: actifInput.checked });
+          p.actif = actifInput.checked;
+        } catch (e) {
+          alert("Échec : " + (e.message || e));
+        }
+      });
+      body.appendChild(actifWrap);
+    },
+  });
+}
+
 /* ========================================================================= Routage == */
 const ROUTE_LOADERS = {
   today: loadToday,
@@ -2878,6 +3153,7 @@ const ROUTE_LOADERS = {
   camions: loadCamionsScreen,
   chauffeurs: loadChauffeursScreen,
   articles: loadArticlesScreen,
+  prestations: loadPrestationsScreen,
   utilisateurs: loadUtilisateursScreen,
 };
 
@@ -2926,6 +3202,7 @@ function wireStaticUI() {
   wireHeaderAutosave();
 
   document.getElementById("btn-add-tour").addEventListener("click", addTour);
+  document.getElementById("btn-add-prestation").addEventListener("click", handleAddPrestation);
 
   // Sélecteur de vue Chauffeur | Bureau (d).
   document.querySelectorAll(".mode-seg").forEach((b) => {
@@ -3304,7 +3581,7 @@ async function openDemoScreen(name) {
     aujourdhui: "today", "mes-lv": "mes-lv", "tableau-de-bord": "dashboard",
     chauffeurs: "chauffeurs", planning: "planning", projets: "projets",
     clients: "clients", sites: "sites", camions: "camions", articles: "articles",
-    utilisateurs: "utilisateurs", reglages: "reglages",
+    prestations: "prestations", utilisateurs: "utilisateurs", reglages: "reglages",
   };
   if (name === "tour") {
     await navigate("today");

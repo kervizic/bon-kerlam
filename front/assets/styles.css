@@ -496,6 +496,32 @@ input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
 .ligne-row { display: grid; grid-template-columns: 1fr 90px 90px 44px; gap: 6px; align-items: center; }
 .ligne-row select, .ligne-row input { min-height: 48px; padding: 0 10px; }
 
+/* Prestations (H) : bloc à part, AVANT les tours. */
+.form-section-title { font-size: 16px; font-weight: 700; margin: 20px 0 8px; }
+.prestations-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: var(--gap); }
+.prestation-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  grid-template-areas:
+    "prestation prestation del"
+    "qte        unite       unite"
+    "materiel   materiel    materiel";
+  gap: 6px;
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+.prestation-row select, .prestation-row input {
+  min-height: 48px; padding: 0 10px; min-width: 0; width: 100%; box-sizing: border-box;
+}
+.prestation-row .f-prestation-prestation { grid-area: prestation; }
+.prestation-row .btn-delete-prestation { grid-area: del; }
+.prestation-row .f-prestation-quantite { grid-area: qte; }
+.prestation-row .f-prestation-unite { grid-area: unite; }
+.prestation-row .f-prestation-materiel { grid-area: materiel; }
+
 /* --------------------------------------------------------------- Jauge poids */
 .weight-gauge {
   background: var(--surface);

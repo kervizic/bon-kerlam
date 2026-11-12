@@ -43,6 +43,9 @@ const demoDb = DEMO
       projets: seed.cloneSeed(seed.PROJETS),
       sites: seed.cloneSeed(seed.SITES),
       articles: seed.cloneSeed(seed.ARTICLES),
+      materiels: seed.cloneSeed(seed.MATERIELS),
+      prestations: seed.cloneSeed(seed.PRESTATIONS),
+      lv_prestations: seed.cloneSeed(seed.LV_PRESTATIONS),
       utilisateurs: seed.cloneSeed(seed.UTILISATEURS),
       reglages: seed.cloneSeed(seed.REGLAGES),
       lettres_voiture: seed.cloneSeed(seed.LETTRES_VOITURE),
@@ -261,6 +264,18 @@ export async function listArticlesAll() {
   if (DEMO) return demoDb.articles.slice();
   return live.listArticlesAll();
 }
+export async function listPrestations() {
+  if (DEMO) return demoDb.prestations.filter((p) => p.actif);
+  return live.listPrestations();
+}
+export async function listPrestationsAll() {
+  if (DEMO) return demoDb.prestations.slice();
+  return live.listPrestationsAll();
+}
+export async function listMateriels() {
+  if (DEMO) return demoDb.materiels.filter((m) => m.actif);
+  return live.listMateriels();
+}
 export async function listCamions() {
   if (DEMO) return demoDb.camions.filter((c) => c.actif);
   return live.listCamions();
@@ -306,6 +321,7 @@ const dContacts = demoCrudSafe("contacts", "contact");
 const dProjets = demoCrudSafe("projets", "projet");
 const dSites = demoCrudSafe("sites", "site");
 const dArticles = demoCrudSafe("articles", "article");
+const dPrestations = demoCrudSafe("prestations", "prestation");
 const dUtilisateurs = demoCrudSafe("utilisateurs", "utilisateur");
 
 function demoCrudSafe(table, kind) {
@@ -333,6 +349,60 @@ export async function updateSite(id, patch) { return DEMO ? dSites.update(id, pa
 
 export async function createArticle(fields) { return DEMO ? dArticles.create(fields) : live.createArticle(fields); }
 export async function updateArticle(id, patch) { return DEMO ? dArticles.update(id, patch) : live.updateArticle(id, patch); }
+
+export async function createPrestation(fields) { return DEMO ? dPrestations.create(fields) : live.createPrestation(fields); }
+export async function updatePrestation(id, patch) { return DEMO ? dPrestations.update(id, patch) : live.updatePrestation(id, patch); }
+
+/* ------------------------------------------------ Prestations d'une lettre (H) */
+export async function getPrestationsLv(lvId) {
+  if (DEMO) {
+    return demoDb.lv_prestations
+      .filter((p) => String(p.lv_id) === String(lvId))
+      .sort((a, b) => (a.ordre - b.ordre) || (a.id - b.id));
+  }
+  return live.getPrestationsLv(lvId);
+}
+export async function createPrestationLigne(fields) {
+  if (DEMO) {
+    const row = { id: seed.nextId("lvPrestation"), prestation_id: null, quantite: null, unite: null, materiel_id: null, ordre: 1, ...fields };
+    demoDb.lv_prestations.push(row);
+    return row;
+  }
+  return live.createPrestationLigne(fields);
+}
+export async function updatePrestationLigne(id, patch) {
+  if (DEMO) {
+    const row = byId(demoDb.lv_prestations, id);
+    if (row) Object.assign(row, patch);
+    return row;
+  }
+  return live.updatePrestationLigne(id, patch);
+}
+export async function deletePrestationLigne(id) {
+  if (DEMO) {
+    demoDb.lv_prestations = demoDb.lv_prestations.filter((p) => String(p.id) !== String(id));
+    return;
+  }
+  return live.deletePrestationLigne(id);
+}
+export async function rpcDernierePrestation(chauffeurId) {
+  if (DEMO) {
+    const lettres = demoDb.lettres_voiture
+      .filter((lv) => String(lv.chauffeur_id) === String(chauffeurId) && !lv.deleted_at)
+      .sort((a, b) => (a.date_etablissement < b.date_etablissement ? 1 : a.date_etablissement > b.date_etablissement ? -1 : b.id - a.id));
+    for (const lv of lettres) {
+      const lignes = demoDb.lv_prestations
+        .filter((p) => String(p.lv_id) === String(lv.id))
+        .sort((a, b) => (a.ordre - b.ordre) || (a.id - b.id));
+      if (lignes.length) {
+        const l = lignes[0];
+        return { prestation_id: l.prestation_id, unite: l.unite, quantite: l.quantite, materiel_id: l.materiel_id };
+      }
+    }
+    return null;
+  }
+  return live.rpcDernierePrestation(chauffeurId);
+}
 
 export async function createUtilisateur(fields) { return DEMO ? dUtilisateurs.create(fields) : live.createUtilisateur(fields); }
 export async function updateUtilisateur(id, patch) { return DEMO ? dUtilisateurs.update(id, patch) : live.updateUtilisateur(id, patch); }

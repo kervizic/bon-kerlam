@@ -29,11 +29,11 @@ export const todayIso = (() => {
 /* ------------------------------------------------------------------ Camions */
 const nextCamionId = makeCounter(6);
 export const CAMIONS = [
-  { id: 1, immatriculation: "GH-204-TY", type: "10 t benne", ptac_kg: 10000, poids_vide_kg: 4200, charge_utile_kg: 5800, volume_benne_m3: 6.5, ct_echeance: addDays(20), chrono_echeance: addDays(400), actif: true },
-  { id: 2, immatriculation: "QL-812-ZX", type: "15 t bibenne grue", ptac_kg: 15000, poids_vide_kg: 6800, charge_utile_kg: 8200, volume_benne_m3: 9.0, ct_echeance: addDays(-5), chrono_echeance: addDays(300), actif: true },
-  { id: 3, immatriculation: "RB-553-PV", type: "19 t ampliroll", ptac_kg: 19000, poids_vide_kg: 8300, charge_utile_kg: 10700, volume_benne_m3: 12.0, ct_echeance: addDays(120), chrono_echeance: addDays(45), actif: true },
-  { id: 4, immatriculation: "SN-071-KD", type: "26 t porteur grue", ptac_kg: 26000, poids_vide_kg: 11200, charge_utile_kg: 14800, volume_benne_m3: 15.0, ct_echeance: addDays(200), chrono_echeance: addDays(180), actif: true },
-  { id: 5, immatriculation: "TM-399-JH", type: "8 t plateau", ptac_kg: 8000, poids_vide_kg: 3500, charge_utile_kg: 4500, volume_benne_m3: 0, ct_echeance: addDays(250), chrono_echeance: addDays(250), actif: false },
+  { id: 1, immatriculation: "GH-204-TY", type: "10 t benne", ptac_kg: 10000, poids_vide_kg: 4200, charge_utile_kg: 5800, volume_benne_m3: 6.5, ct_echeance: addDays(20), chrono_echeance: addDays(400), actif: true, materiel_id: 1 },
+  { id: 2, immatriculation: "QL-812-ZX", type: "15 t bibenne grue", ptac_kg: 15000, poids_vide_kg: 6800, charge_utile_kg: 8200, volume_benne_m3: 9.0, ct_echeance: addDays(-5), chrono_echeance: addDays(300), actif: true, materiel_id: 2 },
+  { id: 3, immatriculation: "RB-553-PV", type: "19 t ampliroll", ptac_kg: 19000, poids_vide_kg: 8300, charge_utile_kg: 10700, volume_benne_m3: 12.0, ct_echeance: addDays(120), chrono_echeance: addDays(45), actif: true, materiel_id: 4 },
+  { id: 4, immatriculation: "SN-071-KD", type: "26 t porteur grue", ptac_kg: 26000, poids_vide_kg: 11200, charge_utile_kg: 14800, volume_benne_m3: 15.0, ct_echeance: addDays(200), chrono_echeance: addDays(180), actif: true, materiel_id: 3 },
+  { id: 5, immatriculation: "TM-399-JH", type: "8 t plateau", ptac_kg: 8000, poids_vide_kg: 3500, charge_utile_kg: 4500, volume_benne_m3: 0, ct_echeance: addDays(250), chrono_echeance: addDays(250), actif: false, materiel_id: null },
 ];
 
 /* ---------------------------------------------------------------- Chauffeurs */
@@ -85,6 +85,26 @@ export const ARTICLES = [
   { id: 2, nom: "Terre végétale", commentaire_interne: "Vérifier humidité avant pesée", unites: ["t", "m3"], densite_t_m3: 1.4, poids_unitaire_t: null, actif: true },
   { id: 3, nom: "Enrobé à chaud 0/10", commentaire_interne: "Livraison avant 11h impérative (refroidissement)", unites: ["t"], densite_t_m3: null, poids_unitaire_t: null, actif: true },
   { id: 4, nom: "Bordure béton T2", commentaire_interne: "Vendue à l'unité, palette de 40", unites: ["unite"], densite_t_m3: null, poids_unitaire_t: 0.032, actif: true },
+];
+
+/* ------------------------------------------------------------------ Matériels */
+const nextMaterielId = makeCounter(5);
+export const MATERIELS = [
+  { id: 1, libelle: "15 t 6×4 bi-benne grue", actif: true },
+  { id: 2, libelle: "20 t 8×4 bi-benne", actif: true },
+  { id: 3, libelle: "20 t 8×4 bi-benne grue", actif: true },
+  { id: 4, libelle: "20 t 8×4 ampliroll grue", actif: true },
+  { id: 5, libelle: "Mini-pelle sur chenilles 2–2,8 t", actif: true },
+];
+
+/* ----------------------------------------------------------------- Prestations */
+const nextPrestationId = makeCounter(5);
+export const PRESTATIONS = [
+  { id: 1, libelle: "Jour de régie avec chauffeur", unite_defaut: "jour", commentaire_interne: null, actif: true },
+  { id: 2, libelle: "Heure supplémentaire jour", unite_defaut: "heure", commentaire_interne: null, actif: true },
+  { id: 3, libelle: "Heure supplémentaire nuit", unite_defaut: "heure", commentaire_interne: null, actif: true },
+  { id: 4, libelle: "Heure supplémentaire week-end", unite_defaut: "heure", commentaire_interne: null, actif: true },
+  { id: 5, libelle: "Astreinte", unite_defaut: "unite", commentaire_interne: null, actif: true },
 ];
 
 /* ---------------------------------------------------------------- Utilisateurs */
@@ -179,6 +199,13 @@ export const TOUR_LIGNES = [
   { id: 3, tour_id: 2, article_id: 4, quantite: 20, unite: "unite" },
 ];
 
+/* ---------------------------------------------------- Prestations d'une lettre */
+const nextLvPrestationId = makeCounter(2);
+export const LV_PRESTATIONS = [
+  { id: 1, lv_id: 1, prestation_id: 1, quantite: 1, unite: "jour", materiel_id: 1, ordre: 1 },
+  { id: 2, lv_id: 2, prestation_id: 2, quantite: 2, unite: "heure", materiel_id: 2, ordre: 1 },
+];
+
 /* ------------------------------------------------------------------- Helpers */
 export function nextId(kind) {
   switch (kind) {
@@ -189,6 +216,9 @@ export function nextId(kind) {
     case "projet": return nextProjetId();
     case "site": return nextSiteId();
     case "article": return nextArticleId();
+    case "materiel": return nextMaterielId();
+    case "prestation": return nextPrestationId();
+    case "lvPrestation": return nextLvPrestationId();
     case "utilisateur": return nextUtilisateurId();
     case "lv": return nextLvId();
     case "tour": return nextTourId();
