@@ -4,6 +4,40 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.14] — 2026-11-12
+
+Correctif (retours iPhone de Manu).
+
+### Logo
+- **Régression corrigée** : sur iPhone, le logo KERLAM de l'en-tête retombait en
+  police système (Arial) au lieu de **Sarpanch**. La police (réservée au logo
+  depuis beta.11) est désormais **préchargée** (`<link rel="preload">`),
+  **précachée par le service worker** et servie **immuable** (`?v=`), et déclarée
+  en **`font-display: block`** (plus de flash). Sarpanch utilisée pour le logo
+  partout — **en-tête, écran de connexion, PDF** — et toujours interdite ailleurs
+  (`scripts/check-sarpanch.py`).
+- **Test Playwright** : vérifie via `document.fonts` + `getComputedStyle` que le
+  logo est bien rendu en Sarpanch (police chargée) et capture un gros plan du logo
+  (clair + sombre).
+
+### Formulaire
+- **Lignes de chargement** : le nom d'article occupe toute la largeur (sur sa
+  propre ligne) ; quantité + unité + suppression en dessous. Nom complet lisible
+  sur 393 px (plus de « Grave 0/… » tronqué).
+
+### Libellés
+- **« Projet / régie » → « Projet »** partout (front, PDF, tests).
+
+### Catalogue / parc
+- **Article commun ajouté** : « DIB (déchets industriels banals) »
+  (migration 0016 additive et idempotente).
+- **Matériel « 20 t 8×4 bi-benne »** (SANS grue) **désactivé** (`actif=false`,
+  jamais supprimé) ; les 4 autres restent actifs.
+
+### Captures CI
+- Playwright force la locale **fr-FR** et le fuseau **Europe/Paris** (dates en
+  JJ/MM/AAAA, heures en 24 h).
+
 ## [0.1.0-beta.13] — 2026-11-12
 
 Item **H** du lot reporté : bloc **« Prestations »**, à part, placé **AVANT les

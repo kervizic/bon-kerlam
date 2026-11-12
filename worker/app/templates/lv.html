@@ -9,6 +9,7 @@
     src: url("sarpanch-900.woff2") format("woff2");
     font-weight: 900;
     font-style: normal;
+    font-display: block;
   }
   @page { size: A4; margin: 14mm 14mm 10mm 14mm; }
   * { box-sizing: border-box; }
@@ -57,7 +58,7 @@
     <div class="row">
       <div>Véhicule : <b>{{ lv.camion or "—" }}</b></div>
       <div>Chauffeur : <b>{{ lv.chauffeur or "—" }}</b></div>
-      <div>Projet / régie : <b>{{ lv.projet or "—" }}</b></div>
+      <div>Projet : <b>{{ lv.projet or "—" }}</b></div>
     </div>
     {% if lv.heures_regie %}<div class="muted">Heures de régie : {{ lv.heures_regie }}</div>{% endif %}
   </div>

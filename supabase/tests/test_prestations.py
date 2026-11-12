@@ -34,6 +34,36 @@ def test_seed_materiels(conn):
     assert len(MATERIELS_ATTENDUS & libelles) == 5
 
 
+def test_materiel_bi_benne_sans_grue_desactive(conn):
+    # Migration 0016 : « 20 t 8×4 bi-benne » (SANS grue) désactivé (conservé), les
+    # 4 autres restent actifs.
+    as_postgres(conn)
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT actif FROM bon.materiels WHERE libelle = '20 t 8×4 bi-benne'"
+        )
+        row = cur.fetchone()
+        assert row is not None            # jamais supprimé
+        assert row[0] is False            # désactivé
+        cur.execute(
+            "SELECT count(*) FROM bon.materiels "
+            "WHERE created_by='seed' AND actif IS TRUE "
+            "AND libelle <> '20 t 8×4 bi-benne'"
+        )
+        assert cur.fetchone()[0] == 4     # les 4 autres restent actifs
+
+
+def test_seed_article_dib(conn):
+    # Migration 0016 : article commun « DIB (déchets industriels banals) ».
+    as_postgres(conn)
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT count(*) FROM bon.articles "
+            "WHERE nom = 'DIB (déchets industriels banals)'"
+        )
+        assert cur.fetchone()[0] == 1
+
+
 def test_seed_prestations(conn):
     as_postgres(conn)
     with conn.cursor() as cur:
