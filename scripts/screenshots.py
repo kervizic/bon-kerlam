@@ -142,6 +142,37 @@ def shoot_signer(ctx, prefix: str) -> None:
             page.close()
 
 
+def shoot_prestations(ctx, prefix: str) -> None:
+    """Bloc « Prestations » (H) : formulaire chauffeur en pleine page (le bloc est
+    AVANT les tours) en clair + sombre, et écran bureau « Prestations »."""
+    for theme in ("clair", "sombre"):
+        page = ctx.new_page()
+        try:
+            page.goto(f"{BASE}?demo=1&screen=today&role=chauffeur&theme={theme}", wait_until="networkidle")
+            page.wait_for_timeout(600)
+            page.locator("#prestations-list .prestation-row").first.scroll_into_view_if_needed()
+            page.wait_for_timeout(200)
+            page.screenshot(path=str(OUT / f"{prefix}-formulaire-prestations-{theme}.png"), full_page=True)
+            check_no_hscroll(page, f"{prefix}-formulaire-prestations-{theme}")
+            print(f"   formulaire-prestations-{theme}")
+        except Exception as exc:  # noqa: BLE001
+            print(f"   !! prestations-form/{theme}: {exc}")
+        finally:
+            page.close()
+    for theme in ("clair", "sombre"):
+        page = ctx.new_page()
+        try:
+            page.goto(f"{BASE}?demo=1&screen=prestations&role=bureau&theme={theme}", wait_until="networkidle")
+            page.wait_for_timeout(600)
+            page.screenshot(path=str(OUT / f"{prefix}-prestations-bureau-{theme}.png"), full_page=True)
+            check_no_hscroll(page, f"{prefix}-prestations-bureau-{theme}")
+            print(f"   prestations-bureau-{theme}")
+        except Exception as exc:  # noqa: BLE001
+            print(f"   !! prestations-bureau/{theme}: {exc}")
+        finally:
+            page.close()
+
+
 def main() -> int:
     with sync_playwright() as p:
         browser = p.chromium.launch()
@@ -162,6 +193,7 @@ def main() -> int:
             shoot(iphone, "iphone-chauffeur", route, "clair", label, role="chauffeur")
         shoot(iphone, "iphone-chauffeur", "today", "sombre", "aujourdhui", role="chauffeur")
         shoot_signer(iphone, "iphone-chauffeur")
+        shoot_prestations(iphone, "iphone")
         iphone.close()
 
         ipad = browser.new_context(viewport=IPAD, device_scale_factor=2, is_mobile=True, has_touch=True)
