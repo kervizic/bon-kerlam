@@ -72,12 +72,16 @@ def test_chauffeur_ne_peut_pas_ecrire_materiels(conn, actors):
 
 
 def test_chauffeur_ne_peut_pas_modifier_prestations(conn, actors):
-    # Écriture structurante (UPDATE/DELETE) d'une prestation réservée au bureau.
+    # UPDATE/DELETE d'une prestation réservés au bureau. La RLS (policy UPDATE
+    # USING bon.is_bureau()) masque les lignes à l'UPDATE du chauffeur : 0 ligne
+    # touchée (pas d'exception, comme pour toute RLS de restriction de lignes), et
+    # les prestations restent actives.
     as_user(conn, actors["chauffeur"])
-    with pytest.raises(psycopg.errors.InsufficientPrivilege):
-        with conn.transaction():
-            with conn.cursor() as cur:
-                cur.execute("UPDATE bon.prestations SET actif=false WHERE created_by='seed'")
+    with conn.cursor() as cur:
+        cur.execute("UPDATE bon.prestations SET actif=false WHERE created_by='seed'")
+        assert cur.rowcount == 0
+        cur.execute("SELECT bool_and(actif) FROM bon.prestations WHERE created_by='seed'")
+        assert cur.fetchone()[0] is True
 
 
 def test_chauffeur_peut_creer_prestation(conn, actors):
