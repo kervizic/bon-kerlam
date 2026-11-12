@@ -28,8 +28,12 @@
   font-family: "Sarpanch";
   font-style: normal;
   font-weight: 900;
-  font-display: swap;
-  src: url("/assets/fonts/sarpanch-900.woff2") format("woff2");
+  /* block : le texte du logo reste invisible le temps (court) du chargement de
+     la police, puis s'affiche en Sarpanch — jamais de flash en Arial. La police
+     est préchargée (<link rel="preload"> dans index.html) et précachée par le
+     service worker, donc disponible dès le premier rendu, même hors ligne. */
+  font-display: block;
+  src: url("/assets/fonts/sarpanch-900.woff2?v=14") format("woff2");
 }
 
 :root {
@@ -493,7 +497,21 @@ input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
 .nav-link { text-decoration: none; }
 
 .lignes-list { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
-.ligne-row { display: grid; grid-template-columns: 1fr 90px 90px 44px; gap: 6px; align-items: center; }
+/* Nom d'article sur sa propre ligne (pleine largeur, nom complet lisible sur un
+   écran de 393 px) ; quantité + unité + suppression sur la ligne du dessous. */
+.ligne-row {
+  display: grid;
+  grid-template-columns: 1fr auto 44px;
+  grid-template-areas:
+    "article article article"
+    "quantite unite delete";
+  gap: 6px;
+  align-items: center;
+}
+.ligne-row .f-ligne-article  { grid-area: article; width: 100%; min-width: 0; }
+.ligne-row .f-ligne-quantite { grid-area: quantite; width: 100%; min-width: 0; }
+.ligne-row .f-ligne-unite    { grid-area: unite; }
+.ligne-row .btn-delete-ligne { grid-area: delete; }
 .ligne-row select, .ligne-row input { min-height: 48px; padding: 0 10px; }
 
 /* Prestations (H) : bloc à part, AVANT les tours. */

@@ -58,6 +58,13 @@ def test_zone_signature_reservee():
 def test_mentions_legales_art4():
     html = pdf.render_html(_context())
     assert "article 4" in html.lower()
+
+
+def test_libelle_projet_sans_regie():
+    # Le libellé est « Projet » seul (plus « Projet / régie »).
+    html = pdf.render_html(_context())
+    assert "Projet :" in html
+    assert "Projet / régie" not in html
     assert "9 novembre 1999" in html
     assert "État récapitulatif des tours" in html
 

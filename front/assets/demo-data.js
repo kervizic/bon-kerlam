@@ -79,19 +79,20 @@ export const SITES = [
 ];
 
 /* -------------------------------------------------------------------- Articles */
-const nextArticleId = makeCounter(4);
+const nextArticleId = makeCounter(5);
 export const ARTICLES = [
   { id: 1, nom: "Grave 0/31,5", commentaire_interne: "Fournisseur habituel : carrière Démo-Sud", unites: ["t", "m3"], densite_t_m3: 1.8, poids_unitaire_t: null, actif: true },
   { id: 2, nom: "Terre végétale", commentaire_interne: "Vérifier humidité avant pesée", unites: ["t", "m3"], densite_t_m3: 1.4, poids_unitaire_t: null, actif: true },
   { id: 3, nom: "Enrobé à chaud 0/10", commentaire_interne: "Livraison avant 11h impérative (refroidissement)", unites: ["t"], densite_t_m3: null, poids_unitaire_t: null, actif: true },
   { id: 4, nom: "Bordure béton T2", commentaire_interne: "Vendue à l'unité, palette de 40", unites: ["unite"], densite_t_m3: null, poids_unitaire_t: 0.032, actif: true },
+  { id: 5, nom: "DIB (déchets industriels banals)", commentaire_interne: null, unites: ["t", "m3", "unite"], densite_t_m3: null, poids_unitaire_t: null, actif: true },
 ];
 
 /* ------------------------------------------------------------------ Matériels */
 const nextMaterielId = makeCounter(5);
 export const MATERIELS = [
   { id: 1, libelle: "15 t 6×4 bi-benne grue", actif: true },
-  { id: 2, libelle: "20 t 8×4 bi-benne", actif: true },
+  { id: 2, libelle: "20 t 8×4 bi-benne", actif: false },
   { id: 3, libelle: "20 t 8×4 bi-benne grue", actif: true },
   { id: 4, libelle: "20 t 8×4 ampliroll grue", actif: true },
   { id: 5, libelle: "Mini-pelle sur chenilles 2–2,8 t", actif: true },

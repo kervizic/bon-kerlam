@@ -40,6 +40,11 @@ CHAUFFEUR_SCREENS = [
 
 overflow_failures: list[str] = []
 status_failures: list[str] = []
+font_failures: list[str] = []
+
+# Locale + fuseau forcés sur tous les contextes : dates en JJ/MM/AAAA et heures en
+# 24 h (toformat FR), indépendamment du fuseau du runner CI.
+LOCALE = {"locale": "fr-FR", "timezone_id": "Europe/Paris"}
 
 # Codes bruts de bon.statut_lv : ne doivent JAMAIS s'afficher (on veut les
 # libellés français, cf. assets/status-labels.js).
@@ -173,13 +178,89 @@ def shoot_prestations(ctx, prefix: str) -> None:
             page.close()
 
 
+def shoot_logo(ctx, prefix: str) -> None:
+    """Régression iPhone : le logo KERLAM de l'en-tête doit être rendu en Sarpanch
+    (police chargée), pas en police système. On vérifie via document.fonts.check +
+    getComputedStyle, et on capture un GROS PLAN du logo (clair + sombre)."""
+    for theme in ("clair", "sombre"):
+        page = ctx.new_page()
+        try:
+            page.goto(
+                f"{BASE}?demo=1&screen=dashboard&role=bureau&theme={theme}",
+                wait_until="networkidle",
+            )
+            page.wait_for_timeout(500)
+            logo = page.locator(".topbar .logo").first
+            logo.scroll_into_view_if_needed()
+            info = page.evaluate(
+                """async () => {
+                    await document.fonts.ready;
+                    try { await document.fonts.load('900 40px "Sarpanch"'); } catch (e) {}
+                    const loaded = document.fonts.check('900 40px "Sarpanch"');
+                    const el = document.querySelector('.topbar .logo');
+                    const fam = el ? getComputedStyle(el).fontFamily : '';
+                    return { loaded, fam };
+                }"""
+            )
+            fam = info.get("fam") or ""
+            if not info.get("loaded"):
+                font_failures.append(
+                    f"logo-{theme}: police Sarpanch non chargée (document.fonts.check=false)"
+                )
+            if "sarpanch" not in fam.lower():
+                font_failures.append(
+                    f"logo-{theme}: font-family calculée « {fam} » n'utilise pas Sarpanch"
+                )
+            out = OUT / f"{prefix}-logo-sarpanch-{theme}.png"
+            logo.screenshot(path=str(out))
+            print(f"   logo-sarpanch-{theme} (chargée: {info.get('loaded')}, famille: {fam[:32]})")
+        except Exception as exc:  # noqa: BLE001
+            font_failures.append(f"logo-{theme}: exception {exc}")
+            print(f"   !! logo/{theme}: {exc}")
+        finally:
+            page.close()
+
+
+def shoot_login(ctx, prefix: str) -> None:
+    """Écran de connexion (#screen-login) : logo KERLAM en Sarpanch + choix de
+    méthode. Le mode démo court-circuite l'auth : on révèle l'écran de connexion
+    (markup statique) directement par le DOM pour la capture."""
+    for theme in ("clair", "sombre"):
+        page = ctx.new_page()
+        try:
+            page.goto(f"{BASE}?demo=1&theme={theme}", wait_until="networkidle")
+            page.wait_for_timeout(400)
+            page.evaluate(
+                """() => {
+                    document.getElementById('app-shell').hidden = true;
+                    document.getElementById('screen-unauthorized').hidden = true;
+                    const login = document.getElementById('screen-login');
+                    login.hidden = false;
+                    const choice = document.getElementById('login-choice');
+                    if (choice) choice.hidden = false;
+                }"""
+            )
+            page.wait_for_timeout(200)
+            page.screenshot(path=str(OUT / f"{prefix}-connexion-{theme}.png"), full_page=False)
+            check_no_hscroll(page, f"{prefix}-connexion-{theme}")
+            print(f"   connexion-{theme}")
+        except Exception as exc:  # noqa: BLE001
+            print(f"   !! connexion/{theme}: {exc}")
+        finally:
+            page.close()
+
+
 def main() -> int:
     with sync_playwright() as p:
         browser = p.chromium.launch()
         iphone = browser.new_context(
             viewport=IPHONE, device_scale_factor=3, is_mobile=True, has_touch=True,
-            user_agent=IOS26_UA,
+            user_agent=IOS26_UA, **LOCALE,
         )
+        # Logo KERLAM : vérifie que la police Sarpanch est bien chargée et appliquée
+        # (régression iPhone : le logo retombait en police système) + gros plan.
+        shoot_logo(iphone, "iphone")
+        shoot_login(iphone, "iphone")
         # Bureau (cas de Manu) : clair + sombre sur le tableau de bord et une LV.
         for route, label in BUREAU_SCREENS:
             shoot(iphone, "iphone-bureau", route, "clair", label, role="bureau")
@@ -196,11 +277,11 @@ def main() -> int:
         shoot_prestations(iphone, "iphone")
         iphone.close()
 
-        ipad = browser.new_context(viewport=IPAD, device_scale_factor=2, is_mobile=True, has_touch=True)
+        ipad = browser.new_context(viewport=IPAD, device_scale_factor=2, is_mobile=True, has_touch=True, **LOCALE)
         shoot(ipad, "ipad", "dashboard", "clair", "tableau-de-bord", role="bureau")
         ipad.close()
 
-        desktop = browser.new_context(viewport=DESKTOP)
+        desktop = browser.new_context(viewport=DESKTOP, **LOCALE)
         shoot(desktop, "bureau", "dashboard", "clair", "tableau-de-bord", check=False)
         shoot(desktop, "bureau", "chauffeurs", "clair", "chauffeurs", check=False)
         desktop.close()
@@ -208,7 +289,7 @@ def main() -> int:
         # Page /installer/ (mobile iOS 26).
         inst = browser.new_context(
             viewport=IPHONE, device_scale_factor=3, is_mobile=True,
-            has_touch=True, user_agent=IOS26_UA,
+            has_touch=True, user_agent=IOS26_UA, **LOCALE,
         )
         ip = inst.new_page()
         try:
@@ -239,6 +320,13 @@ def main() -> int:
         rc = 1
     else:
         print("OK : aucun code de statut brut affiché.")
+    if font_failures:
+        print("LOGO NON RENDU EN SARPANCH (police du logo cassée) :")
+        for f in font_failures:
+            print("  -", f)
+        rc = 1
+    else:
+        print("OK : logo rendu en Sarpanch (police chargée).")
     return rc
 
 

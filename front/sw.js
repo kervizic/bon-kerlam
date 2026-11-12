@@ -19,12 +19,28 @@
  */
 "use strict";
 
-const VERSION = "0.1.0-beta.13";
+const VERSION = "0.1.0-beta.14";
 const CACHE_NAME = `bon-kerlam-${VERSION}`;
 const VERSIONED_QS_RE = /\?v=/;
 
-self.addEventListener("install", () => {
-  self.skipWaiting();
+// Précache minimal : la police du logo (Sarpanch 900). Sans ça, le logo retombait
+// en police système sur iPhone (PWA lancée depuis l'écran d'accueil / réseau
+// capricieux) tant que la police n'avait pas été récupérée. Elle est versionnée
+// (?v=…) donc servie cache-first et immuable.
+const PRECACHE = ["/assets/fonts/sarpanch-900.woff2?v=14"];
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    (async () => {
+      try {
+        const cache = await caches.open(CACHE_NAME);
+        await cache.addAll(PRECACHE);
+      } catch (err) {
+        // Ne JAMAIS bloquer l'installation du SW sur un précache qui échoue.
+      }
+      await self.skipWaiting();
+    })()
+  );
 });
 
 self.addEventListener("activate", (event) => {
