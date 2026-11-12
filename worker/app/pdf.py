@@ -113,7 +113,9 @@ def build_context(lv_id: int) -> dict[str, Any]:
           LEFT JOIN bon.camions c     ON c.id = lv.camion_id
           LEFT JOIN bon.chauffeurs ch ON ch.id = lv.chauffeur_id
           LEFT JOIN bon.projets p     ON p.id = lv.projet_id
-          LEFT JOIN bon.clients cl    ON cl.id = p.client_id
+          -- Client référencé directement sur la lettre (projet facultatif) ;
+          -- repli sur le client du projet pour les lettres non reprises.
+          LEFT JOIN bon.clients cl    ON cl.id = COALESCE(lv.client_id, p.client_id)
          WHERE lv.id = %s
         """,
         (lv_id,),
