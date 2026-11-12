@@ -221,6 +221,35 @@ def shoot_logo(ctx, prefix: str) -> None:
             page.close()
 
 
+def shoot_login(ctx, prefix: str) -> None:
+    """Écran de connexion (#screen-login) : logo KERLAM en Sarpanch + choix de
+    méthode. Le mode démo court-circuite l'auth : on révèle l'écran de connexion
+    (markup statique) directement par le DOM pour la capture."""
+    for theme in ("clair", "sombre"):
+        page = ctx.new_page()
+        try:
+            page.goto(f"{BASE}?demo=1&theme={theme}", wait_until="networkidle")
+            page.wait_for_timeout(400)
+            page.evaluate(
+                """() => {
+                    document.getElementById('app-shell').hidden = true;
+                    document.getElementById('screen-unauthorized').hidden = true;
+                    const login = document.getElementById('screen-login');
+                    login.hidden = false;
+                    const choice = document.getElementById('login-choice');
+                    if (choice) choice.hidden = false;
+                }"""
+            )
+            page.wait_for_timeout(200)
+            page.screenshot(path=str(OUT / f"{prefix}-connexion-{theme}.png"), full_page=False)
+            check_no_hscroll(page, f"{prefix}-connexion-{theme}")
+            print(f"   connexion-{theme}")
+        except Exception as exc:  # noqa: BLE001
+            print(f"   !! connexion/{theme}: {exc}")
+        finally:
+            page.close()
+
+
 def main() -> int:
     with sync_playwright() as p:
         browser = p.chromium.launch()
@@ -231,6 +260,7 @@ def main() -> int:
         # Logo KERLAM : vérifie que la police Sarpanch est bien chargée et appliquée
         # (régression iPhone : le logo retombait en police système) + gros plan.
         shoot_logo(iphone, "iphone")
+        shoot_login(iphone, "iphone")
         # Bureau (cas de Manu) : clair + sombre sur le tableau de bord et une LV.
         for route, label in BUREAU_SCREENS:
             shoot(iphone, "iphone-bureau", route, "clair", label, role="bureau")
