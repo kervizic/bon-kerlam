@@ -164,9 +164,12 @@ jobs:
           SQL
       - name: Vérification du seed (articles + sites communs)
         run: |
-          docker exec bon-db psql -U postgres -tAc "SELECT count(*) FROM bon.articles" | grep -qx 10
+          # 9 articles (0007) + 3 ajoutés par 0019 (Enrobé, Matériel divers, Container) = 12.
+          docker exec bon-db psql -U postgres -tAc "SELECT count(*) FROM bon.articles" | grep -qx 12
           docker exec bon-db psql -U postgres -tAc "SELECT count(*) FROM bon.sites WHERE portee='commun'" | grep -qx 9
-          echo "seed ok (10 articles, 9 sites communs)"
+          # Réconciliation 0019 : noms legacy absents.
+          docker exec bon-db psql -U postgres -tAc "SELECT count(*) FROM bon.articles WHERE nom IN ('Béton de démolition','Engins')" | grep -qx 0
+          echo "seed ok (12 articles, 9 sites communs, noms réconciliés)"
       - name: Build + démarrage auth, rest, worker
         working-directory: deploy
         run: docker compose up -d --build auth rest worker
