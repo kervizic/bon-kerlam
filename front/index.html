@@ -206,11 +206,14 @@
             <button type="button" id="btn-pdf-today" class="icon-btn btn-pdf" title="Exporter en PDF" aria-label="Exporter en PDF">
               <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M12 18v-6"/><path d="m9 15 3 3 3-3"/></svg>
             </button>
+            <button type="button" id="btn-delete-lv" class="icon-btn btn-delete-lv" title="Supprimer la lettre" aria-label="Supprimer la lettre" hidden>
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6M14 11v6"/></svg>
+            </button>
           </div>
 
           <form id="lv-header-form" class="lv-header-form" autocomplete="off">
             <div class="field">
-              <label for="f-date">Date d'établissement</label>
+              <label for="f-date">Date</label>
               <input type="date" id="f-date" name="date_etablissement">
             </div>
             <div class="field">
@@ -245,9 +248,10 @@
               <label for="f-dest-autre">Destinataire (saisie libre)</label>
               <input type="text" id="f-dest-autre" name="destinataire" placeholder="Nom du destinataire">
             </div>
-            <div class="field">
-              <label for="f-heures-regie">Heures régie</label>
-              <input type="text" id="f-heures-regie" name="heures_regie" placeholder="ex. 7h30 - 16h00">
+            <div class="field field-heures">
+              <label>Heures</label>
+              <div id="creneaux-list" class="creneaux-list"></div>
+              <button type="button" id="btn-add-creneau" class="btn btn-secondary btn-sm btn-add-creneau">+ Ajouter un créneau</button>
             </div>
           </form>
 
@@ -270,6 +274,7 @@
           <div class="mes-lv-toolbar">
             <label class="check-inline"><input type="checkbox" id="mes-lv-select-all"> Tout sélectionner</label>
             <label class="check-inline mes-lv-filter"><input type="checkbox" id="mes-lv-show-signees"> Signées</label>
+            <label class="check-inline mes-lv-filter"><input type="checkbox" id="mes-lv-show-corbeille"> Corbeille</label>
           </div>
           <div id="mes-lv-list" class="mes-lv-list">
             <p class="muted">Chargement…</p>
@@ -540,6 +545,40 @@
     </div>
   </div>
 
+  <!-- =================================== Feuille « supprimer / annuler la lettre » -->
+  <div id="delete-sheet" class="sheet-overlay" hidden>
+    <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="delete-title">
+      <div class="sheet-header">
+        <h2 id="delete-title">Supprimer la lettre</h2>
+        <button type="button" class="icon-btn" id="btn-delete-close" aria-label="Fermer"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      </div>
+
+      <!-- Brouillon sans numéro : corbeille (restaurable 30 jours). -->
+      <div id="delete-brouillon" hidden>
+        <p class="muted">Ce brouillon part à la corbeille. Vous pourrez le restaurer pendant 30 jours.</p>
+        <button type="button" id="btn-delete-confirm-brouillon" class="btn btn-danger btn-block is-spaced">Mettre à la corbeille</button>
+      </div>
+
+      <!-- Lettre numérotée non signée : annulation (numéro conservé) + motif. -->
+      <div id="delete-annulation" hidden>
+        <p class="muted">Cette lettre numérotée sera annulée. Le numéro est conservé pour la traçabilité et la lettre disparaît des listes.</p>
+        <div class="field">
+          <label for="f-annul-categorie">Motif</label>
+          <select id="f-annul-categorie">
+            <option value="doublon">Doublon</option>
+            <option value="erreur">Erreur</option>
+            <option value="autre">Autre</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="f-annul-motif">Précision (facultatif)</label>
+          <input type="text" id="f-annul-motif" placeholder="Précision du motif">
+        </div>
+        <button type="button" id="btn-delete-confirm-annulation" class="btn btn-danger btn-block is-spaced">Annuler la lettre</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ============================================ Feuille « aide à l'installation » -->
   <div id="install-help-sheet" class="sheet-overlay" hidden>
     <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="install-help-title">
@@ -575,10 +614,6 @@
           <a class="icon-btn nav-link" target="_blank" rel="noopener" aria-label="Ouvrir dans l'app de navigation" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg></a>
         </div>
       </div>
-      <div class="field">
-        <label>Heure de départ</label>
-        <input type="time" class="f-heure-depart">
-      </div>
       <div class="lignes-list"></div>
       <button type="button" class="btn btn-secondary btn-sm btn-add-ligne">+ Ligne d'article</button>
     </article>
@@ -587,7 +622,7 @@
   <template id="tpl-ligne">
     <div class="ligne-row">
       <select class="f-ligne-article"><option value="">Article…</option></select>
-      <input type="number" class="f-ligne-quantite" placeholder="Qté" step="0.001" inputmode="decimal">
+      <input type="text" class="f-ligne-quantite" placeholder="Qté" inputmode="decimal">
       <select class="f-ligne-unite">
         <option value="t">t</option>
         <option value="m3">m³</option>
@@ -601,7 +636,7 @@
   <template id="tpl-prestation">
     <div class="prestation-row">
       <select class="f-prestation-prestation"><option value="">Prestation…</option></select>
-      <input type="number" class="f-prestation-quantite" placeholder="Qté" step="0.5" min="0" inputmode="decimal">
+      <input type="text" class="f-prestation-quantite" placeholder="Qté" inputmode="decimal">
       <select class="f-prestation-unite">
         <option value="jour">jour</option>
         <option value="heure">heure</option>
@@ -609,6 +644,15 @@
       </select>
       <select class="f-prestation-materiel"><option value="">Matériel…</option></select>
       <button type="button" class="icon-btn btn-delete-prestation" aria-label="Supprimer la prestation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6M14 11v6"/></svg></button>
+    </div>
+  </template>
+
+  <template id="tpl-creneau">
+    <div class="creneau-row">
+      <input type="time" class="f-creneau-debut" aria-label="Heure de début">
+      <span class="creneau-sep" aria-hidden="true">–</span>
+      <input type="time" class="f-creneau-fin" aria-label="Heure de fin">
+      <button type="button" class="icon-btn btn-delete-creneau" aria-label="Supprimer le créneau"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
     </div>
   </template>
 
@@ -630,8 +674,8 @@
   </template>
 
   <!-- ================================================================== Scripts -->
-  <script src="/assets/config.js?v=14"></script>
+  <script src="/assets/config.js?v=15"></script>
   <script src="/assets/vendor/supabase/supabase.js"></script>
-  <script type="module" src="/assets/app.js?v=14"></script>
+  <script type="module" src="/assets/app.js?v=15"></script>
 </body>
 </html>

@@ -540,6 +540,27 @@ input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
 .prestation-row .f-prestation-unite { grid-area: unite; }
 .prestation-row .f-prestation-materiel { grid-area: materiel; }
 
+/* --------------------------------------------- Heures en créneaux (beta.15) */
+.creneaux-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.creneau-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr 44px;
+  gap: 8px;
+  align-items: center;
+}
+.creneau-row input[type="time"] { min-height: 48px; padding: 0 10px; width: 100%; min-width: 0; box-sizing: border-box; }
+.creneau-sep { text-align: center; color: var(--text-muted); }
+.btn-add-creneau { align-self: flex-start; }
+
+/* ------------------------------------- Suppression / annulation (beta.15) */
+.btn-danger {
+  background: var(--c-red);
+  color: #fff;
+  border: 1px solid var(--c-red);
+}
+.btn-danger:hover { filter: brightness(0.95); }
+.corbeille-row-info { background: none; border: none; cursor: default; text-align: left; }
+
 /* --------------------------------------------------------------- Jauge poids */
 .weight-gauge {
   background: var(--surface);

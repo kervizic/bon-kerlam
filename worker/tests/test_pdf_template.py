@@ -119,6 +119,30 @@ def test_pdf_date_francaise_et_siren():
     ctx["transporteur"] = {"nom": "KERLAM", "adresse": "KERLAM — 2 rue des Plantes, 77410 Villevaudé",
                            "siren": "838 377 331"}
     html = pdf.render_html(ctx)
-    assert "Établie le 11/11/2026" in html
+    # Une seule date « Établie et prise en charge le … » (décision beta.15).
+    assert "Établie et prise en charge le 11/11/2026" in html
+    assert "Prise en charge :" not in html
     assert "838 377 331" in html
     assert "2 rue des Plantes" in html
+
+
+def test_format_creneaux():
+    assert pdf.format_creneaux([{"debut": "08:00", "fin": "17:00"}]) == "8h00–17h00"
+    assert (
+        pdf.format_creneaux([{"debut": "08:00", "fin": "12:00"}, {"debut": "13:00", "fin": "17:00"}])
+        == "8h00–12h00 · 13h00–17h00"
+    )
+    # Fin < début (astreinte, lendemain) : rendu tel quel, sans mention.
+    assert pdf.format_creneaux([{"debut": "22:00", "fin": "06:00"}]) == "22h00–6h00"
+    assert pdf.format_creneaux([]) == ""
+    assert pdf.format_creneaux(None) == ""
+
+
+def test_heures_creneaux_sur_pdf():
+    ctx = _context()
+    ctx["lv"].pop("heures_regie", None)
+    ctx["lv"]["heures_aff"] = pdf.format_creneaux(
+        [{"debut": "08:00", "fin": "12:00"}, {"debut": "13:00", "fin": "17:00"}]
+    )
+    html = pdf.render_html(ctx)
+    assert "Heures 8h00–12h00 · 13h00–17h00" in html

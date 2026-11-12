@@ -60,6 +60,39 @@ def _fr_date(value) -> str:
     return s
 
 
+def _fr_heure(value) -> str:
+    """Heure « HH:MM » -> « 8h00 » (format court français, sans AM/PM)."""
+    s = str(value or "").strip()
+    if ":" not in s:
+        return s
+    h, _, m = s.partition(":")
+    try:
+        return f"{int(h)}h{int(m):02d}"
+    except ValueError:
+        return s
+
+
+def format_creneaux(heures) -> str:
+    """Liste de créneaux [{debut,fin}, …] -> « 8h00–12h00 · 13h00–17h00 ».
+
+    Chaîne vide si aucun créneau exploitable. Une fin < début (astreinte, passage
+    au lendemain) est rendue telle quelle, sans mention.
+    """
+    if not heures:
+        return ""
+    morceaux = []
+    for cr in heures:
+        if not isinstance(cr, dict):
+            continue
+        debut = _fr_heure(cr.get("debut"))
+        fin = _fr_heure(cr.get("fin"))
+        if debut and fin:
+            morceaux.append(f"{debut}–{fin}")
+        elif debut:
+            morceaux.append(debut)
+    return " · ".join(morceaux)
+
+
 TRANSPORTEUR = {
     "nom": "KERLAM",
     "adresse": f"KERLAM — {settings.kerlam_adresse}",
@@ -73,7 +106,7 @@ def build_context(lv_id: int) -> dict[str, Any]:
         """
         SELECT lv.id, lv.numero, lv.date_etablissement, lv.date_prise_en_charge,
                lv.expediteur, lv.destinataire, lv.dest_identique, lv.heures_regie,
-               lv.statut,
+               lv.heures, lv.statut,
                c.immatriculation AS camion, ch.nom AS chauffeur, p.nom AS projet,
                cl.raison_sociale AS client_nom, cl.adresse AS client_adresse
           FROM bon.lettres_voiture lv
@@ -99,9 +132,14 @@ def build_context(lv_id: int) -> dict[str, Any]:
     else:
         lv["destinataire"] = lv.get("destinataire") or ""
 
-    # Dates au format français JJ/MM/AAAA (le template ne reformate pas).
+    # Dates au format français JJ/MM/AAAA (le template ne reformate pas). Une
+    # seule date « Établie et prise en charge le … » (le jour du transport).
     lv["date_etablissement"] = _fr_date(lv.get("date_etablissement"))
     lv["date_prise_en_charge"] = _fr_date(lv.get("date_prise_en_charge"))
+
+    # Heures en créneaux (0017) : chaîne « 8h00–12h00 · 13h00–17h00 ». Repli sur
+    # l'ancien texte libre heures_regie pour les lettres antérieures non migrées.
+    lv["heures_aff"] = format_creneaux(lv.get("heures")) or (lv.get("heures_regie") or "")
 
     tours = db.query(
         """

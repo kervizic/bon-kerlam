@@ -81,7 +81,7 @@ export const SITES = [
 /* -------------------------------------------------------------------- Articles */
 const nextArticleId = makeCounter(5);
 export const ARTICLES = [
-  { id: 1, nom: "Grave 0/31,5", commentaire_interne: "Fournisseur habituel : carrière Démo-Sud", unites: ["t", "m3"], densite_t_m3: 1.8, poids_unitaire_t: null, actif: true },
+  { id: 1, nom: "Grave", commentaire_interne: "0/31,5 · granulométrie en commentaire interne uniquement", unites: ["t", "m3"], densite_t_m3: 1.8, poids_unitaire_t: null, actif: true },
   { id: 2, nom: "Terre végétale", commentaire_interne: "Vérifier humidité avant pesée", unites: ["t", "m3"], densite_t_m3: 1.4, poids_unitaire_t: null, actif: true },
   { id: 3, nom: "Enrobé à chaud 0/10", commentaire_interne: "Livraison avant 11h impérative (refroidissement)", unites: ["t"], densite_t_m3: null, poids_unitaire_t: null, actif: true },
   { id: 4, nom: "Bordure béton T2", commentaire_interne: "Vendue à l'unité, palette de 40", unites: ["unite"], densite_t_m3: null, poids_unitaire_t: 0.032, actif: true },
@@ -170,19 +170,22 @@ export const LETTRES_VOITURE = [
   {
     id: 1, numero: "KER-03041", date_etablissement: todayIso(), date_prise_en_charge: todayIso(),
     expediteur: "KERLAM", destinataire: "KERLAM", dest_identique: true,
-    camion_id: 1, chauffeur_id: 1, projet_id: 1, contact_id: 1, heures_regie: "7h30 - 16h00",
+    camion_id: 1, chauffeur_id: 1, projet_id: 1, contact_id: 1, heures_regie: null,
+    heures: [{ debut: "08:00", fin: "12:00" }, { debut: "13:00", fin: "17:00" }],
     statut: "en_cours", preparee: false, owner_email: "demo.chauffeur@kerlam.fr", deleted_at: null,
   },
   {
     id: 2, numero: "KER-03042", date_etablissement: todayIso(), date_prise_en_charge: todayIso(),
     expediteur: "KERLAM", destinataire: "KERLAM", dest_identique: true,
-    camion_id: 2, chauffeur_id: 2, projet_id: 1, contact_id: 1, heures_regie: "6h45 - 15h15",
+    camion_id: 2, chauffeur_id: 2, projet_id: 1, contact_id: 1, heures_regie: null,
+    heures: [{ debut: "06:45", fin: "15:15" }],
     statut: "a_signer", preparee: false, owner_email: "fatou.diallo@kerlam.fr", deleted_at: null,
   },
   {
     id: 3, numero: null, date_etablissement: addDays(1), date_prise_en_charge: null,
     expediteur: "KERLAM", destinataire: "KERLAM", dest_identique: true,
     camion_id: 3, chauffeur_id: 3, projet_id: 1, contact_id: 1, heures_regie: null,
+    heures: null,
     statut: "preparee", preparee: true, owner_email: "hugo.lefevre@kerlam.fr", deleted_at: null,
   },
 ];

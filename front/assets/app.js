@@ -127,6 +127,10 @@ import {
   rpcSitesPour,
   rpcLvUndo,
   rpcSetDerniereUnite,
+  rpcDernieresHeures,
+  rpcLvSupprimer,
+  rpcLvRestaurer,
+  listCorbeille,
   todayIso,
 } from "./data.js";
 
@@ -409,11 +413,16 @@ function toIntOrNull(v) {
 function toFloatOrNull(v) {
   return v === "" || v == null ? null : parseFloat(v);
 }
-function timeToIso(timeStr) {
-  if (!timeStr) return null;
-  const dateStr = (state.lv && state.lv.date_etablissement) || todayIso();
-  const d = new Date(`${dateStr}T${timeStr}:00`);
-  return isNaN(d.getTime()) ? null : d.toISOString();
+// Quantités : virgule décimale française affichée (3,5) ET acceptée en saisie.
+function frQty(v) {
+  return v == null || v === "" ? "" : String(v).replace(".", ",");
+}
+function parseFrFloat(v) {
+  if (v == null) return null;
+  const s = String(v).replace(",", ".").trim();
+  if (s === "") return null;
+  const n = parseFloat(s);
+  return isNaN(n) ? null : n;
 }
 
 /* --------------------------------------------------------------------- Undo */
@@ -859,7 +868,76 @@ function fillHeaderForm(data) {
   document.getElementById("f-contact").value = d.contact_id != null ? String(d.contact_id) : "";
 
   fillDestinataireControls(d);
-  document.getElementById("f-heures-regie").value = d.heures_regie || "";
+  renderCreneaux(Array.isArray(d.heures) ? d.heures : []);
+}
+
+/* -------------------------------------------------- Heures en créneaux (beta.15) ==
+ * Liste de créneaux (début + fin, sélecteur d'heure natif 24 h). « + Ajouter un
+ * créneau » ajoute une ligne, la croix la supprime. Si fin < début, c'est une
+ * astreinte (passage au lendemain) acceptée sans message. Les créneaux sont
+ * stockés en jsonb sur la lettre (colonne heures, cf. migration 0017). Une
+ * nouvelle lettre reprend les créneaux de la dernière lettre du chauffeur. */
+function makeCreneauRow(cr) {
+  const tpl = document.getElementById("tpl-creneau");
+  const node = tpl.content.firstElementChild.cloneNode(true);
+  node.querySelector(".f-creneau-debut").value = (cr && cr.debut) || "";
+  node.querySelector(".f-creneau-fin").value = (cr && cr.fin) || "";
+  node.querySelectorAll("input").forEach((inp) => {
+    inp.addEventListener("change", saveCreneaux);
+  });
+  node.querySelector(".btn-delete-creneau").addEventListener("click", () => {
+    node.remove();
+    saveCreneaux();
+  });
+  return node;
+}
+
+function renderCreneaux(creneaux) {
+  const listEl = document.getElementById("creneaux-list");
+  if (!listEl) return;
+  listEl.innerHTML = "";
+  const rows = (creneaux && creneaux.length) ? creneaux : [{ debut: "", fin: "" }];
+  for (const cr of rows) listEl.appendChild(makeCreneauRow(cr));
+}
+
+// Lit les créneaux saisis (une ligne retenue dès qu'une heure de début est posée).
+function collectCreneaux() {
+  const out = [];
+  document.querySelectorAll("#creneaux-list .creneau-row").forEach((row) => {
+    const debut = row.querySelector(".f-creneau-debut").value || "";
+    const fin = row.querySelector(".f-creneau-fin").value || "";
+    if (debut || fin) out.push({ debut, fin });
+  });
+  return out;
+}
+
+let creneauxSaveTimer = null;
+function saveCreneaux() {
+  if (creneauxSaveTimer) clearTimeout(creneauxSaveTimer);
+  setSyncState("sending");
+  creneauxSaveTimer = setTimeout(async () => {
+    creneauxSaveTimer = null;
+    const heures = collectCreneaux();
+    try {
+      // Pas de lettre et aucun créneau saisi : rien à persister (pas de brouillon vide).
+      if (!state.lv && !heures.length) {
+        setSyncState(window.bonSync.queueLength > 0 ? "offline" : "saved");
+        return;
+      }
+      const lvId = await ensureLv();
+      await patchRemote("lettres_voiture", lvId, { heures: heures.length ? heures : null });
+      if (state.lv) state.lv.heures = heures.length ? heures : null;
+      setSyncState(window.bonSync.queueLength > 0 ? "offline" : "saved");
+    } catch (err) {
+      console.error("[app] saveCreneaux en échec", err);
+      setSyncState(window.bonSync.queueLength > 0 ? "offline" : "saved");
+    }
+  }, 600);
+}
+
+function addCreneau() {
+  const listEl = document.getElementById("creneaux-list");
+  if (listEl) listEl.appendChild(makeCreneauRow({ debut: "", fin: "" }));
 }
 
 // Destinataire (D) : Identique (client) / un autre client / Autre… (saisie libre).
@@ -919,6 +997,59 @@ function renderLvNumero() {
     el.textContent = "Brouillon";
     el.classList.add("is-brouillon");
   }
+  refreshDeleteButton();
+}
+
+/* ============================================= Suppression / annulation (beta.15) ==
+ * Lettre NON signée uniquement. Brouillon sans numéro -> corbeille (restaurable
+ * 30 jours). Lettre numérotée -> statut « Annulée » + motif court, numéro
+ * conservé, masquée des listes. Lettre signée -> jamais supprimable (bouton
+ * caché, refus serveur). La RLS limite déjà le chauffeur à ses propres lettres. */
+function refreshDeleteButton() {
+  const btn = document.getElementById("btn-delete-lv");
+  if (!btn) return;
+  const lv = state.lv;
+  btn.hidden = !(lv && lv.id != null && lv.statut !== "signee");
+}
+
+function openDeleteSheet() {
+  const lv = state.lv;
+  if (!lv || lv.id == null || lv.statut === "signee") return;
+  const isBrouillon = !lv.numero;
+  document.getElementById("delete-brouillon").hidden = !isBrouillon;
+  document.getElementById("delete-annulation").hidden = isBrouillon;
+  document.getElementById("delete-title").textContent = isBrouillon ? "Supprimer le brouillon" : "Annuler la lettre";
+  if (!isBrouillon) {
+    document.getElementById("f-annul-categorie").value = "doublon";
+    document.getElementById("f-annul-motif").value = "";
+  }
+  document.getElementById("delete-sheet").hidden = false;
+}
+
+function closeDeleteSheet() {
+  const sheet = document.getElementById("delete-sheet");
+  if (sheet) sheet.hidden = true;
+}
+
+async function confirmDeleteLv() {
+  const lv = state.lv;
+  if (!lv || lv.id == null) return;
+  const isBrouillon = !lv.numero;
+  let categorie = null;
+  let motif = null;
+  if (!isBrouillon) {
+    categorie = document.getElementById("f-annul-categorie").value || null;
+    motif = document.getElementById("f-annul-motif").value.trim() || null;
+  }
+  try {
+    await rpcLvSupprimer(lv.id, categorie, motif);
+    closeDeleteSheet();
+    state.lv = null;
+    resetUndo();
+    await navigate("mes-lv");
+  } catch (err) {
+    alert("Suppression impossible : " + (err.message || err));
+  }
 }
 
 async function ensureLv() {
@@ -933,6 +1064,10 @@ async function ensureLv() {
     contact_id: prefill.contact_id || null,
     statut: "en_cours",
   };
+  // Créneaux horaires déjà saisis / repris de la dernière lettre : persistés dès
+  // la création pour que la mémoire fonctionne même sans nouvelle interaction.
+  const creneaux = collectCreneaux();
+  if (creneaux.length) fields.heures = creneaux;
   const lv = await createLv(fields);
   state.lv = lv;
   renderLvNumero();
@@ -947,7 +1082,9 @@ function wireHeaderAutosave() {
   wireAutosaveField(document.getElementById("f-camion"), { table: "lettres_voiture", ensureId: ensureLv, field: "camion_id", transform: toIntOrNull });
   wireAutosaveField(document.getElementById("f-projet"), { table: "lettres_voiture", ensureId: ensureLv, field: "projet_id", transform: toIntOrNull });
   wireAutosaveField(document.getElementById("f-contact"), { table: "lettres_voiture", ensureId: ensureLv, field: "contact_id", transform: toIntOrNull });
-  wireAutosaveField(document.getElementById("f-heures-regie"), { table: "lettres_voiture", ensureId: ensureLv, field: "heures_regie" });
+
+  const btnAddCreneau = document.getElementById("btn-add-creneau");
+  if (btnAddCreneau) btnAddCreneau.addEventListener("click", addCreneau);
 
   document.getElementById("f-client").addEventListener("change", refreshProjetContactOptions);
 
@@ -982,10 +1119,20 @@ async function loadToday() {
         /* ignore */
       }
     }
+    // Nouvelle lettre : reprise des créneaux horaires de la dernière lettre (mémoire).
+    if (!lv) {
+      try {
+        const heures = await rpcDernieresHeures(chauffeurId);
+        if (Array.isArray(heures) && heures.length) state.prefillData.heures = heures;
+      } catch (err) {
+        /* pas bloquant */
+      }
+    }
   }
   state.lv = lv;
   fillHeaderForm(lv || state.prefillData);
   renderLvNumero();
+  refreshDeleteButton();
   await loadPrestationsFor(lv);
   await loadToursFor(lv);
 }
@@ -1049,10 +1196,6 @@ async function renderTourCard(entry) {
   pickerBtns[0].addEventListener("click", () => openSitePicker(chargementSel));
   pickerBtns[1].addEventListener("click", () => openSitePicker(dechargementSel));
 
-  const heureInput = node.querySelector(".f-heure-depart");
-  heureInput.value = tour.heure_depart ? new Date(tour.heure_depart).toISOString().slice(11, 16) : "";
-  wireAutosaveField(heureInput, { table: "tours", id: tour.id, field: "heure_depart", transform: timeToIso });
-
   node.querySelector(".btn-delete-tour").addEventListener("click", () => handleDeleteTour(entry, node));
   node.querySelector(".btn-add-ligne").addEventListener("click", () => handleAddLigne(entry, node));
 
@@ -1073,13 +1216,13 @@ function renderLigneRow(lignesList, entry, ligne) {
   articleSel.value = ligne.article_id != null ? String(ligne.article_id) : "";
 
   const qteInput = node.querySelector(".f-ligne-quantite");
-  qteInput.value = ligne.quantite != null ? ligne.quantite : "";
+  qteInput.value = frQty(ligne.quantite);
 
   const uniteSel = node.querySelector(".f-ligne-unite");
   uniteSel.value = ligne.unite || "t";
 
   wireAutosaveField(articleSel, { table: "tour_lignes", id: ligne.id, field: "article_id", transform: toIntOrNull });
-  wireAutosaveField(qteInput, { table: "tour_lignes", id: ligne.id, field: "quantite", transform: toFloatOrNull });
+  wireAutosaveField(qteInput, { table: "tour_lignes", id: ligne.id, field: "quantite", transform: parseFrFloat });
   wireAutosaveField(uniteSel, { table: "tour_lignes", id: ligne.id, field: "unite" });
 
   // Ces 3 champs déclenchent une remise en cache hors-ligne (autosave 600ms).
@@ -1219,7 +1362,7 @@ function renderPrestationRow(ligne, pending) {
   prestSel.value = ligne.prestation_id != null ? String(ligne.prestation_id) : "";
 
   const qteInput = node.querySelector(".f-prestation-quantite");
-  qteInput.value = ligne.quantite != null ? ligne.quantite : "";
+  qteInput.value = frQty(ligne.quantite);
 
   const uniteSel = node.querySelector(".f-prestation-unite");
   uniteSel.value = ligne.unite || "jour";
@@ -1241,7 +1384,7 @@ function renderPrestationRow(ligne, pending) {
     const promote = async () => {
       state.pendingPrestation = {
         prestation_id: toIntOrNull(prestSel.value),
-        quantite: toFloatOrNull(qteInput.value),
+        quantite: parseFrFloat(qteInput.value),
         unite: uniteSel.value || null,
         materiel_id: toIntOrNull(materielSel.value),
       };
@@ -1258,7 +1401,7 @@ function renderPrestationRow(ligne, pending) {
     });
   } else {
     wireAutosaveField(prestSel, { table: "lv_prestations", id: ligne.id, field: "prestation_id", transform: toIntOrNull });
-    wireAutosaveField(qteInput, { table: "lv_prestations", id: ligne.id, field: "quantite", transform: toFloatOrNull });
+    wireAutosaveField(qteInput, { table: "lv_prestations", id: ligne.id, field: "quantite", transform: parseFrFloat });
     wireAutosaveField(uniteSel, { table: "lv_prestations", id: ligne.id, field: "unite" });
     wireAutosaveField(materielSel, { table: "lv_prestations", id: ligne.id, field: "materiel_id", transform: toIntOrNull });
     node.querySelector(".btn-delete-prestation").addEventListener("click", () => handleDeletePrestation(ligne, node));
@@ -1495,10 +1638,15 @@ function clearSignSelection() {
 async function loadMesLv() {
   const listEl = document.getElementById("mes-lv-list");
   const showSignees = !!(document.getElementById("mes-lv-show-signees") || {}).checked;
+  const showCorbeille = !!(document.getElementById("mes-lv-show-corbeille") || {}).checked;
   const selectAll = document.getElementById("mes-lv-select-all");
   if (selectAll) selectAll.checked = false;
   clearSignSelection();
   listEl.innerHTML = '<p class="muted">Chargement…</p>';
+  if (showCorbeille) {
+    await loadCorbeille(listEl);
+    return;
+  }
   try {
     const data = await listLettresVoiture();
     // Non signées en haut (la plus récente d'abord, déjà trié par la requête) ;
@@ -1515,6 +1663,43 @@ async function loadMesLv() {
   } catch (err) {
     reportIfVersionMismatch(err);
     listEl.innerHTML = `<p class="muted">Impossible de charger (hors ligne ?) : ${escapeHtml(err.message || String(err))}</p>`;
+  }
+}
+
+// Corbeille : brouillons mis au rebut (restaurables 30 jours).
+async function loadCorbeille(listEl) {
+  try {
+    const rows = await listCorbeille();
+    if (!rows.length) {
+      listEl.innerHTML = '<p class="entity-empty">Corbeille vide.</p>';
+      return;
+    }
+    listEl.innerHTML = "";
+    for (const lv of rows) {
+      const row = document.createElement("div");
+      row.className = "lv-row";
+      const info = document.createElement("span");
+      info.className = "lv-row-open corbeille-row-info";
+      info.innerHTML = `<span class="lv-row-main"><span class="lv-row-numero">${escapeHtml(lvRowTitle(lv))}</span>
+        <span class="lv-row-date">${escapeHtml(formatDateFr(lv.date_etablissement))}</span></span>`;
+      const restore = document.createElement("button");
+      restore.type = "button";
+      restore.className = "btn btn-secondary btn-sm";
+      restore.textContent = "Restaurer";
+      restore.addEventListener("click", async () => {
+        try {
+          await rpcLvRestaurer(lv.id);
+          await loadMesLv();
+        } catch (err) {
+          alert("Restauration impossible : " + (err.message || err));
+        }
+      });
+      row.append(info, restore);
+      listEl.appendChild(row);
+    }
+  } catch (err) {
+    reportIfVersionMismatch(err);
+    listEl.innerHTML = `<p class="muted">Impossible de charger la corbeille : ${escapeHtml(err.message || String(err))}</p>`;
   }
 }
 
@@ -1726,7 +1911,7 @@ function renderPlanningCard(lv) {
 
       const dateInput = makeTextInput("date", lv.date_etablissement);
       wireAutosaveField(dateInput, { table: "lettres_voiture", id: lv.id, field: "date_etablissement" });
-      grid.appendChild(fieldBlock("Date d'établissement", dateInput));
+      grid.appendChild(fieldBlock("Date", dateInput));
 
       const camionSel = makeSelectInput(state.refs.camions.map((c) => ({ value: c.id, label: c.immatriculation })), lv.camion_id, "Camion…");
       wireAutosaveField(camionSel, { table: "lettres_voiture", id: lv.id, field: "camion_id", transform: toIntOrNull });
@@ -3230,6 +3415,20 @@ function wireStaticUI() {
   if (btnSurPlace) btnSurPlace.addEventListener("click", doSignSurPlace);
   const btnParMail = document.getElementById("btn-sign-par-mail");
   if (btnParMail) btnParMail.addEventListener("click", doSignParMail);
+
+  // Suppression / annulation de la lettre ouverte (beta.15).
+  const btnDeleteLv = document.getElementById("btn-delete-lv");
+  if (btnDeleteLv) btnDeleteLv.addEventListener("click", openDeleteSheet);
+  const btnDeleteClose = document.getElementById("btn-delete-close");
+  if (btnDeleteClose) btnDeleteClose.addEventListener("click", closeDeleteSheet);
+  const deleteSheet = document.getElementById("delete-sheet");
+  if (deleteSheet) deleteSheet.addEventListener("click", (e) => { if (e.target.id === "delete-sheet") closeDeleteSheet(); });
+  const btnDelBrouillon = document.getElementById("btn-delete-confirm-brouillon");
+  if (btnDelBrouillon) btnDelBrouillon.addEventListener("click", confirmDeleteLv);
+  const btnDelAnnul = document.getElementById("btn-delete-confirm-annulation");
+  if (btnDelAnnul) btnDelAnnul.addEventListener("click", confirmDeleteLv);
+  const showCorbeille = document.getElementById("mes-lv-show-corbeille");
+  if (showCorbeille) showCorbeille.addEventListener("change", () => loadMesLv());
 
   document.querySelectorAll("[data-route]").forEach((el) => {
     el.addEventListener("click", (e) => {

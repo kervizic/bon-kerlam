@@ -178,6 +178,41 @@ def shoot_prestations(ctx, prefix: str) -> None:
             page.close()
 
 
+def shoot_suppression(ctx, prefix: str) -> None:
+    """Menu de suppression / annulation (beta.15) : lettre numérotée ouverte ->
+    bouton corbeille -> feuille « Annuler la lettre » (motif Doublon/Erreur/Autre)."""
+    for theme in ("clair", "sombre"):
+        page = ctx.new_page()
+        try:
+            page.goto(f"{BASE}?demo=1&screen=today&role=chauffeur&theme={theme}", wait_until="networkidle")
+            page.wait_for_timeout(600)
+            page.click("#btn-delete-lv", timeout=3000)
+            page.wait_for_timeout(300)
+            page.screenshot(path=str(OUT / f"{prefix}-suppression-annulation-{theme}.png"), full_page=False)
+            print(f"   suppression-annulation-{theme}")
+        except Exception as exc:  # noqa: BLE001
+            print(f"   !! suppression/{theme}: {exc}")
+        finally:
+            page.close()
+
+
+def shoot_formulaire_heures(ctx, prefix: str) -> None:
+    """Formulaire chauffeur pleine page : Date, Heures (2 créneaux), prestations,
+    tours avec articles (beta.15)."""
+    for theme in ("clair", "sombre"):
+        page = ctx.new_page()
+        try:
+            page.goto(f"{BASE}?demo=1&screen=today&role=chauffeur&theme={theme}", wait_until="networkidle")
+            page.wait_for_timeout(600)
+            page.screenshot(path=str(OUT / f"{prefix}-formulaire-heures-{theme}.png"), full_page=True)
+            check_no_hscroll(page, f"{prefix}-formulaire-heures-{theme}")
+            print(f"   formulaire-heures-{theme}")
+        except Exception as exc:  # noqa: BLE001
+            print(f"   !! formulaire-heures/{theme}: {exc}")
+        finally:
+            page.close()
+
+
 def shoot_logo(ctx, prefix: str) -> None:
     """Régression iPhone : le logo KERLAM de l'en-tête doit être rendu en Sarpanch
     (police chargée), pas en police système. On vérifie via document.fonts.check +
@@ -279,6 +314,8 @@ def main() -> int:
         shoot(iphone, "iphone-chauffeur", "today", "sombre", "aujourdhui", role="chauffeur")
         shoot_signer(iphone, "iphone-chauffeur")
         shoot_prestations(iphone, "iphone")
+        shoot_formulaire_heures(iphone, "iphone-chauffeur")
+        shoot_suppression(iphone, "iphone-chauffeur")
         iphone.close()
 
         ipad = browser.new_context(viewport=IPAD, device_scale_factor=2, is_mobile=True, has_touch=True, **LOCALE)

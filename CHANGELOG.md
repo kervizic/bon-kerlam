@@ -4,6 +4,55 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.15] — 2026-11-12
+
+Simplification du formulaire (décisions de Manu : « on simplifie tout au max »).
+
+### Heures en créneaux (remplace « Heures régie »)
+- Le champ texte libre **« Heures régie »** devient **« Heures »** : une liste de
+  **créneaux** (heure de début + heure de fin, sélecteur d'heure natif 24 h, pas
+  de 15 min). Boutons **« + Ajouter un créneau »** et croix pour supprimer.
+  Exemple : `8h00–17h00` ou `8h00–12h00 · 13h00–17h00`.
+- **Astreinte** : si la fin est antérieure au début, c'est un passage au
+  lendemain, accepté **sans message ni mention**.
+- **Mémoire** : une nouvelle lettre **reprend les créneaux de la dernière lettre
+  du même chauffeur** (RPC `dernieres_heures`).
+- **Stockage** : colonne `heures` **jsonb** (migration **0017** additive et
+  idempotente). L'ancien texte `heures_regie` est **migré au mieux** (créneau
+  unique quand le format est reconnu), sinon **conservé en lecture**.
+- **PDF** : une ligne **« Heures 8h00–12h00 · 13h00–17h00 »**, uniquement si au
+  moins un créneau.
+
+### Date unique
+- Un seul champ **« Date »** (le jour du transport). Suppression de la **« Date
+  d'établissement »** séparée et de l'**« Heure de départ » par tour**. Date
+  librement modifiable (passé compris) par tous. `created_at` / `updated_at`
+  conservés en base, jamais affichés.
+- **PDF** : une seule ligne **« Établie et prise en charge le JJ/MM/AAAA »**.
+
+### Suppression / annulation des lettres NON signées
+- **Brouillon sans numéro** → **corbeille** (restaurable **30 jours**).
+- **Lettre numérotée non signée** → statut **« Annulée »** + **motif court**
+  (Doublon / Erreur / Autre + précision), **numéro conservé**, masquée des listes.
+- **Lettre signée** → **jamais supprimable** (bouton caché, refus serveur).
+- **Chauffeur** : ses propres lettres non signées ; **bureau** : toutes.
+  **Journal qui / quand** via l'audit générique. RPC `lv_supprimer` /
+  `lv_restaurer`, vue `lv_corbeille`. **RLS + tests SQL** (`test_suppression.py`).
+
+### Catalogue (démo alignée sur le vrai catalogue)
+- Démo : article **« Grave »** unique (plus de « Grave 0/31,5 ») ; la
+  granulométrie reste en **commentaire interne** uniquement. Le seed serveur
+  (0007) avait déjà une seule « Grave ».
+
+### Saisie des quantités
+- **Virgule décimale française** **affichée** (`3,5`) **et acceptée** (tours et
+  prestations).
+
+### Divers
+- Version `0.1.0-beta.15` (VERSION, service worker, cache `?v=15`, smoke CI).
+- Captures Playwright : **formulaire (Date + Heures 2 créneaux)** et **menu de
+  suppression / annulation** (iPhone, clair + sombre).
+
 ## [0.1.0-beta.14] — 2026-11-12
 
 Correctif (retours iPhone de Manu).
