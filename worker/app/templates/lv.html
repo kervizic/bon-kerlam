@@ -40,8 +40,7 @@
     <div style="text-align:right">
       <h1>Lettre de voiture</h1>
       <div><b>N° {{ lv.numero or "(non attribué)" }}</b></div>
-      <div class="muted">Établie le {{ lv.date_etablissement }}</div>
-      <div class="muted">Prise en charge : {{ lv.date_prise_en_charge or "—" }}</div>
+      <div class="muted">Établie et prise en charge le {{ lv.date_etablissement }}</div>
     </div>
   </div>
 
@@ -60,7 +59,7 @@
       <div>Chauffeur : <b>{{ lv.chauffeur or "—" }}</b></div>
       <div>Projet : <b>{{ lv.projet or "—" }}</b></div>
     </div>
-    {% if lv.heures_regie %}<div class="muted">Heures de régie : {{ lv.heures_regie }}</div>{% endif %}
+    {% if lv.heures_aff %}<div class="muted">Heures {{ lv.heures_aff }}</div>{% endif %}
   </div>
 
   {% if prestations %}

@@ -378,8 +378,10 @@ export async function upsertReglage(cle, valeur) {
 // (écran "Planning" : preparee=true, pas encore de tour).
 export async function listLettresVoiture({ query, date, statut } = {}) {
   let q = requireClient().from("lettres_voiture").select("*").is("deleted_at", null);
-  if (date) q = q.eq("date_etablissement", date);
+  // Lettres annulées masquées des listes (numéro conservé en base, cf. 0017).
   if (statut) q = q.eq("statut", statut);
+  else q = q.neq("statut", "annulee");
+  if (date) q = q.eq("date_etablissement", date);
   q = q.order("date_etablissement", { ascending: false }).order("id", { ascending: false }).limit(200);
   const { data, error } = await q;
   if (error) throw error;
@@ -401,9 +403,43 @@ export async function listPlanningLv() {
     .select("*")
     .eq("preparee", true)
     .is("deleted_at", null)
+    .neq("statut", "annulee")
     .order("date_etablissement", { ascending: true });
   if (error) throw error;
   return data || [];
+}
+
+// Corbeille : lettres mises au rebut dans les 30 derniers jours (vue api.lv_corbeille).
+export async function listCorbeille() {
+  const { data, error } = await requireClient()
+    .from("lv_corbeille")
+    .select("*")
+    .order("deleted_at", { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+// Suppression / annulation (0017). Brouillon sans numéro -> corbeille ; lettre
+// numérotée non signée -> statut « annulée » + motif ; lettre signée -> refus serveur.
+export async function rpcLvSupprimer(lvId, categorie, motif) {
+  const { data, error } = await requireClient().rpc("lv_supprimer", {
+    p_lv_id: lvId, p_categorie: categorie ?? null, p_motif: motif ?? null,
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function rpcLvRestaurer(lvId) {
+  const { data, error } = await requireClient().rpc("lv_restaurer", { p_lv_id: lvId });
+  if (error) throw error;
+  return data;
+}
+
+// Mémoire des créneaux horaires : créneaux de la dernière lettre du chauffeur.
+export async function rpcDernieresHeures(chauffeurId) {
+  const { data, error } = await requireClient().rpc("dernieres_heures", { p_chauffeur_id: chauffeurId });
+  if (error) throw error;
+  return data || null;
 }
 
 // --------------------------------------------------- Documents réglementaires --

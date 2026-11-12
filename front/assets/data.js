@@ -154,7 +154,8 @@ export async function updateLv(lvId, patch) {
 }
 export async function listLettresVoiture(opts) {
   if (DEMO) {
-    let rows = demoDb.lettres_voiture.filter((lv) => !lv.deleted_at);
+    // Les lettres annulées (numéro conservé) sont masquées des listes (0017).
+    let rows = demoDb.lettres_voiture.filter((lv) => !lv.deleted_at && lv.statut !== "annulee");
     if (opts && opts.date) rows = rows.filter((lv) => lv.date_etablissement === opts.date);
     if (opts && opts.statut) rows = rows.filter((lv) => lv.statut === opts.statut);
     if (opts && opts.query) {
@@ -171,8 +172,58 @@ export async function listLettresVoiture(opts) {
   return live.listLettresVoiture(opts);
 }
 export async function listPlanningLv() {
-  if (DEMO) return demoDb.lettres_voiture.filter((lv) => lv.preparee && !lv.deleted_at);
+  if (DEMO) return demoDb.lettres_voiture.filter((lv) => lv.preparee && !lv.deleted_at && lv.statut !== "annulee");
   return live.listPlanningLv();
+}
+
+// Corbeille : lettres mises au rebut dans les 30 derniers jours (restaurables).
+export async function listCorbeille() {
+  if (DEMO) {
+    const floor = Date.now() - 30 * 86400000;
+    return demoDb.lettres_voiture
+      .filter((lv) => lv.deleted_at && new Date(lv.deleted_at).getTime() > floor)
+      .sort((a, b) => (a.deleted_at < b.deleted_at ? 1 : -1));
+  }
+  return live.listCorbeille();
+}
+
+// Suppression / annulation (0017) : brouillon -> corbeille ; numérotée -> annulée.
+export async function rpcLvSupprimer(lvId, categorie, motif) {
+  if (DEMO) {
+    const lv = byId(demoDb.lettres_voiture, lvId);
+    if (!lv) throw new Error("Lettre introuvable");
+    if (lv.statut === "signee") throw new Error("Lettre signée : suppression impossible");
+    if (!lv.numero) {
+      lv.deleted_at = new Date().toISOString();
+      return { mode: "corbeille", lv_id: lvId };
+    }
+    lv.statut = "annulee";
+    lv.annulation_categorie = categorie || null;
+    lv.annulation_motif = motif || null;
+    lv.annulee_at = new Date().toISOString();
+    return { mode: "annulee", lv_id: lvId, numero: lv.numero };
+  }
+  return live.rpcLvSupprimer(lvId, categorie, motif);
+}
+
+export async function rpcLvRestaurer(lvId) {
+  if (DEMO) {
+    const lv = byId(demoDb.lettres_voiture, lvId);
+    if (lv) lv.deleted_at = null;
+    return { restored: !!lv, lv_id: lvId };
+  }
+  return live.rpcLvRestaurer(lvId);
+}
+
+// Mémoire des créneaux : créneaux de la dernière lettre du chauffeur qui en a.
+export async function rpcDernieresHeures(chauffeurId) {
+  if (DEMO) {
+    const lettres = demoDb.lettres_voiture
+      .filter((lv) => String(lv.chauffeur_id) === String(chauffeurId) && !lv.deleted_at && Array.isArray(lv.heures) && lv.heures.length)
+      .sort((a, b) => (a.date_etablissement < b.date_etablissement ? 1 : a.date_etablissement > b.date_etablissement ? -1 : b.id - a.id));
+    return lettres.length ? lettres[0].heures : null;
+  }
+  return live.rpcDernieresHeures(chauffeurId);
 }
 
 /* --------------------------------------------------------------------- Tours == */
