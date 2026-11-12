@@ -180,7 +180,7 @@ jobs:
         run: |
           body=$(curl -fsS http://127.0.0.1:8099/worker/version)
           echo "$body"
-          echo "$body" | python -c "import sys,json; d=json.load(sys.stdin); assert d['version']=='0.1.0-beta.12', d; assert d['schema_version'], d; print('version ok, schema', d['schema_version'])"
+          echo "$body" | python -c "import sys,json; d=json.load(sys.stdin); assert d['version']=='0.1.0-beta.13', d; assert d['schema_version'], d; print('version ok, schema', d['schema_version'])"
       - name: Attente de GoTrue (auth)
         run: |
           for i in $(seq 1 30); do
