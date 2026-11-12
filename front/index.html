@@ -10,8 +10,8 @@
   <!-- Empreinte de version du shell (cf. assets/app-version.js). Bumper `app-rev`
        à chaque déploiement backend devant forcer un refresh (sinon le bump d'un
        `?v=` d'asset suffit). -->
-  <meta name="app-version" content="0.1.0-beta.17">
-  <meta name="app-rev" content="17">
+  <meta name="app-version" content="0.1.0-beta.18">
+  <meta name="app-rev" content="18">
 
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
@@ -31,8 +31,8 @@
        en police système). crossorigin obligatoire : les polices sont toujours
        récupérées en mode CORS, l'attribut évite un double téléchargement. -->
   <link rel="preload" href="/assets/fonts/sarpanch-900.woff2?v=14" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/assets/styles.css?v=17">
-  <script src="/assets/app-version.js?v=17" defer></script>
+  <link rel="stylesheet" href="/assets/styles.css?v=18">
+  <script src="/assets/app-version.js?v=18" defer></script>
 </head>
 <body>
   <a href="#main" class="skip-link">Aller au contenu</a>
@@ -235,18 +235,19 @@
             <div class="field">
               <label for="f-dest-mode">Destinataire</label>
               <select id="f-dest-mode" name="dest_mode">
-                <option value="identique">Identique (client)</option>
-                <option value="autre_client">Un autre client…</option>
-                <option value="autre">Autre…</option>
+                <option value="identique">Identique au client</option>
+                <option value="autre_client">Autre destinataire…</option>
               </select>
             </div>
             <div class="field" id="field-dest-client-wrap" hidden>
-              <label for="f-dest-client">Client destinataire</label>
-              <select id="f-dest-client"><option value="">Choisir…</option></select>
+              <label for="f-dest-client">Destinataire</label>
+              <select id="f-dest-client"><option value="">Choisir ou taper…</option></select>
             </div>
-            <div class="field" id="field-dest-autre-wrap" hidden>
-              <label for="f-dest-autre">Destinataire (saisie libre)</label>
-              <input type="text" id="f-dest-autre" name="destinataire" placeholder="Nom du destinataire">
+            <!-- Lettres antérieures : destinataire en saisie libre (nom seul, sans
+                 adresse). Conservé en LECTURE (migration douce), jamais ressaisi. -->
+            <div class="field" id="field-dest-legacy-wrap" hidden>
+              <label for="f-dest-legacy">Destinataire (ancienne saisie)</label>
+              <input type="text" id="f-dest-legacy" readonly>
             </div>
             <div class="field field-heures">
               <label>Heures</label>
@@ -526,21 +527,6 @@
     </div>
   </div>
 
-  <!-- ============================================ Feuille « fiche rapide » (combobox) -->
-  <div id="quick-create-sheet" class="sheet-overlay" hidden>
-    <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="quick-create-title">
-      <div class="sheet-header">
-        <h2 id="quick-create-title">Nouvelle fiche</h2>
-        <button type="button" class="icon-btn" id="btn-quick-create-close" aria-label="Fermer"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
-      </div>
-      <form id="quick-create-form" class="quick-create-form" autocomplete="off">
-        <div id="quick-create-fields"></div>
-        <p id="quick-create-error" class="muted quick-create-error" hidden></p>
-        <button type="submit" class="btn btn-primary btn-block is-spaced" id="btn-quick-create-save">Enregistrer</button>
-      </form>
-    </div>
-  </div>
-
   <!-- ===================================== Feuille « choix du mode de signature » -->
   <div id="signer-choice-sheet" class="sheet-overlay" hidden>
     <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="signer-choice-title">
@@ -594,7 +580,7 @@
     </div>
   </div>
 
-  <!-- ============================================ Feuille « fiche rapide » (beta.17) -->
+  <!-- ============================================ Feuille « fiche rapide » -->
   <div id="quick-create-sheet" class="sheet-overlay" hidden>
     <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="quick-create-title">
       <div class="sheet-header">
@@ -704,8 +690,8 @@
   </template>
 
   <!-- ================================================================== Scripts -->
-  <script src="/assets/config.js?v=17"></script>
+  <script src="/assets/config.js?v=18"></script>
   <script src="/assets/vendor/supabase/supabase.js"></script>
-  <script type="module" src="/assets/app.js?v=17"></script>
+  <script type="module" src="/assets/app.js?v=18"></script>
 </body>
 </html>

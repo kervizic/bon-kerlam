@@ -293,16 +293,21 @@ export function enhanceSelect(select, opts = {}) {
       rows.push({ value, create: false });
     }
 
+    // Ligne « + Créer » TOUJOURS proposée quand la création est possible (même
+    // liste vide / champ vide) : « + Créer <libellé> » à vide, « + Créer « texte » »
+    // dès qu'on tape. Masquée uniquement si le texte correspond EXACTEMENT à une
+    // fiche existante (éviter un doublon).
     const typed = (q || "").trim();
-    const exact = all.some((it) => normalizeText(it.label) === normalizeText(typed));
-    if (opts.onCreate && typed && !exact) {
+    const exact = typed && all.some((it) => normalizeText(it.label) === normalizeText(typed));
+    if (opts.onCreate && !exact) {
       const row = document.createElement("div");
       row.className = "cb-option cb-create";
       row.setAttribute("role", "option");
       row.id = id + "-opt-" + rows.length;
-      row.innerHTML =
-        '<span class="cb-create-plus" aria-hidden="true">+</span> Créer « ' +
-        escapeHtml(typed) + " »";
+      const createLabel = opts.createLabel || "une fiche";
+      row.innerHTML = typed
+        ? '<span class="cb-create-plus" aria-hidden="true">+</span> Créer « ' + escapeHtml(typed) + " »"
+        : '<span class="cb-create-plus" aria-hidden="true">+</span> Créer ' + escapeHtml(createLabel);
       row.addEventListener("mousedown", (e) => {
         e.preventDefault();
         void create(typed);

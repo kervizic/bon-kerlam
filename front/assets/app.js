@@ -797,24 +797,34 @@ function enhanceHeaderComboboxes() {
   });
   enhanceSelect(document.getElementById("f-client"), {
     entity: "client", driverId: di, placeholder: "Choisir ou taper…",
+    createLabel: "un client",
     onCreate: (text) => openQuickCreate("client", text),
     onEdit: (value) => openQuickCreate("client", "", value),
     canEdit: () => true,
   });
   enhanceSelect(document.getElementById("f-projet"), {
     entity: "projet", driverId: di, placeholder: "Facultatif — choisir ou taper…",
+    createLabel: "un projet",
     onCreate: (text) => openQuickCreate("projet", text),
     onEdit: (value) => openQuickCreate("projet", "", value),
     canEdit: () => true,
   });
   enhanceSelect(document.getElementById("f-contact"), {
     entity: "contact", driverId: di, placeholder: "Choisir ou taper…",
+    createLabel: "un contact",
     onCreate: (text) => openQuickCreate("contact", text),
     onEdit: (value) => openQuickCreate("contact", "", value),
     canEdit: () => true,
   });
+  // Destinataire (D) : même combobox que Client (recherche sociétés + alias,
+  // création avec adresse, crayon d'édition). L'adresse du destinataire est une
+  // mention obligatoire (arrêté du 9/11/1999 art. 5) -> imprimée sur le PDF.
   enhanceSelect(document.getElementById("f-dest-client"), {
     entity: "client", driverId: di, placeholder: "Choisir ou taper…",
+    createLabel: "un destinataire",
+    onCreate: (text) => openQuickCreate("client", text),
+    onEdit: (value) => openQuickCreate("client", "", value),
+    canEdit: () => true,
   });
 }
 
@@ -827,8 +837,8 @@ const QC_SPECS = {
   client: {
     title: "client",
     fields: [
-      { key: "raison_sociale", label: "Raison sociale", required: true, fromText: true },
-      { key: "adresse", label: "Adresse (imprimée sur la lettre)", required: true },
+      { key: "raison_sociale", label: "Nom / raison sociale", required: true, fromText: true },
+      { key: "adresse", label: "Adresse, CP et ville (imprimée sur la lettre)", required: true },
       { key: "siren", label: "SIREN (facultatif)" },
     ],
     create: (v) => createClient({ raison_sociale: v.raison_sociale, adresse: v.adresse || null, siren: v.siren || null, actif: true }),
@@ -1189,45 +1199,74 @@ function addCreneau() {
   if (listEl) listEl.appendChild(makeCreneauRow({ debut: "", fin: "" }));
 }
 
-// Destinataire (D) : Identique (client) / un autre client / Autre… (saisie libre).
-// L'émetteur (raison sociale + adresse du client) n'est plus saisi : il figure
-// uniquement sur le PDF, dérivé du client.
+// Destinataire (D) : « Identique au client » (défaut) OU un destinataire distinct
+// choisi dans le même combobox que Client (sociétés + alias, création avec adresse,
+// crayon d'édition). Si un destinataire est choisi, son nom ET son adresse sont
+// imprimés sur le PDF (mention obligatoire — arrêté du 9/11/1999 art. 5), via la
+// clé destinataire_client_id. Les lettres anciennes (destinataire en texte libre,
+// sans adresse) sont conservées EN LECTURE seule (migration douce) et ne sont
+// jamais réécrites tant que l'utilisateur ne change rien.
 function fillDestinataireControls(d) {
   const mode = document.getElementById("f-dest-mode");
   const destClient = document.getElementById("f-dest-client");
-  const destAutre = document.getElementById("f-dest-autre");
+  const legacy = document.getElementById("f-dest-legacy");
+  legacy.value = "";
   if (d.dest_identique !== false) {
-    mode.value = "identique"; destClient.value = ""; destAutre.value = "";
+    mode.value = "identique"; destClient.value = "";
   } else {
-    const match = (state.refs.clients || []).find((c) => c.raison_sociale === d.destinataire);
-    if (match) { mode.value = "autre_client"; destClient.value = String(match.id); destAutre.value = ""; }
-    else { mode.value = "autre"; destAutre.value = d.destinataire || ""; destClient.value = ""; }
+    mode.value = "autre_client";
+    // 1) clé explicite ; 2) repli : texte destinataire correspondant à un client ;
+    // 3) ancienne saisie libre sans correspondance -> affichée en lecture seule.
+    const byId = d.destinataire_client_id != null
+      ? (state.refs.clients || []).find((c) => String(c.id) === String(d.destinataire_client_id))
+      : null;
+    const byName = !byId
+      ? (state.refs.clients || []).find((c) => c.raison_sociale === d.destinataire)
+      : null;
+    const match = byId || byName;
+    if (match) { destClient.value = String(match.id); }
+    else { destClient.value = ""; legacy.value = d.destinataire || ""; }
   }
+  refreshCombobox(destClient);
   updateDestVisibility();
 }
 
 function updateDestVisibility() {
   const mode = document.getElementById("f-dest-mode").value;
+  const destClient = document.getElementById("f-dest-client");
+  const legacy = document.getElementById("f-dest-legacy");
   document.getElementById("field-dest-client-wrap").hidden = mode !== "autre_client";
-  document.getElementById("field-dest-autre-wrap").hidden = mode !== "autre";
+  // Ancienne saisie libre : visible seulement si présente et sans client choisi.
+  const showLegacy = mode === "autre_client" && !destClient.value && !!legacy.value;
+  document.getElementById("field-dest-legacy-wrap").hidden = !showLegacy;
 }
 
 async function saveDestinataire() {
   updateDestVisibility();
   const mode = document.getElementById("f-dest-mode").value;
   const destIdentique = mode === "identique";
+  const legacy = document.getElementById("f-dest-legacy");
   let destinataire = null;
+  let destinataire_client_id = null;
   if (mode === "autre_client") {
     const c = (state.refs.clients || []).find((x) => String(x.id) === document.getElementById("f-dest-client").value);
-    destinataire = c ? c.raison_sociale : null;
-  } else if (mode === "autre") {
-    destinataire = document.getElementById("f-dest-autre").value || null;
+    if (c) {
+      destinataire_client_id = c.id;
+      destinataire = c.raison_sociale; // conservé pour la recherche / compat lecture
+    } else if (legacy.value) {
+      // Lettre ancienne non convertie : on ne détruit pas la saisie libre.
+      destinataire = legacy.value;
+    }
   }
   setSyncState("sending");
   try {
     const lvId = await ensureLv();
-    await patchRemote("lettres_voiture", lvId, { dest_identique: destIdentique, destinataire });
-    if (state.lv) { state.lv.dest_identique = destIdentique; state.lv.destinataire = destinataire; }
+    await patchRemote("lettres_voiture", lvId, { dest_identique: destIdentique, destinataire, destinataire_client_id });
+    if (state.lv) {
+      state.lv.dest_identique = destIdentique;
+      state.lv.destinataire = destinataire;
+      state.lv.destinataire_client_id = destinataire_client_id;
+    }
     setSyncState(window.bonSync.queueLength > 0 ? "offline" : "saved");
   } catch (err) {
     console.error(err);
@@ -1341,10 +1380,9 @@ function wireHeaderAutosave() {
   wireAutosaveField(document.getElementById("f-client"), { table: "lettres_voiture", ensureId: ensureLv, field: "client_id", transform: toIntOrNull });
   document.getElementById("f-client").addEventListener("change", onClientChange);
 
-  // Destinataire (D) : mode + client/saisie libre -> dest_identique + destinataire.
+  // Destinataire (D) : mode + combobox client -> dest_identique + destinataire_client_id.
   document.getElementById("f-dest-mode").addEventListener("change", saveDestinataire);
   document.getElementById("f-dest-client").addEventListener("change", saveDestinataire);
-  document.getElementById("f-dest-autre").addEventListener("change", saveDestinataire);
 }
 
 /* ============================================================= Vue "Aujourd'hui" */
@@ -1456,6 +1494,7 @@ async function renderTourCard(entry) {
 
   const siteCbOpts = (sel) => ({
     entity: "site", driverId: driverIdForRecents, placeholder: "Choisir un site…",
+    createLabel: "un site",
     onCreate: (text) => openQuickCreate("site", text),
     onEdit: (value) => openQuickCreate("site", "", value), canEdit: () => true,
   });
@@ -1482,7 +1521,9 @@ function renderLigneRow(lignesList, entry, ligne) {
   articleSel.value = ligne.article_id != null ? String(ligne.article_id) : "";
   enhanceSelect(articleSel, {
     entity: "article", driverId: driverIdForRecents, placeholder: "Article…", wrapClass: "cb-area-article",
+    createLabel: "un article",
     onCreate: (text) => openQuickCreate("article", text),
+    onEdit: (value) => openQuickCreate("article", "", value), canEdit: () => true,
   });
 
   const qteInput = node.querySelector(".f-ligne-quantite");
