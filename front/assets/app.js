@@ -139,6 +139,7 @@ import { UndoStack } from "./undo-stack.js?v=13";
 import { PdfCache, shouldCachePdf, formatGeneratedAt } from "./pdf-cache.js?v=13";
 import { statutLabel } from "./status-labels.js?v=13";
 import { canGroupForSignature } from "./signature-group.js?v=13";
+import { enhanceSelect, refreshCombobox, ensureOption } from "./combobox.js?v=17";
 
 /* ============================================================== IndexedDB == */
 /* Deux object stores :
@@ -715,16 +716,21 @@ function escapeHtml(str) {
   ));
 }
 
-function populateSelect(selectEl, items, getValue, getLabel, placeholder = "Choisir…") {
+function populateSelect(selectEl, items, getValue, getLabel, placeholder = "Choisir…", getAlias = null) {
   const current = selectEl.value;
   selectEl.innerHTML = `<option value="">${escapeHtml(placeholder)}</option>`;
   for (const item of items) {
     const opt = document.createElement("option");
     opt.value = String(getValue(item));
     opt.textContent = getLabel(item);
+    if (getAlias) {
+      const a = getAlias(item);
+      if (a) opt.dataset.alias = a;
+    }
     selectEl.appendChild(opt);
   }
   if (current) selectEl.value = current;
+  refreshCombobox(selectEl);
 }
 
 function findSiteById(id) {
@@ -762,17 +768,253 @@ async function loadRefs() {
   state.refs = { camions, clients, projets, contacts, articles, sites, chauffeurs, prestations, materiels };
   state.reglages = Object.fromEntries(reglages.map((r) => [r.cle, r.valeur]));
   populateSelect(document.getElementById("f-camion"), camions, (c) => c.id, (c) => c.immatriculation);
-  populateSelect(document.getElementById("f-client"), clients, (c) => c.id, (c) => c.raison_sociale);
-  populateSelect(document.getElementById("f-dest-client"), clients, (c) => c.id, (c) => c.raison_sociale);
+  populateSelect(document.getElementById("f-client"), clients, (c) => c.id, (c) => c.raison_sociale, "Choisir ou taper…", (c) => c.alias);
+  populateSelect(document.getElementById("f-dest-client"), clients, (c) => c.id, (c) => c.raison_sociale, "Choisir ou taper…", (c) => c.alias);
   refreshProjetContactOptions();
+  enhanceHeaderComboboxes();
+}
+
+/* ======================================================= Comboboxes (beta.17) ==
+ * Champs de recherche (façon Odoo) greffés sur les <select> de l'en-tête. Le
+ * <select> reste la source de vérité (value + change + autosave). La dernière
+ * ligne « + Créer » ouvre la fiche rapide (bottom sheet). Récents par chauffeur.
+ */
+let headerComboboxesReady = false;
+function driverIdForRecents() {
+  return state.chauffeur ? state.chauffeur.id : (state.profil ? state.profil.email : null);
+}
+function enhanceHeaderComboboxes() {
+  if (headerComboboxesReady) {
+    ["f-camion", "f-client", "f-projet", "f-contact", "f-dest-client"].forEach((idf) =>
+      refreshCombobox(document.getElementById(idf))
+    );
+    return;
+  }
+  headerComboboxesReady = true;
+  const di = driverIdForRecents;
+  enhanceSelect(document.getElementById("f-camion"), {
+    entity: "camion", driverId: di, placeholder: "Choisir ou taper…",
+  });
+  enhanceSelect(document.getElementById("f-client"), {
+    entity: "client", driverId: di, placeholder: "Choisir ou taper…",
+    onCreate: (text) => openQuickCreate("client", text),
+    onEdit: (value) => openQuickCreate("client", "", value),
+    canEdit: () => true,
+  });
+  enhanceSelect(document.getElementById("f-projet"), {
+    entity: "projet", driverId: di, placeholder: "Facultatif — choisir ou taper…",
+    onCreate: (text) => openQuickCreate("projet", text),
+    onEdit: (value) => openQuickCreate("projet", "", value),
+    canEdit: () => true,
+  });
+  enhanceSelect(document.getElementById("f-contact"), {
+    entity: "contact", driverId: di, placeholder: "Choisir ou taper…",
+    onCreate: (text) => openQuickCreate("contact", text),
+    onEdit: (value) => openQuickCreate("contact", "", value),
+    canEdit: () => true,
+  });
+  enhanceSelect(document.getElementById("f-dest-client"), {
+    entity: "client", driverId: di, placeholder: "Choisir ou taper…",
+  });
+}
+
+/* ------------------------------------------------- Fiche rapide (bottom sheet) ==
+ * Création / modification express d'un référentiel, par-dessus le formulaire.
+ * Appelée par la dernière ligne « + Créer » d'un combobox, ou par le crayon.
+ * Renvoie une promesse résolue avec { value, label, alias } après création (pour
+ * que le combobox sélectionne la fiche), ou null si annulée. */
+const QC_SPECS = {
+  client: {
+    title: "client",
+    fields: [
+      { key: "raison_sociale", label: "Raison sociale", required: true, fromText: true },
+      { key: "adresse", label: "Adresse (imprimée sur la lettre)", required: true },
+      { key: "siren", label: "SIREN (facultatif)" },
+    ],
+    create: (v) => createClient({ raison_sociale: v.raison_sociale, adresse: v.adresse || null, siren: v.siren || null, actif: true }),
+    update: (id, v) => updateClient(id, { raison_sociale: v.raison_sociale, adresse: v.adresse || null, siren: v.siren || null }),
+    store: "clients",
+    toItem: (r) => ({ value: r.id, label: r.raison_sociale, alias: r.alias || "" }),
+    fill: (r) => ({ raison_sociale: r.raison_sociale, adresse: r.adresse, siren: r.siren }),
+  },
+  projet: {
+    title: "projet",
+    needsClient: true,
+    fields: [{ key: "nom", label: "Nom du projet", required: true, fromText: true }],
+    create: (v) => createProjet({ client_id: v._client_id, nom: v.nom }),
+    update: (id, v) => updateProjet(id, { nom: v.nom }),
+    store: "projets",
+    toItem: (r) => ({ value: r.id, label: r.nom || `Projet #${r.id}`, alias: "" }),
+    fill: (r) => ({ nom: r.nom }),
+  },
+  contact: {
+    title: "contact",
+    needsClient: true,
+    fields: [
+      { key: "nom", label: "Nom", required: true, fromText: true },
+      { key: "email", label: "E-mail (obligatoire)", type: "email", required: true },
+      { key: "tel", label: "Téléphone (facultatif)", type: "tel" },
+    ],
+    create: (v) => createContact({ client_id: v._client_id, nom: v.nom, email: v.email, tel: v.tel || null, signataire: false }),
+    update: (id, v) => updateContact(id, { nom: v.nom, email: v.email, tel: v.tel || null }),
+    store: "contacts",
+    toItem: (r) => ({ value: r.id, label: r.nom, alias: "" }),
+    fill: (r) => ({ nom: r.nom, email: r.email, tel: r.tel }),
+  },
+  site: {
+    title: "site",
+    fields: [
+      { key: "nom", label: "Nom du site", required: true, fromText: true },
+      { key: "adresse", label: "Adresse", required: true },
+    ],
+    create: (v) => {
+      const clientId = toIntOrNull(document.getElementById("f-client").value);
+      // Un chauffeur ne peut créer qu'un chantier (rattaché au client). Avec un
+      // client choisi -> chantier ; sinon site commun (réservé au bureau côté RLS).
+      const chantier = clientId != null;
+      return createSite({
+        nom: v.nom, adresse: v.adresse || null, statut: "actif",
+        portee: chantier ? "chantier" : "commun",
+        client_id: chantier ? clientId : null,
+      });
+    },
+    update: (id, v) => updateSite(id, { nom: v.nom, adresse: v.adresse || null }),
+    store: "sites",
+    toItem: (r) => ({ value: r.id, label: r.nom, alias: "" }),
+    fill: (r) => ({ nom: r.nom, adresse: r.adresse }),
+  },
+  article: {
+    title: "article",
+    fields: [{ key: "nom", label: "Nom de l'article", required: true, fromText: true }],
+    create: (v) => createArticle({ nom: v.nom, actif: true }),
+    update: (id, v) => updateArticle(id, { nom: v.nom }),
+    store: "articles",
+    toItem: (r) => ({ value: r.id, label: r.nom, alias: "" }),
+    fill: (r) => ({ nom: r.nom }),
+  },
+};
+
+let qcResolve = null;
+function openQuickCreate(entity, prefillText = "", editValue = null) {
+  const spec = QC_SPECS[entity];
+  if (!spec) return Promise.resolve(null);
+  const sheet = document.getElementById("quick-create-sheet");
+  const body = document.getElementById("quick-create-body");
+  const errEl = document.getElementById("quick-create-error");
+  const titleEl = document.getElementById("quick-create-title");
+  const editing = editValue != null;
+
+  // Garde-fou : projet/contact exigent un client choisi.
+  if (spec.needsClient && !editing && !document.getElementById("f-client").value) {
+    alert("Choisissez d'abord un client.");
+    return Promise.resolve(null);
+  }
+
+  const existing = editing
+    ? (state.refs[spec.store] || []).find((r) => String(r.id) === String(editValue))
+    : null;
+  const preset = existing ? spec.fill(existing) : {};
+
+  titleEl.textContent = (editing ? "Modifier le " : "Nouveau ") + spec.title;
+  body.innerHTML = "";
+  errEl.hidden = true;
+  const inputs = {};
+  for (const f of spec.fields) {
+    const input = makeTextInput(f.type || "text", preset[f.key] != null ? preset[f.key] : (f.fromText ? prefillText : ""));
+    input.required = !!f.required;
+    inputs[f.key] = input;
+    body.appendChild(fieldBlock(f.label, input));
+  }
+  sheet.hidden = false;
+  const first = inputs[spec.fields[0].key];
+  setTimeout(() => { try { first.focus(); } catch (e) { /* noop */ } }, 50);
+
+  return new Promise((resolve) => {
+    qcResolve = resolve;
+    const form = document.getElementById("quick-create-form");
+    const saveBtn = document.getElementById("btn-quick-create-save");
+    const onSubmit = async (e) => {
+      e.preventDefault();
+      const values = {};
+      for (const f of spec.fields) {
+        const val = inputs[f.key].value.trim();
+        if (f.required && !val) {
+          errEl.textContent = `Le champ « ${f.label} » est obligatoire.`;
+          errEl.hidden = false;
+          inputs[f.key].focus();
+          return;
+        }
+        values[f.key] = val;
+      }
+      if (spec.needsClient) values._client_id = toIntOrNull(document.getElementById("f-client").value);
+      saveBtn.disabled = true;
+      try {
+        let row;
+        if (editing) {
+          row = await spec.update(existing.id, values);
+          row = row || Object.assign({}, existing, values);
+          const arr = state.refs[spec.store] || [];
+          const i = arr.findIndex((r) => String(r.id) === String(existing.id));
+          if (i >= 0) arr[i] = Object.assign({}, arr[i], row);
+        } else {
+          row = await spec.create(values);
+          (state.refs[spec.store] = state.refs[spec.store] || []).push(row);
+        }
+        cleanup();
+        sheet.hidden = true;
+        // Projet/Contact : rafraîchir les listes filtrées par client.
+        if (entity === "projet" || entity === "contact") refreshProjetContactOptions();
+        resolve(spec.toItem(row));
+      } catch (err) {
+        errEl.textContent = "Enregistrement impossible : " + (err && err.message ? err.message : err);
+        errEl.hidden = false;
+        saveBtn.disabled = false;
+      }
+    };
+    function cleanup() {
+      form.removeEventListener("submit", onSubmit);
+      saveBtn.disabled = false;
+      qcResolve = null;
+    }
+    form.addEventListener("submit", onSubmit);
+    sheet._qcCleanup = cleanup;
+  });
+}
+
+function closeQuickCreate() {
+  const sheet = document.getElementById("quick-create-sheet");
+  if (!sheet || sheet.hidden) return;
+  sheet.hidden = true;
+  if (sheet._qcCleanup) sheet._qcCleanup();
+  if (qcResolve) { qcResolve(null); qcResolve = null; }
 }
 
 function refreshProjetContactOptions() {
   const clientId = document.getElementById("f-client").value;
   const projets = clientId ? state.refs.projets.filter((p) => String(p.client_id) === clientId) : state.refs.projets;
   const contacts = clientId ? state.refs.contacts.filter((c) => String(c.client_id) === clientId) : state.refs.contacts;
-  populateSelect(document.getElementById("f-projet"), projets, (p) => p.id, (p) => p.nom || p.ref_contrat || `Projet #${p.id}`);
-  populateSelect(document.getElementById("f-contact"), contacts, (c) => c.id, (c) => c.nom);
+  populateSelect(document.getElementById("f-projet"), projets, (p) => p.id, (p) => p.nom || p.ref_contrat || `Projet #${p.id}`, "Facultatif — choisir ou taper…");
+  populateSelect(document.getElementById("f-contact"), contacts, (c) => c.id, (c) => c.nom, "Choisir ou taper…");
+}
+
+// Changement de client : on refiltre Projet/Contact et on purge les valeurs qui
+// n'appartiennent plus au client choisi (sinon on enverrait un projet d'un autre
+// client). Les purges sont persistées via l'événement change du <select>.
+function onClientChange() {
+  const clientId = document.getElementById("f-client").value;
+  const projetSel = document.getElementById("f-projet");
+  const contactSel = document.getElementById("f-contact");
+  const prevProjet = projetSel.value;
+  const prevContact = contactSel.value;
+  if (clientId) {
+    const projet = state.refs.projets.find((p) => String(p.id) === projetSel.value);
+    if (projet && String(projet.client_id) !== clientId) projetSel.value = "";
+    const contact = state.refs.contacts.find((c) => String(c.id) === contactSel.value);
+    if (contact && String(contact.client_id) !== clientId) contactSel.value = "";
+  }
+  refreshProjetContactOptions();
+  if (projetSel.value !== prevProjet) projetSel.dispatchEvent(new Event("change", { bubbles: true }));
+  if (contactSel.value !== prevContact) contactSel.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
 /* ========================================================== Tableau de bord == */
@@ -860,12 +1102,19 @@ function fillHeaderForm(data) {
   document.getElementById("f-date").value = d.date_etablissement || todayIso();
   document.getElementById("f-camion").value = d.camion_id != null ? String(d.camion_id) : "";
 
-  const projet = state.refs.projets.find((p) => p.id === d.projet_id);
-  document.getElementById("f-client").value = projet ? String(projet.client_id) : "";
+  // Client référencé directement sur la lettre (beta.17). Repli : client du
+  // projet pour les lettres antérieures qui n'ont pas de client_id.
+  let clientId = d.client_id != null ? d.client_id : null;
+  if (clientId == null && d.projet_id != null) {
+    const projet = state.refs.projets.find((p) => p.id === d.projet_id);
+    clientId = projet ? projet.client_id : null;
+  }
+  document.getElementById("f-client").value = clientId != null ? String(clientId) : "";
   refreshProjetContactOptions();
 
   document.getElementById("f-projet").value = d.projet_id != null ? String(d.projet_id) : "";
   document.getElementById("f-contact").value = d.contact_id != null ? String(d.contact_id) : "";
+  ["f-client", "f-projet", "f-contact", "f-camion"].forEach((idf) => refreshCombobox(document.getElementById(idf)));
 
   fillDestinataireControls(d);
   renderCreneaux(Array.isArray(d.heures) ? d.heures : []);
@@ -1059,9 +1308,10 @@ async function ensureLv() {
     date_etablissement: document.getElementById("f-date").value || todayIso(),
     chauffeur_id: state.chauffeur ? state.chauffeur.id : null,
     owner_email: state.profil ? state.profil.email : null,
-    camion_id: prefill.camion_id || null,
-    projet_id: prefill.projet_id || null,
-    contact_id: prefill.contact_id || null,
+    camion_id: toIntOrNull(document.getElementById("f-camion").value) || prefill.camion_id || null,
+    client_id: toIntOrNull(document.getElementById("f-client").value) || prefill.client_id || null,
+    projet_id: toIntOrNull(document.getElementById("f-projet").value) || prefill.projet_id || null,
+    contact_id: toIntOrNull(document.getElementById("f-contact").value) || prefill.contact_id || null,
     statut: "en_cours",
   };
   // Créneaux horaires déjà saisis / repris de la dernière lettre : persistés dès
@@ -1086,7 +1336,10 @@ function wireHeaderAutosave() {
   const btnAddCreneau = document.getElementById("btn-add-creneau");
   if (btnAddCreneau) btnAddCreneau.addEventListener("click", addCreneau);
 
-  document.getElementById("f-client").addEventListener("change", refreshProjetContactOptions);
+  // Client référencé directement sur la lettre (beta.17) : autosave de client_id
+  // + refiltrage Projet/Contact (et purge des valeurs devenues incohérentes).
+  wireAutosaveField(document.getElementById("f-client"), { table: "lettres_voiture", ensureId: ensureLv, field: "client_id", transform: toIntOrNull });
+  document.getElementById("f-client").addEventListener("change", onClientChange);
 
   // Destinataire (D) : mode + client/saisie libre -> dest_identique + destinataire.
   document.getElementById("f-dest-mode").addEventListener("change", saveDestinataire);
@@ -1201,6 +1454,14 @@ async function renderTourCard(entry) {
   pickerBtns[0].addEventListener("click", () => openSitePicker(chargementSel));
   pickerBtns[1].addEventListener("click", () => openSitePicker(dechargementSel));
 
+  const siteCbOpts = (sel) => ({
+    entity: "site", driverId: driverIdForRecents, placeholder: "Choisir un site…",
+    onCreate: (text) => openQuickCreate("site", text),
+    onEdit: (value) => openQuickCreate("site", "", value), canEdit: () => true,
+  });
+  enhanceSelect(chargementSel, siteCbOpts(chargementSel));
+  enhanceSelect(dechargementSel, siteCbOpts(dechargementSel));
+
   node.querySelector(".btn-delete-tour").addEventListener("click", () => handleDeleteTour(entry, node));
   node.querySelector(".btn-add-ligne").addEventListener("click", () => handleAddLigne(entry, node));
 
@@ -1219,6 +1480,10 @@ function renderLigneRow(lignesList, entry, ligne) {
   const articleSel = node.querySelector(".f-ligne-article");
   populateSelect(articleSel, state.refs.articles, (a) => a.id, (a) => a.nom, "Article…");
   articleSel.value = ligne.article_id != null ? String(ligne.article_id) : "";
+  enhanceSelect(articleSel, {
+    entity: "article", driverId: driverIdForRecents, placeholder: "Article…", wrapClass: "cb-area-article",
+    onCreate: (text) => openQuickCreate("article", text),
+  });
 
   const qteInput = node.querySelector(".f-ligne-quantite");
   qteInput.value = frQty(ligne.quantite);
@@ -1365,6 +1630,7 @@ function renderPrestationRow(ligne, pending) {
   const prestSel = node.querySelector(".f-prestation-prestation");
   populateSelect(prestSel, state.refs.prestations, (p) => p.id, (p) => p.libelle, "Prestation…");
   prestSel.value = ligne.prestation_id != null ? String(ligne.prestation_id) : "";
+  enhanceSelect(prestSel, { entity: "prestation", driverId: driverIdForRecents, placeholder: "Prestation…", wrapClass: "cb-area-prestation" });
 
   const qteInput = node.querySelector(".f-prestation-quantite");
   qteInput.value = frQty(ligne.quantite);
@@ -1375,6 +1641,7 @@ function renderPrestationRow(ligne, pending) {
   const materielSel = node.querySelector(".f-prestation-materiel");
   populateSelect(materielSel, state.refs.materiels, (m) => m.id, (m) => m.libelle, "Matériel…");
   materielSel.value = ligne.materiel_id != null ? String(ligne.materiel_id) : "";
+  enhanceSelect(materielSel, { entity: "materiel", driverId: driverIdForRecents, placeholder: "Matériel…", wrapClass: "cb-area-materiel" });
 
   // Choisir une prestation applique son unité par défaut (catalogue).
   prestSel.addEventListener("change", () => {
@@ -3495,6 +3762,12 @@ function wireStaticUI() {
   wireEmailOtpLogin();
   wireReglagesBureauFields();
   initInstall();
+
+  // -------------------------------------------------------- Fiche rapide (beta.17)
+  document.getElementById("btn-quick-create-close").addEventListener("click", closeQuickCreate);
+  document.getElementById("quick-create-sheet").addEventListener("click", (e) => {
+    if (e.target.id === "quick-create-sheet") closeQuickCreate();
+  });
 
   // -------------------------------------------------------- Feuille « choix de site »
   document.getElementById("btn-site-picker-close").addEventListener("click", closeSitePicker);

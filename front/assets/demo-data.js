@@ -48,9 +48,12 @@ export const CHAUFFEURS = [
 /* ------------------------------------------------------------- Clients / contacts */
 const nextClientId = makeCounter(3);
 export const CLIENTS = [
-  { id: 1, raison_sociale: "Travaux Publics Chantereine", adresse: "12 avenue des Peupliers, 77400 Lagny-Démo", siren: "123 456 789", actif: true },
-  { id: 2, raison_sociale: "Groupe Valoris Environnement", adresse: "4 rue des Tanneries, 93160 Noisy-Démo", siren: "234 567 890", actif: true },
-  { id: 3, raison_sociale: "SARL Bétons de l'Est", adresse: "27 rue du Port, 93460 Gournay-Démo", siren: "345 678 901", actif: true },
+  { id: 1, raison_sociale: "Travaux Publics Chantereine", adresse: "12 avenue des Peupliers, 77400 Lagny-Démo", siren: "123 456 789", alias: null, actif: true },
+  { id: 2, raison_sociale: "Groupe Valoris Environnement", adresse: "4 rue des Tanneries, 93160 Noisy-Démo", siren: "234 567 890", alias: "Valoris", actif: true },
+  { id: 3, raison_sociale: "SARL Bétons de l'Est", adresse: "27 rue du Port, 93460 Gournay-Démo", siren: "345 678 901", alias: null, actif: true },
+  // Alias de recherche (beta.17) : « jean » -> EJL, « svtp » -> Société Voirie…
+  { id: 4, raison_sociale: "EJL (Jean Lefebvre)", adresse: "9 rue des Chantiers, 93160 Noisy-Démo", siren: "456 789 012", alias: "Jean Lefebvre", actif: true },
+  { id: 5, raison_sociale: "Société Voirie de Travaux Publics (SVTP)", adresse: "3 allée du Dépôt, 77400 Lagny-Démo", siren: "567 890 123", alias: "SVTP", actif: true },
 ];
 
 const nextContactId = makeCounter(3);
@@ -170,21 +173,21 @@ export const LETTRES_VOITURE = [
   {
     id: 1, numero: "KER-03041", date_etablissement: todayIso(), date_prise_en_charge: todayIso(),
     expediteur: "KERLAM", destinataire: "KERLAM", dest_identique: true,
-    camion_id: 1, chauffeur_id: 1, projet_id: 1, contact_id: 1, heures_regie: null,
+    camion_id: 1, chauffeur_id: 1, client_id: 1, projet_id: 1, contact_id: 1, heures_regie: null,
     heures: [{ debut: "08:00", fin: "12:00" }, { debut: "13:00", fin: "17:00" }],
     statut: "en_cours", preparee: false, owner_email: "demo.chauffeur@kerlam.fr", deleted_at: null,
   },
   {
     id: 2, numero: "KER-03042", date_etablissement: todayIso(), date_prise_en_charge: todayIso(),
     expediteur: "KERLAM", destinataire: "KERLAM", dest_identique: true,
-    camion_id: 2, chauffeur_id: 2, projet_id: 1, contact_id: 1, heures_regie: null,
+    camion_id: 2, chauffeur_id: 2, client_id: 1, projet_id: 1, contact_id: 1, heures_regie: null,
     heures: [{ debut: "06:45", fin: "15:15" }],
     statut: "a_signer", preparee: false, owner_email: "fatou.diallo@kerlam.fr", deleted_at: null,
   },
   {
     id: 3, numero: null, date_etablissement: addDays(1), date_prise_en_charge: null,
     expediteur: "KERLAM", destinataire: "KERLAM", dest_identique: true,
-    camion_id: 3, chauffeur_id: 3, projet_id: 1, contact_id: 1, heures_regie: null,
+    camion_id: 3, chauffeur_id: 3, client_id: 1, projet_id: 1, contact_id: 1, heures_regie: null,
     heures: null,
     statut: "preparee", preparee: true, owner_email: "hugo.lefevre@kerlam.fr", deleted_at: null,
   },

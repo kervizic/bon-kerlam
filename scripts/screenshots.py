@@ -369,6 +369,61 @@ def shoot_login(ctx, prefix: str) -> None:
             page.close()
 
 
+def shoot_combobox(ctx, prefix: str) -> None:
+    """beta.17 : champ de recherche Client avec liste ouverte filtrée (« jean » ->
+    EJL via alias) + ligne « + Créer », et fiche rapide client (bottom sheet)."""
+    for theme in ("clair", "sombre"):
+        page = ctx.new_page()
+        try:
+            page.goto(f"{BASE}?demo=1&screen=today&role=chauffeur&theme={theme}", wait_until="networkidle")
+            page.wait_for_timeout(600)
+            # Ouvre le combobox Client et tape « jean » -> liste filtrée + « + Créer ».
+            page.evaluate(
+                """() => {
+                  const sel = document.getElementById('f-client');
+                  const input = sel.parentNode.querySelector('.cb-input');
+                  input.scrollIntoView({block:'center'});
+                  input.focus();
+                  input.value = 'jean';
+                  input.dispatchEvent(new Event('input', {bubbles:true}));
+                }"""
+            )
+            page.wait_for_timeout(300)
+            page.screenshot(path=str(OUT / f"{prefix}-combobox-client-{theme}.png"), full_page=False)
+            check_no_hscroll(page, f"{prefix}-combobox-client-{theme}")
+            print(f"   combobox-client-{theme}")
+            # Clique « + Créer » -> fiche rapide client pré-remplie.
+            page.evaluate(
+                """() => {
+                  const sel = document.getElementById('f-client');
+                  const opt = Array.from(sel.parentNode.querySelectorAll('.cb-option'))
+                    .find(o => o.classList.contains('cb-create'));
+                  if (opt) opt.dispatchEvent(new MouseEvent('mousedown', {bubbles:true}));
+                }"""
+            )
+            page.wait_for_timeout(300)
+            page.screenshot(path=str(OUT / f"{prefix}-fiche-rapide-client-{theme}.png"), full_page=False)
+            check_no_hscroll(page, f"{prefix}-fiche-rapide-client-{theme}")
+            print(f"   fiche-rapide-client-{theme}")
+        except Exception as exc:  # noqa: BLE001
+            print(f"   !! combobox/{theme}: {exc}")
+        finally:
+            page.close()
+    # Écran bureau Clients (même recherche + bouton Nouveau).
+    for theme in ("clair", "sombre"):
+        page = ctx.new_page()
+        try:
+            page.goto(f"{BASE}?demo=1&screen=clients&role=bureau&theme={theme}", wait_until="networkidle")
+            page.wait_for_timeout(600)
+            page.screenshot(path=str(OUT / f"{prefix}-clients-bureau-{theme}.png"), full_page=False)
+            check_no_hscroll(page, f"{prefix}-clients-bureau-{theme}")
+            print(f"   clients-bureau-{theme}")
+        except Exception as exc:  # noqa: BLE001
+            print(f"   !! clients-bureau/{theme}: {exc}")
+        finally:
+            page.close()
+
+
 def main() -> int:
     with sync_playwright() as p:
         # --lang=fr-FR : les contrôles natifs <input type="date"|"time"> suivent la
@@ -400,6 +455,7 @@ def main() -> int:
         shoot_prestations(iphone, "iphone")
         shoot_formulaire_heures(iphone, "iphone-chauffeur")
         shoot_suppression(iphone, "iphone-chauffeur")
+        shoot_combobox(iphone, "iphone")
         iphone.close()
 
         ipad = browser.new_context(viewport=IPAD, device_scale_factor=2, is_mobile=True, has_touch=True, **LOCALE)

@@ -1004,3 +1004,79 @@ body.can-switch-mode .bb-more { display: flex; }
 .installer-all-title { margin-top: 28px; }
 .install-done { background: var(--status-ok-bg); border-radius: var(--radius); padding: 12px 16px; margin: 12px 0; }
 .installer-native-btn, #installer-native-btn { margin-bottom: 12px; }
+
+/* ===================================================== Combobox (beta.17) ==== */
+/* Champ de recherche greffé sur un <select> natif caché (cf. combobox.js). Le
+   <select> reste dans le DOM (source de vérité) mais invisible. */
+.cb-native {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px; border: 0;
+  clip: rect(0 0 0 0); clip-path: inset(50%);
+  overflow: hidden; pointer-events: none;
+}
+.combobox { position: relative; width: 100%; }
+.cb-field { position: relative; display: flex; align-items: center; }
+.cb-input {
+  width: 100%;
+  min-height: var(--control-h);
+  font-size: 16px;               /* >= 16px : pas de zoom iOS */
+  padding: 0 98px 0 14px;        /* place pour crayon + croix + chevron */
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  box-sizing: border-box;
+  -webkit-appearance: none; appearance: none;
+}
+.cb-input::placeholder { color: var(--text-muted); opacity: 1; }
+.combobox.is-open .cb-input { border-color: var(--c-orange); }
+
+.cb-caret, .cb-clear, .cb-edit {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--text-muted); background: transparent; border: 0;
+  width: 28px; height: 28px; padding: 0; cursor: pointer;
+}
+.cb-caret { right: 8px; pointer-events: none; }
+.combobox.is-open .cb-caret { transform: translateY(-50%) rotate(180deg); }
+.cb-clear { right: 40px; }
+.cb-edit  { right: 70px; color: var(--c-orange); }
+
+/* Liste déroulante JUSTE sous le champ. */
+.cb-list {
+  position: absolute; left: 0; right: 0; top: calc(100% + 4px);
+  z-index: 60;
+  max-height: 46vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+  padding: 4px;
+}
+.cb-option {
+  padding: 12px 12px; min-height: 44px;
+  border-radius: 8px; cursor: pointer;
+  font-size: 16px; color: var(--text);
+  display: flex; align-items: center;
+}
+.cb-option.is-active, .cb-option:hover { background: var(--bg); }
+.cb-option[aria-selected="true"] { font-weight: 600; }
+.cb-option mark { background: rgba(253, 128, 8, 0.22); color: inherit; border-radius: 3px; padding: 0 1px; }
+.cb-create { color: var(--c-orange); font-weight: 600; }
+.cb-create-plus {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; margin-right: 8px;
+  border-radius: 50%; background: rgba(253, 128, 8, 0.15); font-weight: 700;
+}
+.cb-empty { padding: 12px; color: var(--text-muted); font-size: 15px; }
+
+/* Intégration dans les rangées à grille (tours / prestations). */
+.site-row .combobox { flex: 1; min-width: 0; }
+.ligne-row > .combobox.cb-area-article { grid-area: article; min-width: 0; }
+.prestation-row > .combobox.cb-area-prestation { grid-area: prestation; min-width: 0; }
+.prestation-row > .combobox.cb-area-materiel { grid-area: materiel; min-width: 0; }
+.ligne-row .cb-input, .prestation-row .cb-input { min-height: 48px; }
+
+/* Fiche rapide : réutilise .sheet-overlay / .sheet-panel existants. */
+#quick-create-body .field:last-child { margin-bottom: 0; }
