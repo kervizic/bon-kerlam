@@ -372,6 +372,10 @@ export function enhanceSelect(select, opts = {}) {
 
   async function create(text) {
     if (!opts.onCreate) return;
+    // Fermer la liste AVANT d'ouvrir la fiche rapide : sinon le menu déroulant du
+    // combobox déclencheur (« + Créer … ») reste affiché PAR-DESSUS les champs de
+    // la feuille (bug beta.18, fiche « Nouveau contact »).
+    closeList();
     try {
       const created = await opts.onCreate(text);
       if (created && created.value != null) {

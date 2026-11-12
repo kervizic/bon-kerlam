@@ -786,7 +786,7 @@ input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
 
 /* ----------------------------------------------------------- Feuille (sheet) */
 .sheet-overlay {
-  position: fixed; inset: 0; z-index: 50;
+  position: fixed; inset: 0; z-index: 90;   /* > .cb-list (60) : une feuille recouvre tout combobox ouvert */
   background: rgba(0,0,0,.4);
   display: flex; align-items: flex-end; justify-content: center;
 }
@@ -1078,5 +1078,50 @@ body.can-switch-mode .bb-more { display: flex; }
 .prestation-row > .combobox.cb-area-materiel { grid-area: materiel; min-width: 0; }
 .ligne-row .cb-input, .prestation-row .cb-input { min-height: 48px; }
 
+/* Aide courte sous un champ (ex. « Contact signataire » -> « Signe les lettres… »). */
+.field-help {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
 /* Fiche rapide : réutilise .sheet-overlay / .sheet-panel existants. */
 #quick-create-body .field:last-child { margin-bottom: 0; }
+
+/* Panneau en colonne : en-tête fixe + corps défilant + pied (bouton) collant.
+   La hauteur du panneau est bornée à celle de la feuille, elle-même ajustée au
+   visualViewport par app.js quand le clavier iOS est ouvert -> le bouton
+   « Enregistrer » reste toujours visible au-dessus du clavier. */
+.quick-create-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;              /* seul le corps défile */
+  max-height: 100%;
+}
+.quick-create-form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;                 /* autorise le corps à rétrécir et défiler */
+  flex: 1 1 auto;
+}
+.quick-create-body {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 2px;                  /* n'écrase pas l'anneau de focus */
+}
+.quick-create-actions {
+  position: sticky;
+  bottom: 0;
+  flex: 0 0 auto;
+  background: var(--surface);
+  padding-top: 12px;
+  padding-bottom: env(safe-area-inset-bottom);
+  margin-top: 4px;
+  box-shadow: 0 -8px 12px -8px rgba(0,0,0,.18);
+}
+.quick-create-actions .auth-error { margin: 0 0 8px; }
+/* La feuille fiche rapide est ajustée par JS : on neutralise le padding-bas et le
+   max-height en vh de .sheet-panel (gérés dynamiquement). */
+#quick-create-sheet .sheet-panel { padding-bottom: 16px; }

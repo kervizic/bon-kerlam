@@ -685,10 +685,16 @@ function fieldBlock(labelText, inputEl) {
   return wrap;
 }
 
-function makeTextInput(type, value) {
+function makeTextInput(type, value, attrs = {}) {
   const el = document.createElement("input");
   el.type = type;
   if (value != null) el.value = value;
+  // Attributs clavier / autofill iOS (e-mail, tél, nom…) passés par la fiche rapide.
+  if (attrs.inputmode) el.setAttribute("inputmode", attrs.inputmode);
+  if (attrs.autocomplete) el.setAttribute("autocomplete", attrs.autocomplete);
+  if (attrs.autocapitalize) el.setAttribute("autocapitalize", attrs.autocapitalize);
+  if (attrs.name) el.setAttribute("name", attrs.name);
+  if (attrs.placeholder) el.setAttribute("placeholder", attrs.placeholder);
   return el;
 }
 
@@ -811,7 +817,7 @@ function enhanceHeaderComboboxes() {
   });
   enhanceSelect(document.getElementById("f-contact"), {
     entity: "contact", driverId: di, placeholder: "Choisir ou taper…",
-    createLabel: "un contact",
+    createLabel: "un contact signataire",
     onCreate: (text) => openQuickCreate("contact", text),
     onEdit: (value) => openQuickCreate("contact", "", value),
     canEdit: () => true,
@@ -837,9 +843,11 @@ const QC_SPECS = {
   client: {
     title: "client",
     fields: [
-      { key: "raison_sociale", label: "Nom / raison sociale", required: true, fromText: true },
-      { key: "adresse", label: "Adresse, CP et ville (imprimée sur la lettre)", required: true },
-      { key: "siren", label: "SIREN (facultatif)" },
+      { key: "raison_sociale", label: "Nom / raison sociale", required: true, fromText: true,
+        autocomplete: "organization", autocapitalize: "words" },
+      { key: "adresse", label: "Adresse, CP et ville (imprimée sur la lettre)", required: true,
+        autocomplete: "street-address", autocapitalize: "words" },
+      { key: "siren", label: "SIREN (facultatif)", inputmode: "numeric", autocomplete: "off" },
     ],
     create: (v) => createClient({ raison_sociale: v.raison_sociale, adresse: v.adresse || null, siren: v.siren || null, actif: true }),
     update: (id, v) => updateClient(id, { raison_sociale: v.raison_sociale, adresse: v.adresse || null, siren: v.siren || null }),
@@ -858,12 +866,15 @@ const QC_SPECS = {
     fill: (r) => ({ nom: r.nom }),
   },
   contact: {
-    title: "contact",
+    title: "contact signataire",
     needsClient: true,
     fields: [
-      { key: "nom", label: "Nom", required: true, fromText: true },
-      { key: "email", label: "E-mail (obligatoire)", type: "email", required: true },
-      { key: "tel", label: "Téléphone (facultatif)", type: "tel" },
+      { key: "nom", label: "Nom", required: true, fromText: true,
+        autocomplete: "name", autocapitalize: "words" },
+      { key: "email", label: "E-mail (obligatoire)", type: "email", required: true, email: true,
+        inputmode: "email", autocomplete: "email", autocapitalize: "off" },
+      { key: "tel", label: "Téléphone (facultatif)", type: "tel",
+        inputmode: "tel", autocomplete: "tel" },
     ],
     create: (v) => createContact({ client_id: v._client_id, nom: v.nom, email: v.email, tel: v.tel || null, signataire: false }),
     update: (id, v) => updateContact(id, { nom: v.nom, email: v.email, tel: v.tel || null }),
@@ -874,8 +885,9 @@ const QC_SPECS = {
   site: {
     title: "site",
     fields: [
-      { key: "nom", label: "Nom du site", required: true, fromText: true },
-      { key: "adresse", label: "Adresse", required: true },
+      { key: "nom", label: "Nom du site", required: true, fromText: true, autocapitalize: "words" },
+      { key: "adresse", label: "Adresse, CP et ville", required: true,
+        autocomplete: "street-address", autocapitalize: "words" },
     ],
     create: (v) => {
       const clientId = toIntOrNull(document.getElementById("f-client").value);
@@ -930,12 +942,29 @@ function openQuickCreate(entity, prefillText = "", editValue = null) {
   errEl.hidden = true;
   const inputs = {};
   for (const f of spec.fields) {
-    const input = makeTextInput(f.type || "text", preset[f.key] != null ? preset[f.key] : (f.fromText ? prefillText : ""));
+    const input = makeTextInput(
+      f.type || "text",
+      preset[f.key] != null ? preset[f.key] : (f.fromText ? prefillText : ""),
+      { inputmode: f.inputmode, autocomplete: f.autocomplete, autocapitalize: f.autocapitalize, name: f.key },
+    );
     input.required = !!f.required;
     inputs[f.key] = input;
     body.appendChild(fieldBlock(f.label, input));
   }
   sheet.hidden = false;
+  // Ajuste la feuille au clavier iOS (visualViewport) : le panneau reste au-dessus
+  // du clavier et de la barre d'accessoires, le bouton « Enregistrer » visible.
+  attachQuickCreateViewport(sheet);
+  // Garder le champ actif visible quand le clavier le pousse hors écran (listener
+  // greffé une seule fois sur le corps, réutilisé à chaque ouverture).
+  if (!body._qcFocusWired) {
+    body._qcFocusWired = true;
+    body.addEventListener("focusin", (e) => {
+      if (e.target && e.target.scrollIntoView) {
+        setTimeout(() => { try { e.target.scrollIntoView({ block: "center", behavior: "smooth" }); } catch (err) { /* noop */ } }, 120);
+      }
+    });
+  }
   const first = inputs[spec.fields[0].key];
   setTimeout(() => { try { first.focus(); } catch (e) { /* noop */ } }, 50);
 
@@ -950,6 +979,13 @@ function openQuickCreate(entity, prefillText = "", editValue = null) {
         const val = inputs[f.key].value.trim();
         if (f.required && !val) {
           errEl.textContent = `Le champ « ${f.label} » est obligatoire.`;
+          errEl.hidden = false;
+          inputs[f.key].focus();
+          return;
+        }
+        // E-mail du contact obligatoire ET au bon format (création impossible sinon).
+        if (f.email && val && !isValidEmail(val)) {
+          errEl.textContent = "Adresse e-mail invalide (ex. prenom.nom@kerlam.fr).";
           errEl.hidden = false;
           inputs[f.key].focus();
           return;
@@ -984,6 +1020,7 @@ function openQuickCreate(entity, prefillText = "", editValue = null) {
     function cleanup() {
       form.removeEventListener("submit", onSubmit);
       saveBtn.disabled = false;
+      detachQuickCreateViewport(sheet);
       qcResolve = null;
     }
     form.addEventListener("submit", onSubmit);
@@ -996,7 +1033,48 @@ function closeQuickCreate() {
   if (!sheet || sheet.hidden) return;
   sheet.hidden = true;
   if (sheet._qcCleanup) sheet._qcCleanup();
+  detachQuickCreateViewport(sheet);
   if (qcResolve) { qcResolve(null); qcResolve = null; }
+}
+
+// Format e-mail (validation légère côté client ; GoTrue/API restent la vérité).
+function isValidEmail(s) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s || "").trim());
+}
+
+/* Ajuste la feuille fiche rapide au visualViewport : quand le clavier iOS s'ouvre,
+ * visualViewport rétrécit. On borne l'overlay à la zone VISIBLE (hauteur + offset)
+ * pour que le panneau (ancré en bas) et son bouton « Enregistrer » restent au-dessus
+ * du clavier et de la barre d'accessoires. Sans visualViewport : no-op (la feuille
+ * garde son max-height 85vh). */
+function attachQuickCreateViewport(sheet) {
+  const vv = window.visualViewport;
+  if (!vv) return;
+  const apply = () => {
+    // L'overlay occupe exactement la fenêtre visuelle (sous la barre d'état,
+    // au-dessus du clavier). align-items:flex-end -> panneau collé au clavier.
+    sheet.style.position = "fixed";
+    sheet.style.left = "0";
+    sheet.style.width = "100%";
+    sheet.style.top = vv.offsetTop + "px";
+    sheet.style.height = vv.height + "px";
+    sheet.style.bottom = "auto";
+  };
+  apply();
+  sheet._qcVvApply = apply;
+  vv.addEventListener("resize", apply);
+  vv.addEventListener("scroll", apply);
+}
+
+function detachQuickCreateViewport(sheet) {
+  const vv = window.visualViewport;
+  if (vv && sheet._qcVvApply) {
+    vv.removeEventListener("resize", sheet._qcVvApply);
+    vv.removeEventListener("scroll", sheet._qcVvApply);
+  }
+  sheet._qcVvApply = null;
+  // Réinitialise les styles inline posés par apply().
+  for (const p of ["position", "left", "width", "top", "height", "bottom"]) sheet.style[p] = "";
 }
 
 function refreshProjetContactOptions() {
@@ -2445,8 +2523,12 @@ function renderClientCard(c, startOpen = false) {
       // ---------------------------------------------------------------- Contacts
       const contactsTitle = document.createElement("div");
       contactsTitle.className = "sheet-section-title";
-      contactsTitle.textContent = "Contacts";
+      contactsTitle.textContent = "Contacts signataires";
       body.appendChild(contactsTitle);
+      const contactsHelp = document.createElement("p");
+      contactsHelp.className = "field-help";
+      contactsHelp.textContent = "Signe les lettres de voiture.";
+      body.appendChild(contactsHelp);
 
       const contactsList = document.createElement("div");
       contactsList.className = "entity-list";
@@ -2465,7 +2547,7 @@ function renderClientCard(c, startOpen = false) {
       const addContactBtn = document.createElement("button");
       addContactBtn.type = "button";
       addContactBtn.className = "btn btn-secondary btn-sm";
-      addContactBtn.textContent = "+ Contact";
+      addContactBtn.textContent = "+ Contact signataire";
       addContactBtn.style.marginTop = "8px";
       addContactBtn.addEventListener("click", async () => {
         try {

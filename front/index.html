@@ -10,8 +10,8 @@
   <!-- Empreinte de version du shell (cf. assets/app-version.js). Bumper `app-rev`
        à chaque déploiement backend devant forcer un refresh (sinon le bump d'un
        `?v=` d'asset suffit). -->
-  <meta name="app-version" content="0.1.0-beta.18">
-  <meta name="app-rev" content="18">
+  <meta name="app-version" content="0.1.0-beta.19">
+  <meta name="app-rev" content="19">
 
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
@@ -31,8 +31,8 @@
        en police système). crossorigin obligatoire : les polices sont toujours
        récupérées en mode CORS, l'attribut évite un double téléchargement. -->
   <link rel="preload" href="/assets/fonts/sarpanch-900.woff2?v=14" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/assets/styles.css?v=18">
-  <script src="/assets/app-version.js?v=18" defer></script>
+  <link rel="stylesheet" href="/assets/styles.css?v=19">
+  <script src="/assets/app-version.js?v=19" defer></script>
 </head>
 <body>
   <a href="#main" class="skip-link">Aller au contenu</a>
@@ -229,8 +229,9 @@
               <select id="f-projet" name="projet_id"><option value="">Choisir…</option></select>
             </div>
             <div class="field">
-              <label for="f-contact">Contact</label>
+              <label for="f-contact">Contact signataire</label>
               <select id="f-contact" name="contact_id"><option value="">Choisir…</option></select>
+              <p class="field-help">Signe les lettres de voiture.</p>
             </div>
             <div class="field">
               <label for="f-dest-mode">Destinataire</label>
@@ -581,16 +582,21 @@
   </div>
 
   <!-- ============================================ Feuille « fiche rapide » -->
+  <!-- Panneau en colonne : en-tête fixe + corps défilant + pied collant. La feuille
+       est ajustée à visualViewport (clavier iOS) par app.js pour que le bouton
+       « Enregistrer » reste visible au-dessus du clavier et de la barre d'accessoires. -->
   <div id="quick-create-sheet" class="sheet-overlay" hidden>
-    <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="quick-create-title">
+    <div class="sheet-panel quick-create-panel" role="dialog" aria-modal="true" aria-labelledby="quick-create-title">
       <div class="sheet-header">
         <h2 id="quick-create-title">Nouvelle fiche</h2>
         <button type="button" class="icon-btn" id="btn-quick-create-close" aria-label="Fermer"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       </div>
-      <form id="quick-create-form" autocomplete="off">
-        <div id="quick-create-body"></div>
-        <p id="quick-create-error" class="auth-error" role="alert" hidden></p>
-        <button type="submit" id="btn-quick-create-save" class="btn btn-primary btn-block is-spaced">Enregistrer</button>
+      <form id="quick-create-form" class="quick-create-form" autocomplete="off" novalidate>
+        <div id="quick-create-body" class="quick-create-body"></div>
+        <div class="quick-create-actions">
+          <p id="quick-create-error" class="auth-error" role="alert" hidden></p>
+          <button type="submit" id="btn-quick-create-save" class="btn btn-primary btn-block">Enregistrer</button>
+        </div>
       </form>
     </div>
   </div>
@@ -690,8 +696,8 @@
   </template>
 
   <!-- ================================================================== Scripts -->
-  <script src="/assets/config.js?v=18"></script>
+  <script src="/assets/config.js?v=19"></script>
   <script src="/assets/vendor/supabase/supabase.js"></script>
-  <script type="module" src="/assets/app.js?v=18"></script>
+  <script type="module" src="/assets/app.js?v=19"></script>
 </body>
 </html>
