@@ -62,6 +62,19 @@
     {% if lv.heures_regie %}<div class="muted">Heures de régie : {{ lv.heures_regie }}</div>{% endif %}
   </div>
 
+  {% if prestations %}
+  <h2 class="recap-title">Prestations</h2>
+  <table>
+    <thead><tr><th>Prestation</th><th class="num">Quantité</th><th>Unité</th><th>Matériel</th></tr></thead>
+    <tbody>
+    {% for p in prestations %}
+      {# Seul le libellé de la prestation est imprimé — jamais le commentaire interne. #}
+      <tr><td>{{ p.libelle }}</td><td class="num">{{ p.quantite }}</td><td>{{ p.unite_aff or p.unite }}</td><td>{{ p.materiel or "—" }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
   <h2 class="recap-title">État récapitulatif des tours</h2>
   {% for tour in tours %}
   <div class="box">

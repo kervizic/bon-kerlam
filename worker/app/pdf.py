@@ -42,6 +42,8 @@ def unite_label(code: str, quantite) -> str:
         "m3": "m³",
         "unite": "unités" if plural else "unité",
         "big_bag": "big bags" if plural else "big bag",
+        "jour": "jours" if plural else "jour",
+        "heure": "heures" if plural else "heure",
     }
     return mapping.get(code, code or "")
 
@@ -126,9 +128,32 @@ def build_context(lv_id: int) -> dict[str, Any]:
         )
         for ligne in tour["lignes"]:
             ligne["unite_aff"] = unite_label(ligne.get("unite"), ligne.get("quantite"))
+
+    # Prestations de la lettre (bloc imprimé avant le récapitulatif des tours).
+    # Le commentaire interne des prestations n'est JAMAIS chargé ni imprimé.
+    prestations = db.query(
+        """
+        SELECT p.libelle AS libelle, lp.quantite, lp.unite, m.libelle AS materiel
+          FROM bon.lv_prestations lp
+          LEFT JOIN bon.prestations p ON p.id = lp.prestation_id
+          LEFT JOIN bon.materiels m   ON m.id = lp.materiel_id
+         WHERE lp.lv_id = %s
+         ORDER BY lp.ordre, lp.id
+        """,
+        (lv_id,),
+    )
+    for presta in prestations:
+        presta["unite_aff"] = unite_label(presta.get("unite"), presta.get("quantite"))
+
     # Bandeau « Non signée » tant que la lettre n'est pas au statut signée.
     signee = lv.get("statut") == "signee"
-    return {"lv": lv, "tours": tours, "transporteur": TRANSPORTEUR, "signee": signee}
+    return {
+        "lv": lv,
+        "tours": tours,
+        "prestations": prestations,
+        "transporteur": TRANSPORTEUR,
+        "signee": signee,
+    }
 
 
 def render_html(context: dict[str, Any]) -> str:
