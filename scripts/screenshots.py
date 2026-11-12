@@ -41,6 +41,7 @@ CHAUFFEUR_SCREENS = [
 overflow_failures: list[str] = []
 status_failures: list[str] = []
 font_failures: list[str] = []
+align_failures: list[str] = []
 
 # Locale + fuseau forcés sur tous les contextes : dates en JJ/MM/AAAA et heures en
 # 24 h (toformat FR), indépendamment du fuseau du runner CI.
@@ -219,6 +220,83 @@ def shoot_formulaire_heures(ctx, prefix: str) -> None:
             page.close()
 
 
+def shoot_date_heures(ctx, prefix: str) -> None:
+    """WebKit (Safari iOS) : régression beta.15 sur l'alignement des champs natifs
+    Date / Heures. Manu (iPhone réel) voyait le texte collé en haut de la case et
+    la case Date plus haute que les selects. On vérifie par getBoundingClientRect
+    que la hauteur des champs date/heure == celle d'un select (écart < 2 px) et
+    que le centrage vertical est bien en place (display:flex + align-items:center,
+    valeur interne sans marge), puis on capture un gros plan Date + Heures
+    (clair + sombre). WebKit uniquement : le bug n'existe pas sur Chromium."""
+    for theme in ("clair", "sombre"):
+        page = ctx.new_page()
+        try:
+            page.goto(
+                f"{BASE}?demo=1&screen=today&role=bureau&theme={theme}",
+                wait_until="networkidle",
+            )
+            page.wait_for_timeout(600)
+            # Valeurs explicites pour que le texte natif soit visible sur la capture.
+            page.evaluate(
+                """() => {
+                    const d = document.getElementById('f-date');
+                    if (d) { d.value = '2026-11-12'; d.dispatchEvent(new Event('change', {bubbles:true})); }
+                    const deb = document.querySelector('#view-today .f-creneau-debut');
+                    const fin = document.querySelector('#view-today .f-creneau-fin');
+                    if (deb) { deb.value = '07:00'; deb.dispatchEvent(new Event('change', {bubbles:true})); }
+                    if (fin) { fin.value = '16:00'; fin.dispatchEvent(new Event('change', {bubbles:true})); }
+                }"""
+            )
+            page.wait_for_timeout(200)
+            metrics = page.evaluate(
+                """() => {
+                    const pick = (sel) => {
+                        const el = document.querySelector(sel);
+                        if (!el) return null;
+                        const r = el.getBoundingClientRect();
+                        const cs = getComputedStyle(el);
+                        return { h: r.height, display: cs.display, align: cs.alignItems };
+                    };
+                    return {
+                        date: pick('#f-date'),
+                        time: pick('#view-today .f-creneau-debut'),
+                        select: pick('#f-camion'),
+                    };
+                }"""
+            )
+            d, t, s = metrics.get("date"), metrics.get("time"), metrics.get("select")
+            if not (d and t and s):
+                align_failures.append(f"date-heures-{theme}: champ introuvable {metrics}")
+            else:
+                if abs(d["h"] - s["h"]) >= 2:
+                    align_failures.append(
+                        f"date-heures-{theme}: hauteur Date {d['h']:.1f}px != select {s['h']:.1f}px"
+                    )
+                if abs(t["h"] - s["h"]) >= 2:
+                    align_failures.append(
+                        f"date-heures-{theme}: hauteur Heure {t['h']:.1f}px != select {s['h']:.1f}px"
+                    )
+                for name, m in (("Date", d), ("Heure", t)):
+                    if m["display"] != "flex" or m["align"] != "center":
+                        align_failures.append(
+                            f"date-heures-{theme}: {name} non centré "
+                            f"(display={m['display']}, align-items={m['align']})"
+                        )
+            # Gros plan Date + Heures (les deux premiers champs du formulaire).
+            form = page.locator("#lv-header-form")
+            form.scroll_into_view_if_needed()
+            page.wait_for_timeout(200)
+            out = OUT / f"{prefix}-date-heures-{theme}.png"
+            form.screenshot(path=str(out))
+            print(f"   date-heures-{theme} (Date {d['h']:.0f}px / Heure {t['h']:.0f}px / select {s['h']:.0f}px)"
+                  if (d and t and s) else f"   date-heures-{theme} (métriques incomplètes)")
+        except Exception as exc:  # noqa: BLE001
+            align_failures.append(f"date-heures-{theme}: exception {exc}")
+            print(f"   !! date-heures/{theme}: {exc}")
+        finally:
+            page.close()
+
+
 def shoot_logo(ctx, prefix: str) -> None:
     """Régression iPhone : le logo KERLAM de l'en-tête doit être rendu en Sarpanch
     (police chargée), pas en police système. On vérifie via document.fonts.check +
@@ -350,6 +428,21 @@ def main() -> int:
         inst.close()
         browser.close()
 
+        # --- WebKit (moteur de Safari iOS) : vérification ciblée de l'alignement
+        # des champs natifs Date / Heures, que Chromium ne reproduit pas. Locale
+        # fr-FR + Europe/Paris sur le contexte (WebKit suit la locale du contexte
+        # pour les contrôles natifs, pas besoin du flag --lang). UA iPhone iOS 26.
+        wk = p.webkit.launch()
+        # is_mobile n'est pas supporté par WebKit (option Chromium) : on l'omet.
+        wk_iphone = wk.new_context(
+            viewport=IPHONE, device_scale_factor=3, has_touch=True,
+            user_agent=IOS26_UA, **LOCALE,
+        )
+        print("WebKit (Safari iOS) : alignement Date / Heures")
+        shoot_date_heures(wk_iphone, "webkit-iphone")
+        wk_iphone.close()
+        wk.close()
+
     n = len(list(OUT.glob("*.png")))
     print(f"{n} captures dans {OUT}/")
     rc = 0
@@ -374,6 +467,13 @@ def main() -> int:
         rc = 1
     else:
         print("OK : logo rendu en Sarpanch (police chargée).")
+    if align_failures:
+        print("CHAMPS DATE / HEURES MAL ALIGNÉS (WebKit / Safari iOS) :")
+        for f in align_failures:
+            print("  -", f)
+        rc = 1
+    else:
+        print("OK : champs Date / Heures alignés comme les selects (WebKit).")
     return rc
 
 

@@ -4,6 +4,37 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.16] — 2026-11-12
+
+Correctif iPhone (retour de Manu sur Safari iOS, formulaire en prod beta.15).
+
+### Champs Date / Heures natifs (Safari iOS)
+- **Alignement corrigé** : avec `-webkit-appearance:none`, iOS laissait le texte
+  des champs **Date** et **Heures** **collé en haut** de la case, et la case Date
+  **plus haute** que les autres champs. Les champs date/heure ont désormais la
+  **même hauteur** (56 px, comme les selects Camion/Client…), le **même padding**,
+  le **texte centré verticalement** et **aligné à gauche** (`display:flex;
+  align-items:center`, `::-webkit-date-and-time-value { margin:0; text-align:left }`,
+  `::-webkit-datetime-edit { padding:0 }`).
+- **Icône Lucide** (calendrier / horloge) reposée à droite des champs, l'indicateur
+  natif disparaissant avec `appearance:none`. Décorative : le picker natif s'ouvre
+  toujours en touchant le champ.
+
+### Listes déroulantes
+- Les listes vides (**Client, Projet, Contact**, Camion, destinataire) affichent
+  désormais l'invite grise **« Choisir… »** au lieu de **« — »**.
+
+### Heures par défaut
+- Un chauffeur **sans historique** (aucune lettre précédente) voit un créneau
+  **07:00–16:00** pré-rempli. Sinon, la **mémoire de la dernière lettre** est
+  conservée (inchangé).
+
+### Tests
+- Nouvelle vérification **Playwright WebKit** (moteur Safari, UA iPhone iOS 26,
+  393×852, fr-FR / Europe-Paris) : `getBoundingClientRect` contrôle que la hauteur
+  des champs Date/Heures == celle d'un select (écart < 2 px) et que le centrage
+  vertical est en place. Captures WebKit clair + sombre du bloc Date + Heures.
+
 ## [0.1.0-beta.15] — 2026-11-12
 
 Simplification du formulaire (décisions de Manu : « on simplifie tout au max »).

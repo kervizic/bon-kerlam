@@ -691,7 +691,7 @@ function makeTextInput(type, value) {
   return el;
 }
 
-function makeSelectInput(options, value, placeholder = "—") {
+function makeSelectInput(options, value, placeholder = "Choisir…") {
   const el = document.createElement("select");
   el.innerHTML = `<option value="">${escapeHtml(placeholder)}</option>`;
   for (const opt of options) {
@@ -715,7 +715,7 @@ function escapeHtml(str) {
   ));
 }
 
-function populateSelect(selectEl, items, getValue, getLabel, placeholder = "—") {
+function populateSelect(selectEl, items, getValue, getLabel, placeholder = "Choisir…") {
   const current = selectEl.value;
   selectEl.innerHTML = `<option value="">${escapeHtml(placeholder)}</option>`;
   for (const item of items) {
@@ -1119,14 +1119,19 @@ async function loadToday() {
         /* ignore */
       }
     }
-    // Nouvelle lettre : reprise des créneaux horaires de la dernière lettre (mémoire).
+    // Nouvelle lettre : reprise des créneaux horaires de la dernière lettre
+    // (mémoire). À défaut d'historique (premier bon du chauffeur), on pré-remplit
+    // un créneau de journée 07:00–16:00 plutôt qu'une ligne vide (retour beta.15).
     if (!lv) {
+      let heures = null;
       try {
-        const heures = await rpcDernieresHeures(chauffeurId);
-        if (Array.isArray(heures) && heures.length) state.prefillData.heures = heures;
+        heures = await rpcDernieresHeures(chauffeurId);
       } catch (err) {
-        /* pas bloquant */
+        /* pas bloquant : on retombe sur le créneau par défaut */
       }
+      state.prefillData.heures = (Array.isArray(heures) && heures.length)
+        ? heures
+        : [{ debut: "07:00", fin: "16:00" }];
     }
   }
   state.lv = lv;

@@ -465,7 +465,43 @@ input[type="email"], input[type="tel"], input[type="search"], select, textarea {
 }
 /* Le picker natif iOS garde son indicateur ; on évite juste le débordement. */
 input[type="date"], input[type="time"], input[type="number"] { max-width: 100%; }
-input[type="date"]::-webkit-date-and-time-value { text-align: left; }
+
+/* iOS Safari (retour iPhone beta.15) : avec -webkit-appearance:none, la valeur
+   interne des champs date/heure (::-webkit-date-and-time-value) reste collée en
+   HAUT de la case, et la case est plus haute que les autres champs. On force une
+   hauteur STRICTEMENT identique aux selects (Camion, Client…), un centrage
+   vertical par flex et un texte aligné à gauche. L'indicateur natif disparaissant
+   avec appearance:none, on repose une icône Lucide (calendrier / horloge) en fond
+   à droite : purement décorative, elle ne capte pas le tap — le picker natif
+   s'ouvre toujours en touchant le champ. */
+input[type="date"], input[type="time"] {
+  height: var(--control-h);
+  min-height: var(--control-h);
+  display: flex;
+  align-items: center;
+  padding-right: 42px;
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 20px 20px;
+}
+input[type="date"]::-webkit-date-and-time-value,
+input[type="time"]::-webkit-date-and-time-value {
+  margin: 0;
+  padding: 0;
+  text-align: left;
+}
+input[type="date"]::-webkit-datetime-edit,
+input[type="time"]::-webkit-datetime-edit {
+  padding: 0;
+  line-height: normal;
+}
+/* Icônes Lucide en data-URI (gris neutre #8a8a8a lisible en clair comme en sombre). */
+input[type="date"] {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%238a8a8a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect width='18' height='18' x='3' y='4' rx='2'/%3E%3Cpath d='M3 10h18M8 2v4M16 2v4'/%3E%3C/svg%3E");
+}
+input[type="time"] {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%238a8a8a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7v5l3 2'/%3E%3C/svg%3E");
+}
 input:focus-visible, select:focus-visible, textarea:focus-visible {
   outline: 2px solid var(--c-orange);
   outline-offset: 1px;
@@ -548,7 +584,9 @@ input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
   gap: 8px;
   align-items: center;
 }
-.creneau-row input[type="time"] { min-height: 48px; padding: 0 10px; width: 100%; min-width: 0; box-sizing: border-box; }
+/* Hauteur et padding hérités de la règle date/time : les deux créneaux ont la
+   même boîte que la Date et que les selects (56 px), texte centré verticalement. */
+.creneau-row input[type="time"] { height: var(--control-h); min-height: var(--control-h); width: 100%; min-width: 0; box-sizing: border-box; }
 .creneau-sep { text-align: center; color: var(--text-muted); }
 .btn-add-creneau { align-self: flex-start; }
 
