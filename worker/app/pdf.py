@@ -105,10 +105,12 @@ def build_context(lv_id: int) -> dict[str, Any]:
     lv = db.query_one(
         """
         SELECT lv.id, lv.numero, lv.date_etablissement, lv.date_prise_en_charge,
-               lv.expediteur, lv.destinataire, lv.dest_identique, lv.heures_regie,
+               lv.expediteur, lv.destinataire, lv.dest_identique,
+               lv.destinataire_client_id, lv.heures_regie,
                lv.heures, lv.statut,
                c.immatriculation AS camion, ch.nom AS chauffeur, p.nom AS projet,
-               cl.raison_sociale AS client_nom, cl.adresse AS client_adresse
+               cl.raison_sociale AS client_nom, cl.adresse AS client_adresse,
+               dc.raison_sociale AS dest_nom, dc.adresse AS dest_adresse
           FROM bon.lettres_voiture lv
           LEFT JOIN bon.camions c     ON c.id = lv.camion_id
           LEFT JOIN bon.chauffeurs ch ON ch.id = lv.chauffeur_id
@@ -116,6 +118,8 @@ def build_context(lv_id: int) -> dict[str, Any]:
           -- Client référencé directement sur la lettre (projet facultatif) ;
           -- repli sur le client du projet pour les lettres non reprises.
           LEFT JOIN bon.clients cl    ON cl.id = COALESCE(lv.client_id, p.client_id)
+          -- Destinataire distinct (beta.18) : nom + adresse imprimés sur le PDF.
+          LEFT JOIN bon.clients dc    ON dc.id = lv.destinataire_client_id
          WHERE lv.id = %s
         """,
         (lv_id,),
@@ -128,9 +132,15 @@ def build_context(lv_id: int) -> dict[str, Any]:
     client_parts = [p for p in (lv.get("client_nom"), lv.get("client_adresse")) if p]
     lv["expediteur"] = ", ".join(client_parts) if client_parts else (lv.get("expediteur") or "")
 
-    # Destinataire : identique => reprend l'expéditeur (client) ; sinon valeur saisie.
+    # Destinataire : identique => reprend l'expéditeur (client). Sinon, destinataire
+    # distinct (beta.18) : nom + adresse du client choisi (adresse OBLIGATOIRE —
+    # arrêté du 9/11/1999 art. 5). Repli sur la valeur texte stockée pour les
+    # lettres anciennes (saisie libre, nom seul).
     if lv["dest_identique"]:
         lv["destinataire"] = lv["expediteur"]
+    elif lv.get("dest_nom"):
+        dest_parts = [p for p in (lv.get("dest_nom"), lv.get("dest_adresse")) if p]
+        lv["destinataire"] = ", ".join(dest_parts)
     else:
         lv["destinataire"] = lv.get("destinataire") or ""
 
