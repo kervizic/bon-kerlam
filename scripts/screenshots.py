@@ -252,7 +252,11 @@ def shoot_login(ctx, prefix: str) -> None:
 
 def main() -> int:
     with sync_playwright() as p:
-        browser = p.chromium.launch()
+        # --lang=fr-FR : les contrôles natifs <input type="date"|"time"> suivent la
+        # langue de l'UI du navigateur (pas la `locale` du contexte) ; sans ça les
+        # dates sortaient en MM/JJ/AAAA et les heures en AM/PM. Le fuseau et le
+        # formatage Intl restent fixés par locale/timezone_id sur chaque contexte.
+        browser = p.chromium.launch(args=["--lang=fr-FR"])
         iphone = browser.new_context(
             viewport=IPHONE, device_scale_factor=3, is_mobile=True, has_touch=True,
             user_agent=IOS26_UA, **LOCALE,
