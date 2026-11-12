@@ -4,6 +4,39 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.13] — 2026-11-12
+
+Item **H** du lot reporté : bloc **« Prestations »**, à part, placé **AVANT les
+tours** dans le formulaire de la lettre de voiture **et** sur le PDF. **C**
+(création rapide) reste à faire.
+
+### (H) Prestations
+- **Bloc « Prestations » distinct**, au-dessus des tours. Une ligne =
+  **prestation + quantité + unité + matériel**. Le **matériel** (type de
+  véhicule) est **déduit du camion** de la lettre (`bon.camions.materiel_id`) et
+  reste **modifiable** sur la ligne. Choisir une prestation applique son **unité
+  par défaut** (catalogue).
+- **Report automatique** : à chaque **nouvelle lettre**, la **première prestation
+  de la dernière lettre du chauffeur** est reprise (modifiable / supprimable),
+  via l'RPC `api.derniere_prestation`. Persistée dès que la lettre existe.
+- **Catalogue commun `bon.prestations`** (libellé, unité par défaut, commentaire
+  interne **jamais imprimé**, actif) — **écran bureau « Prestations »** (liste +
+  Nouveau + édition + désactivation), comme Articles. Seed : *Jour de régie avec
+  chauffeur* (jour) · *Heure supplémentaire jour* · *… nuit* · *… week-end*
+  (heure) · *Astreinte* (unité).
+- **`bon.materiels`** seed : *15 t 6×4 bi-benne grue* · *20 t 8×4 bi-benne* ·
+  *20 t 8×4 bi-benne grue* · *20 t 8×4 ampliroll grue* · *Mini-pelle sur
+  chenilles 2–2,8 t*.
+- **PDF** : tableau **« Prestations » sobre** (Prestation | Quantité | Unité |
+  Matériel) **avant** l'état récapitulatif des tours. **Pluriels FR** corrects
+  (1 jour / 2 jours, 1 heure / 3 heures).
+- **Migration 0015** additive et idempotente : tables `bon.materiels`,
+  `bon.prestations`, `bon.lv_prestations` (rattachée à la lettre), colonne
+  `bon.camions.materiel_id`, vues `api.*`, RPC de report. **RLS** identique aux
+  articles (lecture tous rôles, écriture bureau ; lignes de prestation écrites
+  par le chauffeur de la lettre, comme les lignes de chargement). **Tests** RLS +
+  seed + report, tests worker (rendu + pluriels).
+
 ## [0.1.0-beta.12] — 2026-11-11
 
 Item **D** du lot reporté + retouches. H (prestations) et C (création rapide)

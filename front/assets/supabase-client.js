@@ -291,6 +291,62 @@ export async function listArticlesAll() {
   return data || [];
 }
 
+// ------------------------------------------------------- Prestations (H) --
+// Catalogue commun bon.prestations (comme les articles) + matériels + lignes de
+// prestation d'une lettre (bon.lv_prestations, rattachées directement à la LV).
+
+export async function listPrestations() {
+  const { data, error } = await requireClient().from("prestations").select("*").eq("actif", true).order("libelle");
+  if (error) throw error;
+  return data || [];
+}
+export async function listPrestationsAll() {
+  const { data, error } = await requireClient().from("prestations").select("*").order("libelle");
+  if (error) throw error;
+  return data || [];
+}
+const crudPrestations = makeCrud("prestations");
+export const createPrestation = crudPrestations.create;
+export const updatePrestation = crudPrestations.update;
+
+export async function listMateriels() {
+  const { data, error } = await requireClient().from("materiels").select("*").eq("actif", true).order("libelle");
+  if (error) throw error;
+  return data || [];
+}
+
+export async function getPrestationsLv(lvId) {
+  const { data, error } = await requireClient()
+    .from("lv_prestations")
+    .select("*")
+    .eq("lv_id", lvId)
+    .order("ordre", { ascending: true })
+    .order("id", { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+export async function createPrestationLigne(fields) {
+  const { data, error } = await requireClient().from("lv_prestations").insert(fields).select().single();
+  if (error) throw error;
+  return data;
+}
+export async function updatePrestationLigne(id, patch) {
+  const { data, error } = await requireClient().from("lv_prestations").update(patch).eq("id", id).select().maybeSingle();
+  if (error) throw error;
+  return data;
+}
+export async function deletePrestationLigne(id) {
+  const { error } = await requireClient().from("lv_prestations").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// Report automatique : première prestation de la dernière lettre du chauffeur.
+export async function rpcDernierePrestation(chauffeurId) {
+  const { data, error } = await requireClient().rpc("derniere_prestation", { p_chauffeur_id: chauffeurId });
+  if (error) throw error;
+  return data; // { prestation_id, unite, quantite, materiel_id } ou null
+}
+
 // Pas de fonction api.fusionner_article() exposée côté SQL (cf. migrations) :
 // on signale clairement l'absence plutôt que de faire semblant. L'écran
 // Articles affiche alors un stub bureau-only (cf. app.js, handleFusionArticle).

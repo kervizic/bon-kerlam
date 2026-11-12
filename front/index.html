@@ -10,8 +10,8 @@
   <!-- Empreinte de version du shell (cf. assets/app-version.js). Bumper `app-rev`
        à chaque déploiement backend devant forcer un refresh (sinon le bump d'un
        `?v=` d'asset suffit). -->
-  <meta name="app-version" content="0.1.0-beta.12">
-  <meta name="app-rev" content="12">
+  <meta name="app-version" content="0.1.0-beta.13">
+  <meta name="app-rev" content="13">
 
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
@@ -26,8 +26,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="mobile-web-app-capable" content="yes">
 
-  <link rel="stylesheet" href="/assets/styles.css?v=12">
-  <script src="/assets/app-version.js?v=12" defer></script>
+  <link rel="stylesheet" href="/assets/styles.css?v=13">
+  <script src="/assets/app-version.js?v=13" defer></script>
 </head>
 <body>
   <a href="#main" class="skip-link">Aller au contenu</a>
@@ -155,6 +155,7 @@
           <li class="nav-bureau"><a href="#/camions"      data-route="camions">Camions</a></li>
           <li class="nav-bureau"><a href="#/chauffeurs"   data-route="chauffeurs">Chauffeurs</a></li>
           <li class="nav-bureau"><a href="#/articles"     data-route="articles">Articles</a></li>
+          <li class="nav-bureau"><a href="#/prestations"  data-route="prestations">Prestations</a></li>
           <li class="nav-bureau"><a href="#/utilisateurs" data-route="utilisateurs">Utilisateurs</a></li>
           <li><a href="#/reglages"     data-route="reglages">Réglages</a></li>
         </ul>
@@ -245,6 +246,11 @@
             </div>
           </form>
 
+          <h2 class="form-section-title">Prestations</h2>
+          <div id="prestations-list" class="prestations-list"></div>
+          <button type="button" id="btn-add-prestation" class="btn btn-secondary btn-block">+ Ajouter une prestation</button>
+
+          <h2 class="form-section-title">Tours</h2>
           <div id="tours-list" class="tours-list"></div>
           <button type="button" id="btn-add-tour" class="btn btn-secondary btn-block">+ Ajouter un tour</button>
         </section>
@@ -403,6 +409,16 @@
           <div id="list-articles" class="entity-list"><p class="muted">Chargement…</p></div>
         </section>
 
+        <!-- ----------------------------------------------------------- Prestations -->
+        <section id="view-prestations" class="view" data-view="prestations" hidden>
+          <div class="view-header"><h1>Prestations</h1></div>
+          <div class="view-toolbar">
+            <input type="search" id="filter-prestations" class="filter-input" placeholder="Rechercher une prestation…">
+            <button type="button" id="btn-new-prestation" class="btn btn-primary">+ Nouveau</button>
+          </div>
+          <div id="list-prestations" class="entity-list"><p class="muted">Chargement…</p></div>
+        </section>
+
         <!-- ---------------------------------------------------------- Utilisateurs -->
         <section id="view-utilisateurs" class="view" data-view="utilisateurs" hidden>
           <div class="view-header"><h1>Utilisateurs</h1></div>
@@ -479,6 +495,7 @@
           <a class="nav-bureau" href="#/camions"      data-route="camions">Camions</a>
           <a class="nav-bureau" href="#/chauffeurs"   data-route="chauffeurs">Chauffeurs</a>
           <a class="nav-bureau" href="#/articles"     data-route="articles">Articles</a>
+          <a class="nav-bureau" href="#/prestations"  data-route="prestations">Prestations</a>
           <a class="nav-bureau" href="#/utilisateurs" data-route="utilisateurs">Utilisateurs</a>
           <a href="#/reglages"     data-route="reglages">Réglages</a>
         </nav>
@@ -576,6 +593,20 @@
     </div>
   </template>
 
+  <template id="tpl-prestation">
+    <div class="prestation-row">
+      <select class="f-prestation-prestation"><option value="">Prestation…</option></select>
+      <input type="number" class="f-prestation-quantite" placeholder="Qté" step="0.5" min="0" inputmode="decimal">
+      <select class="f-prestation-unite">
+        <option value="jour">jour</option>
+        <option value="heure">heure</option>
+        <option value="unite">unité</option>
+      </select>
+      <select class="f-prestation-materiel"><option value="">Matériel…</option></select>
+      <button type="button" class="icon-btn btn-delete-prestation" aria-label="Supprimer la prestation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6M14 11v6"/></svg></button>
+    </div>
+  </template>
+
   <template id="tpl-doc-cat-row">
     <div class="doc-cat-row">
       <input type="text" class="f-cat-code" placeholder="Catégorie" maxlength="4">
@@ -594,8 +625,8 @@
   </template>
 
   <!-- ================================================================== Scripts -->
-  <script src="/assets/config.js?v=12"></script>
+  <script src="/assets/config.js?v=13"></script>
   <script src="/assets/vendor/supabase/supabase.js"></script>
-  <script type="module" src="/assets/app.js?v=12"></script>
+  <script type="module" src="/assets/app.js?v=13"></script>
 </body>
 </html>
