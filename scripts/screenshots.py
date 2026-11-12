@@ -206,7 +206,13 @@ def shoot_formulaire_heures(ctx, prefix: str) -> None:
             page.wait_for_timeout(600)
             page.screenshot(path=str(OUT / f"{prefix}-formulaire-heures-{theme}.png"), full_page=True)
             check_no_hscroll(page, f"{prefix}-formulaire-heures-{theme}")
-            print(f"   formulaire-heures-{theme}")
+            # Vue rapprochée (viewport) : les DEUX créneaux horaires visibles,
+            # au-dessus de la barre de navigation fixe.
+            page.locator(".field-heures label").first.scroll_into_view_if_needed()
+            page.evaluate("() => window.scrollBy(0, -60)")
+            page.wait_for_timeout(200)
+            page.screenshot(path=str(OUT / f"{prefix}-heures-creneaux-{theme}.png"), full_page=False)
+            print(f"   formulaire-heures-{theme} + heures-creneaux-{theme}")
         except Exception as exc:  # noqa: BLE001
             print(f"   !! formulaire-heures/{theme}: {exc}")
         finally:
