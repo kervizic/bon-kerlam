@@ -4,6 +4,48 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.17] — 2026-11-12
+
+Saisie rendue utilisable : champs de recherche (combobox façon Odoo) et création
+rapide, à la place des listes déroulantes natives. « On simplifie tout au max. »
+
+### Comboboxes (champ de recherche)
+- Les `<select>` Client, Projet, Contact, Camion, destinataire, sites de
+  chargement/déchargement, articles, prestations et matériel deviennent des
+  **champs de recherche** : on tape, la liste s'ouvre **juste sous le champ** et
+  filtre en direct, **insensible à la casse ET aux accents**, sur le **nom** ET un
+  **alias** éventuel (« jean » trouve **EJL (Jean Lefebvre)**, « svtp » trouve
+  **Société Voirie de Travaux Publics (SVTP)**). Portion trouvée **surlignée**.
+- **Champ vide au focus** : **récents d'abord** (derniers utilisés par ce
+  chauffeur, mémorisés sur l'appareil), puis le reste **par ordre alphabétique**.
+- Dernière ligne **« + Créer "texte" »** (comme Odoo) → ouvre la **fiche rapide**.
+- **Croix** pour vider, **crayon** pour modifier la fiche choisie.
+- **Projet et Contact filtrés par le client** ; changer de client purge une
+  valeur devenue incohérente. Projet désormais **facultatif**.
+- iOS : **font-size 16 px** (pas de zoom), liste scrollable, fermeture au tap à
+  l'extérieur, **ARIA** combobox/listbox, placeholder gris « Choisir ou taper… ».
+- Le `<select>` natif reste la source de vérité (value + autosave inchangés) :
+  le combobox ne fait que le piloter. Fonctions pures testées (`combobox.test.mjs`).
+
+### Fiche rapide (bottom sheet)
+- Création / modification express **par-dessus le formulaire** : Client (raison
+  sociale, **adresse imprimée sur la lettre**, SIREN), Projet (nom, client),
+  Contact (nom, e-mail, téléphone, client), Site (nom, adresse), Article (nom).
+  Après enregistrement, l'élément est **sélectionné automatiquement**.
+
+### Client référencé directement sur la lettre
+- La lettre porte désormais une colonne **`client_id`** (le client n'est plus
+  déduit du projet). Migration **0018** additive : reprise des lettres existantes
+  depuis le client de leur projet. PDF : ligne **Projet** masquée si vide.
+
+### Droits (RLS) + tests
+- **Chauffeur** : peut **créer** client / projet / contact / chantier, et modifier
+  **les fiches qu'il a créées** (`created_by`). **Bureau** : tout. Un chauffeur ne
+  modifie pas la fiche d'un autre. **Alias** de recherche sur les clients (jamais
+  affiché comme raison sociale), **sans renommer** les clients. Tests SQL
+  (`test_rls.py`, `test_client_direct.py`) et unitaires (filtrage accents/alias,
+  récents, surbrillance).
+
 ## [0.1.0-beta.16] — 2026-11-12
 
 Correctif iPhone (retour de Manu sur Safari iOS, formulaire en prod beta.15).

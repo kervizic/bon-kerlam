@@ -710,6 +710,7 @@ export async function rpcPrefill(chauffeurId) {
       .sort((a, b) => (a.date_etablissement < b.date_etablissement ? 1 : -1))[0];
     return {
       camion_id: ch ? ch.camion_id : null,
+      client_id: lastLv ? lastLv.client_id : null,
       projet_id: lastLv ? lastLv.projet_id : null,
       contact_id: lastLv ? lastLv.contact_id : null,
       lv_id: lastLv && lastLv.statut !== "signee" ? lastLv.id : null,

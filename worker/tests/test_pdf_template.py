@@ -69,6 +69,17 @@ def test_libelle_projet_sans_regie():
     assert "État récapitulatif des tours" in html
 
 
+def test_projet_vide_masque_la_ligne_projet():
+    # Projet facultatif (beta.17) : sans projet, aucune ligne « Projet » imprimée
+    # (ni « Projet : — »). L'expéditeur reste le client de la lettre.
+    ctx = _context()
+    ctx["lv"]["projet"] = None
+    html = pdf.render_html(ctx)
+    assert "Projet :" not in html
+    assert "Projet : —" not in html
+    assert "YPREMA Lagny" in html  # expéditeur (client) toujours présent
+
+
 def test_aucun_badge_statut_sur_pdf():
     # Retouche beta.12 (demande de Manu) : plus aucun badge/filigrane de statut.
     for signee in (False, True):

@@ -54,23 +54,60 @@ def test_desactive_ne_voit_rien(conn, actors):
         assert cur.fetchone()[0] == 0
 
 
-def test_chauffeur_cree_article_et_chantier_mais_pas_client(conn, actors):
+def test_chauffeur_cree_referentiels_mais_pas_site_commun(conn, actors):
+    # beta.17 : le chauffeur peut créer client / projet / contact / chantier
+    # (fiche rapide). Le site commun reste réservé au bureau.
     as_user(conn, actors["chauffeur"])
     with conn.cursor() as cur:
-        # Article : autorisé.
         cur.execute("INSERT INTO bon.articles (nom) VALUES ('Nouvel article')")
-        # Chantier : autorisé.
         cur.execute(
             "INSERT INTO bon.sites (nom, portee, client_id) VALUES ('Ch','chantier',%s)",
             (actors["client_id"],),
         )
-    # Client : interdit.
-    with pytest.raises(psycopg.errors.InsufficientPrivilege):
-        with conn.transaction():
-            with conn.cursor() as cur:
-                cur.execute("INSERT INTO bon.clients (raison_sociale) VALUES ('X')")
+        # Client / projet / contact : désormais autorisés au chauffeur.
+        cur.execute("INSERT INTO bon.clients (raison_sociale) VALUES ('Franciliane') RETURNING id")
+        cid = cur.fetchone()[0]
+        cur.execute("INSERT INTO bon.projets (client_id, nom) VALUES (%s,'Chantier A')", (cid,))
+        cur.execute(
+            "INSERT INTO bon.contacts (client_id, nom, email) VALUES (%s,'Paul','p@x.fr')",
+            (cid,),
+        )
     # Site commun par un chauffeur : interdit.
     with pytest.raises(psycopg.errors.InsufficientPrivilege):
         with conn.transaction():
             with conn.cursor() as cur:
                 cur.execute("INSERT INTO bon.sites (nom, portee) VALUES ('C','commun')")
+
+
+def test_chauffeur_ne_modifie_pas_la_fiche_d_un_autre(conn, actors):
+    # Le client du fixture (créé en superuser, created_by NULL) n'est modifiable
+    # que par le bureau : un chauffeur ne peut pas le renommer.
+    as_user(conn, actors["chauffeur"])
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE bon.clients SET adresse = 'piratee' WHERE id = %s",
+            (actors["client_id"],),
+        )
+        assert cur.rowcount == 0  # RLS masque la ligne : aucune modification
+    # Le bureau, lui, modifie tout.
+    as_user(conn, actors["bureau"])
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE bon.clients SET adresse = 'ok' WHERE id = %s", (actors["client_id"],)
+        )
+        assert cur.rowcount == 1
+
+
+def test_chauffeur_modifie_son_propre_client(conn, actors):
+    # Un chauffeur peut modifier la fiche client qu'il a lui-même créée.
+    as_user(conn, actors["chauffeur"])
+    with conn.cursor() as cur:
+        cur.execute("INSERT INTO bon.clients (raison_sociale) VALUES ('MonClient') RETURNING id")
+        cid = cur.fetchone()[0]
+        cur.execute("UPDATE bon.clients SET adresse = '1 rue X' WHERE id = %s", (cid,))
+        assert cur.rowcount == 1
+    # Un autre chauffeur ne peut pas la modifier.
+    as_user(conn, actors["chauffeur2"])
+    with conn.cursor() as cur:
+        cur.execute("UPDATE bon.clients SET adresse = 'non' WHERE id = %s", (cid,))
+        assert cur.rowcount == 0
