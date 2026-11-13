@@ -425,6 +425,7 @@ def shoot_combobox(ctx, prefix: str) -> None:
 
 
 beta19_failures: list[str] = []
+beta20_failures: list[str] = []
 
 
 def _assert(cond: bool, msg: str) -> None:
@@ -643,6 +644,111 @@ def shoot_beta19_fiches(ctx, prefix: str) -> None:
             page.close()
 
 
+def shoot_beta20_infobulles(ctx, prefix: str) -> None:
+    """beta.20 (WebKit, DSR 2) : infobulles ⓘ sur les champs du formulaire.
+
+    Vérifie, en clair ET en sombre : l'icône ⓘ est présente ; un toucher ouvre la
+    bulle Date (texte « Jour du transport. ») SANS recouvrir le champ Date ; un
+    toucher ailleurs la ferme ; la bulle Destinataire s'ouvre de même. Captures :
+    formulaire avec ⓘ, bulle Date ouverte, bulle Destinataire ouverte, et fiche
+    rapide contact avec ⓘ.
+    """
+    for theme in ("clair", "sombre"):
+        page = ctx.new_page()
+        try:
+            page.goto(f"{BASE}?demo=1&screen=today&role=bureau&theme={theme}", wait_until="networkidle")
+            page.wait_for_timeout(600)
+
+            n_icons = page.locator(".tt-btn").count()
+            if n_icons < 5:
+                beta20_failures.append(f"infobulles/{theme}: seulement {n_icons} icône(s) ⓘ (attendu ≥ 5)")
+
+            form = page.locator("#lv-header-form")
+            form.scroll_into_view_if_needed()
+            page.wait_for_timeout(150)
+            page.screenshot(path=str(OUT / f"{prefix}-infobulles-formulaire-{theme}.png"), full_page=False)
+
+            # --- Bulle Date : ouvre, vérifie le texte + le non-chevauchement du champ.
+            date_btn = page.locator('.tt-row:has(label[data-tt="date"]) .tt-btn')
+            date_btn.click()
+            page.wait_for_timeout(200)
+            bubble = page.locator('.tt-bubble:not([hidden])').first
+            if bubble.count() == 0 or not bubble.is_visible():
+                beta20_failures.append(f"infobulles/{theme}: bulle Date non ouverte")
+            else:
+                txt = (bubble.inner_text() or "").strip()
+                if txt != "Jour du transport.":
+                    beta20_failures.append(f"infobulles/{theme}: texte Date = {txt!r} (attendu « Jour du transport. »)")
+                boxes = page.evaluate(
+                    """() => {
+                        const b = document.querySelector('.tt-bubble:not([hidden])');
+                        const f = document.getElementById('f-date');
+                        if (!b || !f) return null;
+                        const rb = b.getBoundingClientRect();
+                        const rf = f.getBoundingClientRect();
+                        const overlap = !(rb.bottom <= rf.top || rb.top >= rf.bottom
+                                          || rb.right <= rf.left || rb.left >= rf.right);
+                        return { overlap };
+                    }"""
+                )
+                if not boxes:
+                    beta20_failures.append(f"infobulles/{theme}: bulle/champ Date introuvable")
+                elif boxes["overlap"]:
+                    beta20_failures.append(f"infobulles/{theme}: la bulle Date recouvre le champ Date")
+            page.screenshot(path=str(OUT / f"{prefix}-infobulle-date-{theme}.png"), full_page=False)
+
+            # --- Toucher ailleurs = fermeture.
+            page.locator("h1").first.click()
+            page.wait_for_timeout(150)
+            if page.locator('.tt-bubble:not([hidden])').count() != 0:
+                beta20_failures.append(f"infobulles/{theme}: la bulle reste ouverte après un toucher ailleurs")
+
+            # --- Bulle Destinataire.
+            dest_btn = page.locator('.tt-row:has(label[data-tt="destinataire"]) .tt-btn')
+            dest_btn.scroll_into_view_if_needed()
+            dest_btn.click()
+            page.wait_for_timeout(200)
+            if page.locator('.tt-bubble:not([hidden])').count() == 0:
+                beta20_failures.append(f"infobulles/{theme}: bulle Destinataire non ouverte")
+            page.screenshot(path=str(OUT / f"{prefix}-infobulle-destinataire-{theme}.png"), full_page=False)
+            check_no_hscroll(page, f"infobulles-{theme}")
+            print(f"   infobulles-{theme} ({n_icons} icônes ⓘ)")
+        except Exception as exc:  # noqa: BLE001
+            beta20_failures.append(f"infobulles/{theme}: {exc}")
+            print(f"   !! infobulles/{theme}: {exc}")
+        finally:
+            page.close()
+
+    # --- Fiche rapide contact : ⓘ sur l'e-mail (clair).
+    page = ctx.new_page()
+    try:
+        page.goto(f"{BASE}?demo=1&screen=today&role=chauffeur&theme=clair", wait_until="networkidle")
+        page.wait_for_timeout(600)
+        # Choisir un client (prérequis de la fiche contact) puis ouvrir la fiche.
+        page.evaluate(
+            """() => {
+                const c = document.getElementById('f-client');
+                if (c && c.options.length > 1) { c.selectedIndex = 1; c.dispatchEvent(new Event('change', {bubbles:true})); }
+            }"""
+        )
+        page.wait_for_timeout(200)
+        page.evaluate("() => window.openQuickCreate && window.openQuickCreate('contact', 'Jean Dupont')")
+        page.wait_for_timeout(400)
+        opened = page.evaluate("() => { const s = document.getElementById('quick-create-sheet'); return s && !s.hidden; }")
+        has_icon = page.locator('#quick-create-body .tt-btn').count()
+        if not opened:
+            beta20_failures.append("infobulles/fiche-contact: fiche non ouverte")
+        elif has_icon < 1:
+            beta20_failures.append("infobulles/fiche-contact: aucune icône ⓘ dans la fiche contact")
+        page.screenshot(path=str(OUT / f"{prefix}-infobulle-fiche-contact-clair.png"), full_page=False)
+        print(f"   infobulle-fiche-contact-clair ({has_icon} icône(s) ⓘ)")
+    except Exception as exc:  # noqa: BLE001
+        beta20_failures.append(f"infobulles/fiche-contact: {exc}")
+        print(f"   !! infobulles/fiche-contact: {exc}")
+    finally:
+        page.close()
+
+
 def main() -> int:
     with sync_playwright() as p:
         # --lang=fr-FR : les contrôles natifs <input type="date"|"time"> suivent la
@@ -725,6 +831,8 @@ def main() -> int:
         )
         print("WebKit (Safari iOS, DSR 2) : fiches rapides beta.19")
         shoot_beta19_fiches(wk_iphone2, "webkit-iphone")
+        print("WebKit (Safari iOS, DSR 2) : infobulles ⓘ beta.20")
+        shoot_beta20_infobulles(wk_iphone2, "webkit-iphone")
         wk_iphone2.close()
         wk.close()
 
@@ -766,6 +874,13 @@ def main() -> int:
         rc = 1
     else:
         print("OK : fiches rapides beta.19 (champs texte, clavier, e-mail, Contact signataire).")
+    if beta20_failures:
+        print("INFOBULLES beta.20 KO (icône / ouverture / texte Date / chevauchement) :")
+        for f in beta20_failures:
+            print("  -", f)
+        rc = 1
+    else:
+        print("OK : infobulles beta.20 (icône ⓘ, bulle Date « Jour du transport. », pas de chevauchement).")
     return rc
 
 
