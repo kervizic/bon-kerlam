@@ -140,6 +140,7 @@ import { PdfCache, shouldCachePdf, formatGeneratedAt } from "./pdf-cache.js?v=13
 import { statutLabel } from "./status-labels.js?v=13";
 import { canGroupForSignature } from "./signature-group.js?v=13";
 import { enhanceSelect, refreshCombobox, ensureOption } from "./combobox.js?v=17";
+import { initTooltips } from "./tooltips.js?v=20";
 
 /* ============================================================== IndexedDB == */
 /* Deux object stores :
@@ -675,11 +676,12 @@ function wireFilterInput(inputEl, onFilter) {
   });
 }
 
-function fieldBlock(labelText, inputEl) {
+function fieldBlock(labelText, inputEl, ttKey) {
   const wrap = document.createElement("div");
   wrap.className = "field";
   const label = document.createElement("label");
   label.textContent = labelText;
+  if (ttKey) label.dataset.tt = ttKey;
   wrap.appendChild(label);
   wrap.appendChild(inputEl);
   return wrap;
@@ -847,7 +849,7 @@ const QC_SPECS = {
         autocomplete: "organization", autocapitalize: "words" },
       { key: "adresse", label: "Adresse, CP et ville (imprimée sur la lettre)", required: true,
         autocomplete: "street-address", autocapitalize: "words" },
-      { key: "siren", label: "SIREN (facultatif)", inputmode: "numeric", autocomplete: "off" },
+      { key: "siren", label: "SIREN (facultatif)", inputmode: "numeric", autocomplete: "off", tt: "qc_siren" },
     ],
     create: (v) => createClient({ raison_sociale: v.raison_sociale, adresse: v.adresse || null, siren: v.siren || null, actif: true }),
     update: (id, v) => updateClient(id, { raison_sociale: v.raison_sociale, adresse: v.adresse || null, siren: v.siren || null }),
@@ -872,7 +874,7 @@ const QC_SPECS = {
       { key: "nom", label: "Nom", required: true, fromText: true,
         autocomplete: "name", autocapitalize: "words" },
       { key: "email", label: "E-mail (obligatoire)", type: "email", required: true, email: true,
-        inputmode: "email", autocomplete: "email", autocapitalize: "off" },
+        inputmode: "email", autocomplete: "email", autocapitalize: "off", tt: "qc_contact_email" },
       { key: "tel", label: "Téléphone (facultatif)", type: "tel",
         inputmode: "tel", autocomplete: "tel" },
     ],
@@ -949,9 +951,10 @@ function openQuickCreate(entity, prefillText = "", editValue = null) {
     );
     input.required = !!f.required;
     inputs[f.key] = input;
-    body.appendChild(fieldBlock(f.label, input));
+    body.appendChild(fieldBlock(f.label, input, f.tt));
   }
   sheet.hidden = false;
+  initTooltips(body);
   // Ajuste la feuille au clavier iOS (visualViewport) : le panneau reste au-dessus
   // du clavier et de la barre d'accessoires, le bouton « Enregistrer » visible.
   attachQuickCreateViewport(sheet);
@@ -1586,6 +1589,7 @@ async function renderTourCard(entry) {
   for (const ligne of lignes) renderLigneRow(lignesList, entry, ligne);
 
   document.getElementById("tours-list").appendChild(node);
+  initTooltips(node);
   return node;
 }
 
@@ -4198,6 +4202,12 @@ async function openDemoScreen(name) {
 
 async function boot() {
   wireStaticUI();
+  // Infobulles ⓘ du formulaire principal (libellés statiques). Les parties
+  // rendues dynamiquement (tours, fiches rapides) rappellent initTooltips().
+  initTooltips(document);
+  // Mode démo (captures CI) : exposer l'ouverture de fiche rapide pour scénariser
+  // la capture « fiche contact avec ⓘ ». Jamais exposé hors démo.
+  if (isDemoMode()) window.openQuickCreate = openQuickCreate;
 
   // `?theme=clair|sombre` (uniquement actif sous ?demo=1, cf. demoThemeParam())
   // force le thème pour les captures CI, par-dessus la préférence localStorage.

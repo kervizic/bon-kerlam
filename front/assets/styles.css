@@ -1125,3 +1125,31 @@ body.can-switch-mode .bb-more { display: flex; }
 /* La feuille fiche rapide est ajustée par JS : on neutralise le padding-bas et le
    max-height en vh de .sheet-panel (gérés dynamiquement). */
 #quick-create-sheet .sheet-panel { padding-bottom: 16px; }
+
+/* ============================================================ Infobulles ⓘ (beta.20)
+   Icône Lucide « info » à droite d'un libellé ; au toucher, une bulle courte
+   s'ouvre EN FLUX sous le libellé (jamais en superposition du champ). Pensé
+   iPhone (pas de survol) : tout est piloté au clic/au toucher par tooltips.js.
+   Clair + sombre via les variables de thème (--surface / --border / --text). */
+.tt-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.tt-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; padding: 0; margin: 0;
+  border: none; border-radius: 50%; background: transparent;
+  color: var(--text-muted); cursor: pointer; flex: 0 0 auto; line-height: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.tt-btn:hover, .tt-btn:focus-visible { color: var(--c-blue); background: var(--bg); outline: none; }
+.tt-btn:focus-visible { box-shadow: 0 0 0 2px var(--c-blue); }
+.tt-btn[aria-expanded="true"] { color: var(--c-blue); }
+.tt-bubble {
+  display: block; width: 100%; margin: 4px 0 8px; padding: 8px 10px;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px;
+  font-size: 13px; line-height: 1.35; max-width: 46ch;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+}
+.tt-bubble[hidden] { display: none; }
+/* Titre de section : l'icône reste alignée sur la ligne du titre. */
+h2.form-section-title.tt-row, .tt-row > h2.form-section-title { margin-bottom: 8px; }
+.tt-row > h2.form-section-title { margin-bottom: 0; }
