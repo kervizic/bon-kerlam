@@ -539,8 +539,14 @@ def shoot_beta19_fiches(ctx, prefix: str) -> None:
             vv = page.evaluate(
                 """() => {
                   if (!window.visualViewport) return { skip: true };
-                  try { Object.defineProperty(window.visualViewport, 'height', { configurable: true, get: () => 430 }); } catch (e) {}
-                  try { Object.defineProperty(window.visualViewport, 'offsetTop', { configurable: true, get: () => 0 }); } catch (e) {}
+                  try {
+                    Object.defineProperty(window.visualViewport, 'height',
+                      { configurable: true, get: () => 430 });
+                  } catch (e) {}
+                  try {
+                    Object.defineProperty(window.visualViewport, 'offsetTop',
+                      { configurable: true, get: () => 0 });
+                  } catch (e) {}
                   window.visualViewport.dispatchEvent(new Event('resize'));
                   const s = document.getElementById('quick-create-sheet');
                   return { skip: false, h: s.style.height };
@@ -728,13 +734,18 @@ def shoot_beta20_infobulles(ctx, prefix: str) -> None:
         page.evaluate(
             """() => {
                 const c = document.getElementById('f-client');
-                if (c && c.options.length > 1) { c.selectedIndex = 1; c.dispatchEvent(new Event('change', {bubbles:true})); }
+                if (c && c.options.length > 1) {
+                    c.selectedIndex = 1;
+                    c.dispatchEvent(new Event('change', {bubbles:true}));
+                }
             }"""
         )
         page.wait_for_timeout(200)
         page.evaluate("() => window.openQuickCreate && window.openQuickCreate('contact', 'Jean Dupont')")
         page.wait_for_timeout(400)
-        opened = page.evaluate("() => { const s = document.getElementById('quick-create-sheet'); return s && !s.hidden; }")
+        opened = page.evaluate(
+            "() => { const s = document.getElementById('quick-create-sheet'); return s && !s.hidden; }"
+        )
         has_icon = page.locator('#quick-create-body .tt-btn').count()
         if not opened:
             beta20_failures.append("infobulles/fiche-contact: fiche non ouverte")

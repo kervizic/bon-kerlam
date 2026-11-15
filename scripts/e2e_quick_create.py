@@ -16,7 +16,8 @@ from pathlib import Path
 from playwright.sync_api import expect, sync_playwright
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8099"
-OUT = Path("screenshots"); OUT.mkdir(exist_ok=True)
+OUT = Path("screenshots")
+OUT.mkdir(exist_ok=True)
 IOS_UA = ("Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 "
           "(KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1")
 IPHONE = {"width": 393, "height": 852}
@@ -96,7 +97,8 @@ def test_email_required(page):
     cb_input(page, "f-client").click()
     page.locator(".field:has(#f-client) .cb-option").first.click()
     inp = cb_input(page, "f-contact")
-    inp.click(); inp.fill("Franck")
+    inp.click()
+    inp.fill("Franck")
     page.locator(".field:has(#f-contact) .cb-option.cb-create").click()
     # Nom rempli (Franck), e-mail vide -> Enregistrer doit refuser.
     page.locator("#btn-quick-create-save").click()
@@ -118,7 +120,8 @@ def test_keyboard_button_visible(page):
     inp = cb_input(page, "f-contact")
     cb_input(page, "f-client").click()
     page.locator(".field:has(#f-client) .cb-option").first.click()
-    inp.click(); inp.fill("Franck Durand")
+    inp.click()
+    inp.fill("Franck Durand")
     page.locator(".field:has(#f-contact) .cb-option.cb-create").click()
     expect(page.locator("#quick-create-sheet")).to_be_visible()
     box = page.locator("#btn-quick-create-save").bounding_box()
@@ -141,7 +144,9 @@ def shot_sheet(ctx, theme, opener, name):
 def open_nouveau_contact(page):
     cb_input(page, "f-client").click()
     page.locator(".field:has(#f-client) .cb-option").first.click()
-    i = cb_input(page, "f-contact"); i.click(); i.fill("Franck")
+    i = cb_input(page, "f-contact")
+    i.click()
+    i.fill("Franck")
     page.locator(".field:has(#f-contact) .cb-option.cb-create").click()
     page.wait_for_selector("#quick-create-sheet:not([hidden])")
 
@@ -155,7 +160,9 @@ def open_modifier_client(page):
 
 def open_destinataire_create(page):
     page.select_option("#f-dest-mode", "autre_client")
-    i = cb_input(page, "f-dest-client"); i.click(); i.fill("Chantier Nord")
+    i = cb_input(page, "f-dest-client")
+    i.click()
+    i.fill("Chantier Nord")
     page.locator(".field:has(#f-dest-client) .cb-option.cb-create").click()
     page.wait_for_selector("#quick-create-sheet:not([hidden])")
 
