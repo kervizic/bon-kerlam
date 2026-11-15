@@ -467,7 +467,7 @@ def _sheet_sane(page, who: str) -> None:
           const body = document.getElementById('quick-create-body');
           const inputs = body ? body.querySelectorAll('input') : [];
           const nestedCb = body ? body.querySelectorAll('.cb-input, .combobox').length : -1;
-          const labels = body ? body.querySelectorAll('.field > label').length : 0;
+          const labels = body ? body.querySelectorAll('.field label').length : 0;
           const save = document.getElementById('btn-quick-create-save');
           const title = (document.getElementById('quick-create-title')||{}).textContent || '';
           return { open: sheet && !sheet.hidden, n: inputs.length, nestedCb, labels,
@@ -502,16 +502,18 @@ def shoot_beta19_fiches(ctx, prefix: str) -> None:
             )
             page.wait_for_timeout(200)
 
-            # Champ « Contact signataire » + aide, dans la lettre.
+            # Champ « Contact signataire » + aide, dans la lettre. L'aide est désormais
+            # portée par l'infobulle ⓘ (beta.20) : on lit le texte de la bulle.
             lab = page.evaluate(
                 """() => {
                   const l = document.querySelector('label[for="f-contact"]');
-                  const h = l ? l.parentElement.querySelector('.field-help') : null;
-                  return { label: l ? l.textContent.trim() : '', help: h ? h.textContent.trim() : '' };
+                  const row = l ? l.closest('.tt-row') : null;
+                  const bubble = row ? row.parentElement.querySelector('.tt-bubble') : null;
+                  return { label: l ? l.textContent.trim() : '', help: bubble ? bubble.textContent.trim() : '' };
                 }"""
             )
             _assert(lab["label"] == "Contact signataire", f"label contact = {lab['label']!r}")
-            _assert("Signe les lettres de voiture" in lab["help"], "aide « Signe les lettres… » absente")
+            _assert("Signe les lettres de voiture" in lab["help"], "aide « Signe les lettres… » (infobulle) absente")
             page.screenshot(path=str(OUT / f"{prefix}-contact-signataire-champ-{theme}.png"), full_page=False)
             print(f"   contact-signataire-champ-{theme}")
 
@@ -718,6 +720,15 @@ def shoot_beta20_infobulles(ctx, prefix: str) -> None:
                 beta20_failures.append(f"infobulles/{theme}: bulle Destinataire non ouverte")
             page.screenshot(path=str(OUT / f"{prefix}-infobulle-destinataire-{theme}.png"), full_page=False)
             check_no_hscroll(page, f"infobulles-{theme}")
+
+            # --- Champ « Quantité estimée de la journée » (beta.20) : capture + ⓘ présent.
+            qrow = page.locator('.tt-row:has(label[data-tt="quantite_estimee"])')
+            if qrow.count() == 0:
+                beta20_failures.append(f"quantite-estimee/{theme}: libellé/infobulle absent du formulaire")
+            else:
+                qrow.scroll_into_view_if_needed()
+                page.wait_for_timeout(150)
+                page.screenshot(path=str(OUT / f"{prefix}-quantite-estimee-{theme}.png"), full_page=False)
             print(f"   infobulles-{theme} ({n_icons} icônes ⓘ)")
         except Exception as exc:  # noqa: BLE001
             beta20_failures.append(f"infobulles/{theme}: {exc}")
@@ -758,6 +769,90 @@ def shoot_beta20_infobulles(ctx, prefix: str) -> None:
         print(f"   !! infobulles/fiche-contact: {exc}")
     finally:
         page.close()
+
+
+def shoot_beta20_fiche_clavier(ctx, prefix: str) -> None:
+    """beta.20 (WebKit, DSR 2) — PRIORITÉ : fiche « Nouveau contact signataire » en
+    vue PLEIN ÉCRAN modale, clavier iOS simulé (visualViewport réduit + scroll page).
+
+    Vérifie, clair ET sombre : le titre et le bouton « Enregistrer » (en-tête) restent
+    DANS le viewport visible ; et aucun élément de la lettre n'est visible derrière la
+    fiche (elementFromPoint sur plusieurs points tombe toujours dans #quick-create-sheet).
+    """
+    VVH = 430
+    for theme in ("clair", "sombre"):
+        page = ctx.new_page()
+        try:
+            page.goto(f"{BASE}?demo=1&screen=today&role=chauffeur&theme={theme}", wait_until="networkidle")
+            page.wait_for_timeout(600)
+            # Choisir un client (prérequis du contact) puis ouvrir la fiche contact.
+            page.evaluate(
+                """() => {
+                    const c = document.getElementById('f-client');
+                    if (c && c.options.length > 1) {
+                        c.selectedIndex = 1;
+                        c.dispatchEvent(new Event('change', {bubbles:true}));
+                    }
+                }"""
+            )
+            page.wait_for_timeout(200)
+            page.evaluate("() => window.openQuickCreate && window.openQuickCreate('contact', 'Jean Dupont')")
+            page.wait_for_timeout(400)
+            # Clavier iOS simulé : visualViewport réduit + tentative de scroll de la page.
+            page.evaluate(
+                """(h) => {
+                    window.scrollTo(0, 500);
+                    if (window.visualViewport) {
+                        try {
+                            Object.defineProperty(window.visualViewport, 'height',
+                                { configurable: true, get: () => h });
+                        } catch (e) {}
+                        try {
+                            Object.defineProperty(window.visualViewport, 'offsetTop',
+                                { configurable: true, get: () => 0 });
+                        } catch (e) {}
+                        window.visualViewport.dispatchEvent(new Event('resize'));
+                    }
+                }""",
+                VVH,
+            )
+            page.wait_for_timeout(250)
+            checks = page.evaluate(
+                """(vvh) => {
+                    const inView = (el) => {
+                        if (!el) return false;
+                        const r = el.getBoundingClientRect();
+                        return r.top >= 0 && r.bottom <= vvh && r.width > 0 && r.height > 0;
+                    };
+                    const title = document.getElementById('quick-create-title');
+                    const saveTop = document.getElementById('btn-quick-create-save-top');
+                    // Points répartis dans le viewport visible : tous doivent tomber DANS la fiche.
+                    const pts = [[196, 60], [196, 200], [196, 320], [196, vvh - 12], [30, 150], [360, 260]];
+                    let leaks = 0;
+                    for (const [x, y] of pts) {
+                        const el = document.elementFromPoint(x, y);
+                        if (!el || !el.closest('#quick-create-sheet')) leaks++;
+                    }
+                    return { title: inView(title), save: inView(saveTop), leaks };
+                }""",
+                VVH,
+            )
+            if not checks["title"]:
+                beta20_failures.append(f"fiche-clavier/{theme}: titre hors du viewport visible")
+            if not checks["save"]:
+                beta20_failures.append(f"fiche-clavier/{theme}: bouton Enregistrer hors du viewport visible")
+            if checks["leaks"]:
+                beta20_failures.append(
+                    f"fiche-clavier/{theme}: {checks['leaks']} point(s) laissent voir la lettre derrière la fiche"
+                )
+            page.screenshot(path=str(OUT / f"{prefix}-fiche-contact-clavier-{theme}.png"), full_page=False)
+            print(f"   fiche-contact-clavier-{theme} "
+                  f"(titre={checks['title']}, save={checks['save']}, leaks={checks['leaks']})")
+        except Exception as exc:  # noqa: BLE001
+            beta20_failures.append(f"fiche-clavier/{theme}: {exc}")
+            print(f"   !! fiche-clavier/{theme}: {exc}")
+        finally:
+            page.close()
 
 
 def main() -> int:
@@ -842,6 +937,8 @@ def main() -> int:
         )
         print("WebKit (Safari iOS, DSR 2) : fiches rapides beta.19")
         shoot_beta19_fiches(wk_iphone2, "webkit-iphone")
+        print("WebKit (Safari iOS, DSR 2) : fiche plein écran + clavier beta.20")
+        shoot_beta20_fiche_clavier(wk_iphone2, "webkit-iphone")
         print("WebKit (Safari iOS, DSR 2) : infobulles ⓘ beta.20")
         shoot_beta20_infobulles(wk_iphone2, "webkit-iphone")
         wk_iphone2.close()
