@@ -30,6 +30,16 @@ def _format_siren(raw: str) -> str:
     return raw or ""
 
 
+def _fmt_qte(value) -> str:
+    """Nombre lisible : « 12 », « 12,5 » (sans zéros inutiles, virgule FR)."""
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    s = f"{f:.3f}".rstrip("0").rstrip(".")
+    return s.replace(".", ",")
+
+
 def unite_label(code: str, quantite) -> str:
     """Libellé d'unité pour le PDF, avec pluriel (« 3 big bags »)."""
     try:
@@ -108,6 +118,7 @@ def build_context(lv_id: int) -> dict[str, Any]:
                lv.expediteur, lv.destinataire, lv.dest_identique,
                lv.destinataire_client_id, lv.heures_regie,
                lv.heures, lv.statut,
+               lv.quantite_estimee, lv.quantite_estimee_unite,
                c.immatriculation AS camion, ch.nom AS chauffeur, p.nom AS projet,
                cl.raison_sociale AS client_nom, cl.adresse AS client_adresse,
                dc.raison_sociale AS dest_nom, dc.adresse AS dest_adresse
@@ -152,6 +163,14 @@ def build_context(lv_id: int) -> dict[str, Any]:
     # Heures en créneaux (0017) : chaîne « 8h00–12h00 · 13h00–17h00 ». Repli sur
     # l'ancien texte libre heures_regie pour les lettres antérieures non migrées.
     lv["heures_aff"] = format_creneaux(lv.get("heures")) or (lv.get("heures_regie") or "")
+
+    # Quantité estimée de la journée (mention obligatoire — arrêté du 9/11/1999
+    # art. 5 I a). Imprimée en une ligne « X unité » UNIQUEMENT si renseignée.
+    qte = lv.get("quantite_estimee")
+    if qte is not None:
+        lv["quantite_estimee_aff"] = f"{_fmt_qte(qte)} {unite_label(lv.get('quantite_estimee_unite'), qte)}"
+    else:
+        lv["quantite_estimee_aff"] = ""
 
     tours = db.query(
         """

@@ -1153,3 +1153,52 @@ body.can-switch-mode .bb-more { display: flex; }
 /* Titre de section : l'icône reste alignée sur la ligne du titre. */
 h2.form-section-title.tt-row, .tt-row > h2.form-section-title { margin-bottom: 8px; }
 .tt-row > h2.form-section-title { margin-bottom: 0; }
+
+/* ===================================================== Fiche rapide plein écran (beta.20)
+   Modèle iOS Contacts : vue modale plein écran, position/hauteur calées sur
+   visualViewport par app.js (suit le clavier). En-tête fixe sous la safe-area
+   (Annuler / titre / Enregistrer), corps défilant seul. Le défilement de la page
+   est verrouillé pendant l'ouverture (app.js) → iOS ne fait plus défiler la lettre
+   derrière. Fond opaque : rien de la lettre n'est visible. Clair + sombre. */
+.qc-modal {
+  position: fixed; left: 0; top: 0; width: 100%; height: 100%;
+  z-index: 1000; background: var(--bg);
+  display: flex; flex-direction: column;
+}
+.qc-modal[hidden] { display: none; }
+.qc-form {
+  display: flex; flex-direction: column;
+  height: 100%; width: 100%; background: var(--bg); overflow: hidden;
+}
+.qc-header {
+  flex: 0 0 auto;
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px;
+  padding: 10px 12px; padding-top: calc(10px + env(safe-area-inset-top));
+  background: var(--surface); border-bottom: 1px solid var(--border);
+}
+.qc-title {
+  grid-column: 2; margin: 0; font-size: 17px; font-weight: 700; color: var(--text);
+  text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 62vw;
+}
+.qc-htext {
+  background: none; border: none; font-size: 16px; padding: 6px 4px; cursor: pointer;
+  color: var(--c-blue); -webkit-tap-highlight-color: transparent;
+}
+.qc-htext:focus-visible { outline: 2px solid var(--c-blue); outline-offset: 2px; border-radius: 4px; }
+.qc-cancel { grid-column: 1; justify-self: start; }
+.qc-save { grid-column: 3; justify-self: end; font-weight: 700; }
+.qc-htext:disabled { opacity: 0.5; cursor: default; }
+.qc-scroll {
+  flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: 16px 16px calc(24px + env(safe-area-inset-bottom));
+}
+.qc-save-bottom { margin-top: 8px; }
+/* Verrou de défilement de la page quand une fiche est ouverte. */
+body.qc-lock { position: fixed; left: 0; right: 0; width: 100%; overflow: hidden; }
+
+/* Quantité estimée de la journée (beta.20) : nombre + unité sur une ligne. */
+.qte-estimee-row { display: flex; gap: 8px; align-items: center; }
+.qte-estimee-row input { flex: 1 1 auto; min-width: 0; }
+.qte-estimee-row select { flex: 0 0 auto; width: auto; }

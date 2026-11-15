@@ -454,6 +454,17 @@ export async function rpcDernierePrestation(chauffeurId) {
   }
   return live.rpcDernierePrestation(chauffeurId);
 }
+export async function rpcDerniereQuantiteEstimee(chauffeurId, clientId) {
+  if (DEMO) {
+    const lv = demoDb.lettres_voiture
+      .filter((l) => String(l.chauffeur_id) === String(chauffeurId)
+        && String(l.client_id) === String(clientId)
+        && !l.deleted_at && l.quantite_estimee != null)
+      .sort((a, b) => (a.date_etablissement < b.date_etablissement ? 1 : a.date_etablissement > b.date_etablissement ? -1 : b.id - a.id))[0];
+    return lv ? { quantite: lv.quantite_estimee, unite: lv.quantite_estimee_unite } : null;
+  }
+  return live.rpcDerniereQuantiteEstimee(chauffeurId, clientId);
+}
 
 export async function createUtilisateur(fields) { return DEMO ? dUtilisateurs.create(fields) : live.createUtilisateur(fields); }
 export async function updateUtilisateur(id, patch) { return DEMO ? dUtilisateurs.update(id, patch) : live.updateUtilisateur(id, patch); }

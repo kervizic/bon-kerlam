@@ -254,6 +254,18 @@
               <div id="creneaux-list" class="creneaux-list"></div>
               <button type="button" id="btn-add-creneau" class="btn btn-secondary btn-sm btn-add-creneau">+ Ajouter un créneau</button>
             </div>
+            <div class="field">
+              <label for="f-qte-estimee" data-tt="quantite_estimee">Quantité estimée de la journée</label>
+              <div class="qte-estimee-row">
+                <input type="text" id="f-qte-estimee" name="quantite_estimee" inputmode="decimal" placeholder="Qté">
+                <select id="f-qte-estimee-unite" name="quantite_estimee_unite" aria-label="Unité de la quantité estimée">
+                  <option value="">Unité…</option>
+                  <option value="t">t</option>
+                  <option value="m3">m³</option>
+                  <option value="big_bag">big bag</option>
+                </select>
+              </div>
+            </div>
           </form>
 
           <h2 class="form-section-title" data-tt="prestations">Prestations</h2>
@@ -584,20 +596,24 @@
   <!-- Panneau en colonne : en-tête fixe + corps défilant + pied collant. La feuille
        est ajustée à visualViewport (clavier iOS) par app.js pour que le bouton
        « Enregistrer » reste visible au-dessus du clavier et de la barre d'accessoires. -->
-  <div id="quick-create-sheet" class="sheet-overlay" hidden>
-    <div class="sheet-panel quick-create-panel" role="dialog" aria-modal="true" aria-labelledby="quick-create-title">
-      <div class="sheet-header">
-        <h2 id="quick-create-title">Nouvelle fiche</h2>
-        <button type="button" class="icon-btn" id="btn-quick-create-close" aria-label="Fermer"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
-      </div>
-      <form id="quick-create-form" class="quick-create-form" autocomplete="off" novalidate>
+  <!-- Fiche rapide = vue PLEIN ÉCRAN modale (modèle iOS Contacts). Le conteneur
+       suit exactement visualViewport (position/hauteur posées par app.js) : fond
+       opaque, rien de la lettre visible derrière, défilement de la page verrouillé.
+       En-tête fixe sous la safe-area : Annuler (gauche) / titre (centre) /
+       Enregistrer (droite, action principale, jamais cachée par le clavier). -->
+  <div id="quick-create-sheet" class="qc-modal" hidden>
+    <form id="quick-create-form" class="qc-form" role="dialog" aria-modal="true" aria-labelledby="quick-create-title" autocomplete="off" novalidate>
+      <header class="qc-header">
+        <button type="button" class="qc-htext qc-cancel" id="btn-quick-create-close">Annuler</button>
+        <h2 id="quick-create-title" class="qc-title">Nouvelle fiche</h2>
+        <button type="submit" class="qc-htext qc-save" id="btn-quick-create-save-top">Enregistrer</button>
+      </header>
+      <div class="qc-scroll">
         <div id="quick-create-body" class="quick-create-body"></div>
-        <div class="quick-create-actions">
-          <p id="quick-create-error" class="auth-error" role="alert" hidden></p>
-          <button type="submit" id="btn-quick-create-save" class="btn btn-primary btn-block">Enregistrer</button>
-        </div>
-      </form>
-    </div>
+        <p id="quick-create-error" class="auth-error" role="alert" hidden></p>
+        <button type="submit" id="btn-quick-create-save" class="btn btn-primary btn-block qc-save-bottom">Enregistrer</button>
+      </div>
+    </form>
   </div>
 
   <!-- ============================================ Feuille « aide à l'installation » -->

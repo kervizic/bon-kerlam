@@ -26,6 +26,7 @@ export const TOOLTIPS = {
   contact: "Signe les lettres de voiture. Son e-mail est obligatoire.",
   destinataire: "Qui reçoit la marchandise. Son adresse figure obligatoirement sur la lettre.",
   heures: "Heures de travail du chauffeur sur ce transport.",
+  quantite_estimee: "Mention obligatoire : quantité prévue pour la journée.",
   prestations: "Ce qui est facturé (régie, heures supplémentaires, astreinte). N'apparaît sur la lettre que si c'est rempli.",
 
   // Tours (trajets de la journée).
@@ -53,7 +54,7 @@ export const TOOLTIPS = {
 // Champs qui DOIVENT avoir un texte d'aide défini (contrôlé par le test).
 export const FORM_FIELD_KEYS = [
   "date", "camion", "client", "projet", "contact", "destinataire", "heures",
-  "prestations", "tours", "site_chargement", "site_dechargement",
+  "quantite_estimee", "prestations", "tours", "site_chargement", "site_dechargement",
   "ligne_article", "ligne_quantite", "ligne_unite",
   "prestation_prestation", "prestation_quantite", "prestation_unite", "prestation_materiel",
 ];

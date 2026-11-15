@@ -96,6 +96,7 @@ import {
   updatePrestationLigne,
   deletePrestationLigne,
   rpcDernierePrestation,
+  rpcDerniereQuantiteEstimee,
   createUtilisateur,
   updateUtilisateur,
   upsertReglage,
@@ -964,7 +965,7 @@ function openQuickCreate(entity, prefillText = "", editValue = null) {
     body._qcFocusWired = true;
     body.addEventListener("focusin", (e) => {
       if (e.target && e.target.scrollIntoView) {
-        setTimeout(() => { try { e.target.scrollIntoView({ block: "center", behavior: "smooth" }); } catch (err) { /* noop */ } }, 120);
+        setTimeout(() => { try { e.target.scrollIntoView({ block: "nearest", behavior: "smooth" }); } catch (err) { /* noop */ } }, 120);
       }
     });
   }
@@ -974,7 +975,9 @@ function openQuickCreate(entity, prefillText = "", editValue = null) {
   return new Promise((resolve) => {
     qcResolve = resolve;
     const form = document.getElementById("quick-create-form");
-    const saveBtn = document.getElementById("btn-quick-create-save");
+    // Deux boutons « Enregistrer » (en-tête iOS + bas du corps) : même action.
+    const saveBtns = form.querySelectorAll('button[type="submit"]');
+    const setSaveDisabled = (v) => saveBtns.forEach((b) => { b.disabled = v; });
     const onSubmit = async (e) => {
       e.preventDefault();
       const values = {};
@@ -996,7 +999,7 @@ function openQuickCreate(entity, prefillText = "", editValue = null) {
         values[f.key] = val;
       }
       if (spec.needsClient) values._client_id = toIntOrNull(document.getElementById("f-client").value);
-      saveBtn.disabled = true;
+      setSaveDisabled(true);
       try {
         let row;
         if (editing) {
@@ -1017,12 +1020,12 @@ function openQuickCreate(entity, prefillText = "", editValue = null) {
       } catch (err) {
         errEl.textContent = "Enregistrement impossible : " + (err && err.message ? err.message : err);
         errEl.hidden = false;
-        saveBtn.disabled = false;
+        setSaveDisabled(false);
       }
     };
     function cleanup() {
       form.removeEventListener("submit", onSubmit);
-      saveBtn.disabled = false;
+      setSaveDisabled(false);
       detachQuickCreateViewport(sheet);
       qcResolve = null;
     }
@@ -1050,23 +1053,37 @@ function isValidEmail(s) {
  * pour que le panneau (ancré en bas) et son bouton « Enregistrer » restent au-dessus
  * du clavier et de la barre d'accessoires. Sans visualViewport : no-op (la feuille
  * garde son max-height 85vh). */
+let _qcScrollY = 0;
+
 function attachQuickCreateViewport(sheet) {
+  // Verrou de défilement de la PAGE : mémorise la position puis fige le body, pour
+  // qu'iOS ne fasse plus défiler la lettre derrière la fiche au focus d'un champ.
+  _qcScrollY = window.scrollY || window.pageYOffset || 0;
+  document.body.style.top = `-${_qcScrollY}px`;
+  document.body.classList.add("qc-lock");
+
   const vv = window.visualViewport;
-  if (!vv) return;
   const apply = () => {
-    // L'overlay occupe exactement la fenêtre visuelle (sous la barre d'état,
-    // au-dessus du clavier). align-items:flex-end -> panneau collé au clavier.
+    // La fiche occupe EXACTEMENT la fenêtre visuelle (sous la barre d'état, au-dessus
+    // du clavier) : top = offsetTop, height = height, suivis sur resize/scroll.
     sheet.style.position = "fixed";
     sheet.style.left = "0";
     sheet.style.width = "100%";
-    sheet.style.top = vv.offsetTop + "px";
-    sheet.style.height = vv.height + "px";
     sheet.style.bottom = "auto";
+    if (vv) {
+      sheet.style.top = vv.offsetTop + "px";
+      sheet.style.height = vv.height + "px";
+    } else {
+      sheet.style.top = "0";
+      sheet.style.height = "100%";
+    }
   };
   apply();
   sheet._qcVvApply = apply;
-  vv.addEventListener("resize", apply);
-  vv.addEventListener("scroll", apply);
+  if (vv) {
+    vv.addEventListener("resize", apply);
+    vv.addEventListener("scroll", apply);
+  }
 }
 
 function detachQuickCreateViewport(sheet) {
@@ -1078,6 +1095,12 @@ function detachQuickCreateViewport(sheet) {
   sheet._qcVvApply = null;
   // Réinitialise les styles inline posés par apply().
   for (const p of ["position", "left", "width", "top", "height", "bottom"]) sheet.style[p] = "";
+  // Libère le verrou de défilement et restaure la position de la page (idempotent).
+  if (document.body.classList.contains("qc-lock")) {
+    document.body.classList.remove("qc-lock");
+    document.body.style.top = "";
+    window.scrollTo(0, _qcScrollY);
+  }
 }
 
 function refreshProjetContactOptions() {
@@ -1106,6 +1129,7 @@ function onClientChange() {
   refreshProjetContactOptions();
   if (projetSel.value !== prevProjet) projetSel.dispatchEvent(new Event("change", { bubbles: true }));
   if (contactSel.value !== prevContact) contactSel.dispatchEvent(new Event("change", { bubbles: true }));
+  if (clientId) prefillQuantiteEstimee(clientId);
 }
 
 /* ========================================================== Tableau de bord == */
@@ -1209,6 +1233,12 @@ function fillHeaderForm(data) {
 
   fillDestinataireControls(d);
   renderCreneaux(Array.isArray(d.heures) ? d.heures : []);
+
+  // Quantité estimée de la journée (beta.20) : nombre + unité.
+  const qEl = document.getElementById("f-qte-estimee");
+  const qUEl = document.getElementById("f-qte-estimee-unite");
+  if (qEl) qEl.value = d.quantite_estimee != null ? String(d.quantite_estimee) : "";
+  if (qUEl) qUEl.value = d.quantite_estimee_unite || "";
 }
 
 /* -------------------------------------------------- Heures en créneaux (beta.15) ==
@@ -1464,6 +1494,39 @@ function wireHeaderAutosave() {
   // Destinataire (D) : mode + combobox client -> dest_identique + destinataire_client_id.
   document.getElementById("f-dest-mode").addEventListener("change", saveDestinataire);
   document.getElementById("f-dest-client").addEventListener("change", saveDestinataire);
+
+  // Quantité estimée de la journée (beta.20) : nombre + unité (facultatifs).
+  wireAutosaveField(document.getElementById("f-qte-estimee"), {
+    table: "lettres_voiture", ensureId: ensureLv, field: "quantite_estimee", transform: toNumberOrNull });
+  wireAutosaveField(document.getElementById("f-qte-estimee-unite"), {
+    table: "lettres_voiture", ensureId: ensureLv, field: "quantite_estimee_unite",
+    transform: (v) => v || null });
+}
+
+function toNumberOrNull(v) {
+  const n = parseFloat(String(v == null ? "" : v).replace(",", "."));
+  return Number.isFinite(n) ? n : null;
+}
+
+// Pré-remplit la quantité estimée depuis la dernière lettre de ce chauffeur pour
+// ce client (mémoire par chauffeur + client), uniquement si le champ est vide.
+async function prefillQuantiteEstimee(clientId) {
+  const qEl = document.getElementById("f-qte-estimee");
+  const qUEl = document.getElementById("f-qte-estimee-unite");
+  if (!qEl || !clientId || qEl.value.trim()) return;
+  const chauffeurId = state.chauffeur ? state.chauffeur.id : null;
+  if (!chauffeurId) return;
+  try {
+    const last = await rpcDerniereQuantiteEstimee(chauffeurId, toIntOrNull(clientId));
+    if (last && last.quantite != null && !qEl.value.trim()) {
+      qEl.value = String(last.quantite);
+      if (qUEl && !qUEl.value) qUEl.value = last.unite || "";
+      qEl.dispatchEvent(new Event("change", { bubbles: true }));
+      if (qUEl) qUEl.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  } catch (err) {
+    reportIfVersionMismatch(err);
+  }
 }
 
 /* ============================================================= Vue "Aujourd'hui" */

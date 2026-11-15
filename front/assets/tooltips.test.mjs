@@ -37,7 +37,7 @@ test("les champs principaux portent un data-tt dans index.html", () => {
   const keys = new Set([...HTML.matchAll(/\bdata-tt\s*=\s*["']([^"']+)["']/g)].map((m) => m[1]));
   const requis = [
     "date", "camion", "client", "projet", "contact", "destinataire", "heures",
-    "prestations", "tours", "site_chargement", "site_dechargement",
+    "quantite_estimee", "prestations", "tours", "site_chargement", "site_dechargement",
   ];
   const absents = requis.filter((k) => !keys.has(k));
   assert.deepEqual(absents, [], `champs sans data-tt dans index.html : ${absents.join(", ")}`);

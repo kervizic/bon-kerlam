@@ -347,6 +347,13 @@ export async function rpcDernierePrestation(chauffeurId) {
   return data; // { prestation_id, unite, quantite, materiel_id } ou null
 }
 
+export async function rpcDerniereQuantiteEstimee(chauffeurId, clientId) {
+  const { data, error } = await requireClient().rpc("derniere_quantite_estimee",
+    { p_chauffeur_id: chauffeurId, p_client_id: clientId });
+  if (error) throw error;
+  return data; // { quantite, unite } ou null
+}
+
 // Pas de fonction api.fusionner_article() exposée côté SQL (cf. migrations) :
 // on signale clairement l'absence plutôt que de faire semblant. L'écran
 // Articles affiche alors un stub bureau-only (cf. app.js, handleFusionArticle).
