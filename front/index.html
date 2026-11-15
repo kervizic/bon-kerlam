@@ -658,9 +658,9 @@
 
   <template id="tpl-ligne">
     <div class="ligne-row">
-      <select class="f-ligne-article"><option value="">Article…</option></select>
-      <input type="text" class="f-ligne-quantite" placeholder="Qté" inputmode="decimal">
-      <select class="f-ligne-unite">
+      <select class="f-ligne-article" aria-label="Article : marchandise transportée sur ce tour"><option value="">Article…</option></select>
+      <input type="text" class="f-ligne-quantite" placeholder="Qté" inputmode="decimal" aria-label="Quantité transportée pour cet article">
+      <select class="f-ligne-unite" aria-label="Unité de la quantité">
         <option value="t">t</option>
         <option value="m3">m³</option>
         <option value="unite">unité</option>
@@ -672,14 +672,14 @@
 
   <template id="tpl-prestation">
     <div class="prestation-row">
-      <select class="f-prestation-prestation"><option value="">Prestation…</option></select>
-      <input type="text" class="f-prestation-quantite" placeholder="Qté" inputmode="decimal">
-      <select class="f-prestation-unite">
+      <select class="f-prestation-prestation" aria-label="Prestation facturée en plus du transport"><option value="">Prestation…</option></select>
+      <input type="text" class="f-prestation-quantite" placeholder="Qté" inputmode="decimal" aria-label="Nombre d'unités de cette prestation">
+      <select class="f-prestation-unite" aria-label="Unité de la prestation">
         <option value="jour">jour</option>
         <option value="heure">heure</option>
         <option value="unite">unité</option>
       </select>
-      <select class="f-prestation-materiel"><option value="">Matériel…</option></select>
+      <select class="f-prestation-materiel" aria-label="Matériel utilisé pour la prestation"><option value="">Matériel…</option></select>
       <button type="button" class="icon-btn btn-delete-prestation" aria-label="Supprimer la prestation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6M14 11v6"/></svg></button>
     </div>
   </template>
