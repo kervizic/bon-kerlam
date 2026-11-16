@@ -120,8 +120,12 @@ def build_context(lv_id: int) -> dict[str, Any]:
                lv.heures, lv.statut,
                lv.quantite_estimee, lv.quantite_estimee_unite,
                c.immatriculation AS camion, ch.nom AS chauffeur, p.nom AS projet,
-               cl.raison_sociale AS client_nom, cl.adresse AS client_adresse,
-               dc.raison_sociale AS dest_nom, dc.adresse AS dest_adresse
+               cl.raison_sociale AS client_nom,
+               -- beta.22 : adresse CHOISIE de la société (société -> adresses),
+               -- repli sur l'adresse de la fiche client (mono-adresse / ancien modèle).
+               COALESCE(ca.adresse, cl.adresse) AS client_adresse,
+               dc.raison_sociale AS dest_nom,
+               COALESCE(da.adresse, dc.adresse) AS dest_adresse
           FROM bon.lettres_voiture lv
           LEFT JOIN bon.camions c     ON c.id = lv.camion_id
           LEFT JOIN bon.chauffeurs ch ON ch.id = lv.chauffeur_id
@@ -131,6 +135,9 @@ def build_context(lv_id: int) -> dict[str, Any]:
           LEFT JOIN bon.clients cl    ON cl.id = COALESCE(lv.client_id, p.client_id)
           -- Destinataire distinct (beta.18) : nom + adresse imprimés sur le PDF.
           LEFT JOIN bon.clients dc    ON dc.id = lv.destinataire_client_id
+          -- Adresse choisie (beta.22) : expéditeur et destinataire.
+          LEFT JOIN bon.client_adresses ca ON ca.id = lv.client_adresse_id
+          LEFT JOIN bon.client_adresses da ON da.id = lv.dest_adresse_id
          WHERE lv.id = %s
         """,
         (lv_id,),

@@ -56,8 +56,58 @@ const demoDb = DEMO
       fco: seed.cloneSeed(seed.FCO),
       carte_conducteur: seed.cloneSeed(seed.CARTE_CONDUCTEUR),
       caces: seed.cloneSeed(seed.CACES),
+      client_adresses: seed.cloneSeed(seed.CLIENT_ADRESSES || []),
+      site_societes: seed.cloneSeed(seed.SITE_SOCIETES || []),
+      fusions: [],
+      doublons_clients: seed.cloneSeed(seed.DOUBLONS_CLIENTS || []),
+      doublons_sites: seed.cloneSeed(seed.DOUBLONS_SITES || []),
     }
   : null;
+
+// CRUD démo minimal (ids horodatés) pour les tables beta.22 absentes du seed.
+function demoCrudLocal(table) {
+  return {
+    create: async (fields) => {
+      const row = { id: Date.now() + Math.floor(Math.random() * 1000), actif: true, ...fields };
+      demoDb[table].push(row);
+      return row;
+    },
+    update: async (id, patch) => {
+      const row = byId(demoDb[table], id);
+      if (row) Object.assign(row, patch);
+      return row;
+    },
+    delete: async (id) => {
+      demoDb[table] = demoDb[table].filter((r) => String(r.id) !== String(id));
+    },
+  };
+}
+
+// Fusion démo : marque les fiches fusionnées, journalise, réversible en mémoire.
+function demoFusionner(kind, gardeId, fusionnesIds) {
+  const table = kind === "clients" ? "clients" : kind === "sites" ? "sites" : "site_societes";
+  let done = 0;
+  for (const fid of fusionnesIds || []) {
+    if (String(fid) === String(gardeId)) continue;
+    const row = byId(demoDb[table], fid);
+    if (!row || row.merged_into_id) continue;
+    const snapshot = { ...row };
+    row.merged_into_id = gardeId;
+    if (table === "sites") row.statut = "termine"; else row.actif = false;
+    demoDb.fusions.push({ id: Date.now() + demoDb.fusions.length, type: kind, garde_id: gardeId, fusionne_id: fid, snapshot });
+    done += 1;
+  }
+  return { type: kind, garde: gardeId, fusionnes: done };
+}
+function demoFusionAnnuler(fusionId) {
+  const fu = byId(demoDb.fusions, fusionId);
+  if (!fu || fu.annulee_at) return { deja_annulee: !!fu };
+  const table = fu.type === "clients" ? "clients" : fu.type === "sites" ? "sites" : "site_societes";
+  const row = byId(demoDb[table], fu.fusionne_id);
+  if (row) { row.merged_into_id = null; if (table === "sites") row.statut = "actif"; else row.actif = true; }
+  fu.annulee_at = new Date().toISOString();
+  return { annulee: true, type: fu.type };
+}
 
 function byId(rows, id) {
   return rows.find((r) => String(r.id) === String(id)) || null;
@@ -401,6 +451,8 @@ const dSites = demoCrudSafe("sites", "site");
 const dArticles = demoCrudSafe("articles", "article");
 const dPrestations = demoCrudSafe("prestations", "prestation");
 const dUtilisateurs = demoCrudSafe("utilisateurs", "utilisateur");
+const dClientAdresses = DEMO ? demoCrudLocal("client_adresses") : null;
+const dSiteSocietes = DEMO ? demoCrudLocal("site_societes") : null;
 
 function demoCrudSafe(table, kind) {
   return DEMO ? demoCrud(table, kind) : null;
@@ -424,6 +476,51 @@ export async function updateProjet(id, patch) { return DEMO ? dProjets.update(id
 
 export async function createSite(fields) { return DEMO ? dSites.create(fields) : live.createSite(fields); }
 export async function updateSite(id, patch) { return DEMO ? dSites.update(id, patch) : live.updateSite(id, patch); }
+
+// -------------------------------------------------- beta.22 : société -> adresses
+export async function listClientAdresses(clientId) {
+  if (DEMO) {
+    const rows = (demoDb.client_adresses || []).filter(
+      (a) => a.actif !== false && (!clientId || String(a.client_id) === String(clientId)));
+    return rows.sort((a, b) => (b.is_principale ? 1 : 0) - (a.is_principale ? 1 : 0));
+  }
+  return live.listClientAdresses(clientId);
+}
+export async function createClientAdresse(fields) { return DEMO ? dClientAdresses.create(fields) : live.createClientAdresse(fields); }
+export async function updateClientAdresse(id, patch) { return DEMO ? dClientAdresses.update(id, patch) : live.updateClientAdresse(id, patch); }
+export async function deleteClientAdresse(id) { return DEMO ? dClientAdresses.delete(id) : live.deleteClientAdresse(id); }
+
+export async function listSiteSocietes() {
+  if (DEMO) return (demoDb.site_societes || []).filter((s) => s.actif !== false);
+  return live.listSiteSocietes();
+}
+export async function createSiteSociete(fields) { return DEMO ? dSiteSocietes.create(fields) : live.createSiteSociete(fields); }
+export async function updateSiteSociete(id, patch) { return DEMO ? dSiteSocietes.update(id, patch) : live.updateSiteSociete(id, patch); }
+
+export async function rpcFusionnerClients(gardeId, fusionnesIds) {
+  if (DEMO) return demoFusionner("clients", gardeId, fusionnesIds);
+  return live.rpcFusionnerClients(gardeId, fusionnesIds);
+}
+export async function rpcFusionnerSites(gardeId, fusionnesIds) {
+  if (DEMO) return demoFusionner("sites", gardeId, fusionnesIds);
+  return live.rpcFusionnerSites(gardeId, fusionnesIds);
+}
+export async function rpcFusionnerSiteSocietes(gardeId, fusionnesIds) {
+  if (DEMO) return demoFusionner("site_societes", gardeId, fusionnesIds);
+  return live.rpcFusionnerSiteSocietes(gardeId, fusionnesIds);
+}
+export async function rpcFusionAnnuler(fusionId) {
+  if (DEMO) return demoFusionAnnuler(fusionId);
+  return live.rpcFusionAnnuler(fusionId);
+}
+export async function listDoublonsClients() {
+  if (DEMO) return demoDb.doublons_clients || [];
+  return live.listDoublonsClients();
+}
+export async function listDoublonsSites() {
+  if (DEMO) return demoDb.doublons_sites || [];
+  return live.listDoublonsSites();
+}
 
 export async function createArticle(fields) { return DEMO ? dArticles.create(fields) : live.createArticle(fields); }
 export async function updateArticle(id, patch) { return DEMO ? dArticles.update(id, patch) : live.updateArticle(id, patch); }

@@ -136,6 +136,14 @@ import {
   todayIso,
 } from "./data.js";
 
+// beta.22 : société -> adresses, fusion réversible, détection de doublons.
+import {
+  listClientAdresses, createClientAdresse, updateClientAdresse, deleteClientAdresse,
+  listSiteSocietes, createSiteSociete, updateSiteSociete,
+  rpcFusionnerClients, rpcFusionnerSites, rpcFusionnerSiteSocietes, rpcFusionAnnuler,
+  listDoublonsClients, listDoublonsSites,
+} from "./data.js";
+
 import { initInstall } from "./install.js?v=13";
 import { UndoStack } from "./undo-stack.js?v=13";
 import { PdfCache, shouldCachePdf, formatGeneratedAt } from "./pdf-cache.js?v=13";
@@ -1222,7 +1230,45 @@ function onClientChange() {
   refreshProjetContactOptions();
   if (projetSel.value !== prevProjet) projetSel.dispatchEvent(new Event("change", { bubbles: true }));
   if (contactSel.value !== prevContact) contactSel.dispatchEvent(new Event("change", { bubbles: true }));
-  if (clientId) prefillQuantiteEstimee(clientId);
+  refreshAdressePicker({ selectId: "f-client-adresse", wrapId: "field-client-adresse-wrap",
+    clientId: toIntOrNull(clientId), saveField: "client_adresse_id" });
+}
+
+// beta.22 : libellé d'une adresse de société (sans tiret cadratin).
+function adresseLabel(a) {
+  const lib = (a.libelle || "").trim();
+  const adr = (a.adresse || "").trim();
+  if (lib && adr) return `${lib} · ${adr}`;
+  return adr || lib || `Adresse #${a.id}`;
+}
+
+// Affiche le sélecteur d'adresse si la société a plusieurs adresses ; sinon
+// l'unique adresse est prise d'office (décision A). Persiste le choix sur la LV.
+async function refreshAdressePicker({ selectId, wrapId, clientId, saveField, selectedId = null }) {
+  const sel = document.getElementById(selectId);
+  const wrap = document.getElementById(wrapId);
+  if (!sel || !wrap) return;
+  if (!clientId) {
+    wrap.hidden = true;
+    sel.innerHTML = '<option value="">Choisir…</option>';
+    return;
+  }
+  let adresses = [];
+  try { adresses = await listClientAdresses(clientId); } catch (err) { adresses = []; }
+  if (adresses.length <= 1) {
+    wrap.hidden = true;
+    const only = adresses[0] ? adresses[0].id : null;
+    if (state.lv) { try { await updateLv(state.lv.id, { [saveField]: only }); } catch (err) { /* ignore */ } }
+    return;
+  }
+  populateSelect(sel, adresses, (a) => a.id, (a) => adresseLabel(a), "Choisir…");
+  let val = selectedId != null ? String(selectedId) : "";
+  if (!val) {
+    const p = adresses.find((a) => a.is_principale) || adresses[0];
+    val = p ? String(p.id) : "";
+  }
+  sel.value = val;
+  wrap.hidden = false;
 }
 
 /* ========================================================== Tableau de bord == */
@@ -1323,6 +1369,8 @@ function fillHeaderForm(data) {
   document.getElementById("f-projet").value = d.projet_id != null ? String(d.projet_id) : "";
   document.getElementById("f-contact").value = d.contact_id != null ? String(d.contact_id) : "";
   ["f-client", "f-projet", "f-contact", "f-camion"].forEach((idf) => refreshCombobox(document.getElementById(idf)));
+  refreshAdressePicker({ selectId: "f-client-adresse", wrapId: "field-client-adresse-wrap",
+    clientId, saveField: "client_adresse_id", selectedId: d.client_adresse_id });
 
   fillDestinataireControls(d);
   renderCreneaux(Array.isArray(d.heures) ? d.heures : []);
@@ -1440,6 +1488,9 @@ function fillDestinataireControls(d) {
   }
   refreshCombobox(destClient);
   updateDestVisibility();
+  refreshAdressePicker({ selectId: "f-dest-adresse", wrapId: "field-dest-adresse-wrap",
+    clientId: d.dest_identique !== false ? null : toIntOrNull(destClient.value),
+    saveField: "dest_adresse_id", selectedId: d.dest_adresse_id });
 }
 
 function updateDestVisibility() {
@@ -1450,6 +1501,7 @@ function updateDestVisibility() {
   // Ancienne saisie libre : visible seulement si présente et sans client choisi.
   const showLegacy = mode === "autre_client" && !destClient.value && !!legacy.value;
   document.getElementById("field-dest-legacy-wrap").hidden = !showLegacy;
+  if (mode !== "autre_client") document.getElementById("field-dest-adresse-wrap").hidden = true;
 }
 
 async function saveDestinataire() {
@@ -1478,6 +1530,8 @@ async function saveDestinataire() {
       state.lv.destinataire = destinataire;
       state.lv.destinataire_client_id = destinataire_client_id;
     }
+    refreshAdressePicker({ selectId: "f-dest-adresse", wrapId: "field-dest-adresse-wrap",
+      clientId: destinataire_client_id, saveField: "dest_adresse_id" });
     setSyncState(window.bonSync.queueLength > 0 ? "offline" : "saved");
   } catch (err) {
     console.error(err);
@@ -1582,6 +1636,9 @@ function wireHeaderAutosave() {
   wireAutosaveField(document.getElementById("f-camion"), { table: "lettres_voiture", ensureId: ensureLv, field: "camion_id", transform: toIntOrNull });
   wireAutosaveField(document.getElementById("f-projet"), { table: "lettres_voiture", ensureId: ensureLv, field: "projet_id", transform: toIntOrNull });
   wireAutosaveField(document.getElementById("f-contact"), { table: "lettres_voiture", ensureId: ensureLv, field: "contact_id", transform: toIntOrNull });
+  // beta.22 : adresse choisie de la société (expéditeur + destinataire).
+  wireAutosaveField(document.getElementById("f-client-adresse"), { table: "lettres_voiture", ensureId: ensureLv, field: "client_adresse_id", transform: toIntOrNull });
+  wireAutosaveField(document.getElementById("f-dest-adresse"), { table: "lettres_voiture", ensureId: ensureLv, field: "dest_adresse_id", transform: toIntOrNull });
 
   const btnAddCreneau = document.getElementById("btn-add-creneau");
   if (btnAddCreneau) btnAddCreneau.addEventListener("click", addCreneau);

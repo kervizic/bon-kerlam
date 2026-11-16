@@ -235,6 +235,12 @@
               <label for="f-client" data-tt="client">Client</label>
               <select id="f-client" name="client_id"><option value="">Choisir…</option></select>
             </div>
+            <!-- beta.22 : adresse de la société choisie (visible si la société a
+                 plusieurs adresses ; sinon l'unique adresse est prise d'office). -->
+            <div class="field" id="field-client-adresse-wrap" hidden>
+              <label for="f-client-adresse">Adresse</label>
+              <select id="f-client-adresse" name="client_adresse_id"><option value="">Choisir…</option></select>
+            </div>
             <div class="field">
               <label for="f-projet" data-tt="projet">Projet</label>
               <select id="f-projet" name="projet_id"><option value="">Choisir…</option></select>
@@ -253,6 +259,10 @@
             <div class="field" id="field-dest-client-wrap" hidden>
               <label for="f-dest-client">Destinataire</label>
               <select id="f-dest-client"><option value="">Choisir ou taper…</option></select>
+            </div>
+            <div class="field" id="field-dest-adresse-wrap" hidden>
+              <label for="f-dest-adresse">Adresse du destinataire</label>
+              <select id="f-dest-adresse" name="dest_adresse_id"><option value="">Choisir…</option></select>
             </div>
             <!-- Lettres antérieures : destinataire en saisie libre (nom seul, sans
                  adresse). Conservé en LECTURE (migration douce), jamais ressaisi. -->

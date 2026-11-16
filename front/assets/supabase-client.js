@@ -265,6 +265,68 @@ const crudSites = makeCrud("sites");
 export const createSite = crudSites.create;
 export const updateSite = crudSites.update;
 
+// ------------------------------------------------------ beta.22 : société -> adresses
+export async function listClientAdresses(clientId) {
+  let q = requireClient().from("client_adresses").select("*").eq("actif", true)
+    .order("is_principale", { ascending: false }).order("libelle");
+  if (clientId) q = q.eq("client_id", clientId);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data || [];
+}
+const crudClientAdresses = makeCrud("client_adresses");
+export const createClientAdresse = crudClientAdresses.create;
+export const updateClientAdresse = crudClientAdresses.update;
+export async function deleteClientAdresse(id) {
+  const { error } = await requireClient().from("client_adresses").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function listSiteSocietes() {
+  const { data, error } = await requireClient().from("site_societes").select("*")
+    .eq("actif", true).order("nom");
+  if (error) throw error;
+  return data || [];
+}
+const crudSiteSocietes = makeCrud("site_societes");
+export const createSiteSociete = crudSiteSocietes.create;
+export const updateSiteSociete = crudSiteSocietes.update;
+
+// Fusion réversible (RPC SECURITY DEFINER) + détection de doublons.
+export async function rpcFusionnerClients(gardeId, fusionnesIds) {
+  const { data, error } = await requireClient().rpc("fusionner_clients",
+    { p_garde: gardeId, p_fusionnes: fusionnesIds });
+  if (error) throw error;
+  return data;
+}
+export async function rpcFusionnerSites(gardeId, fusionnesIds) {
+  const { data, error } = await requireClient().rpc("fusionner_sites",
+    { p_garde: gardeId, p_fusionnes: fusionnesIds });
+  if (error) throw error;
+  return data;
+}
+export async function rpcFusionnerSiteSocietes(gardeId, fusionnesIds) {
+  const { data, error } = await requireClient().rpc("fusionner_site_societes",
+    { p_garde: gardeId, p_fusionnes: fusionnesIds });
+  if (error) throw error;
+  return data;
+}
+export async function rpcFusionAnnuler(fusionId) {
+  const { data, error } = await requireClient().rpc("fusion_annuler", { p_fusion_id: fusionId });
+  if (error) throw error;
+  return data;
+}
+export async function listDoublonsClients() {
+  const { data, error } = await requireClient().from("doublons_clients").select("*");
+  if (error) throw error;
+  return data || [];
+}
+export async function listDoublonsSites() {
+  const { data, error } = await requireClient().from("doublons_sites").select("*");
+  if (error) throw error;
+  return data || [];
+}
+
 const crudCamions = makeCrud("camions");
 export const createCamion = crudCamions.create;
 export const updateCamion = crudCamions.update;
