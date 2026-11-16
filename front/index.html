@@ -211,6 +211,17 @@
             </button>
           </div>
 
+          <!-- Bandeau « à compléter avant signature » (beta.20) : liste déroulante
+               des mentions obligatoires manquantes, chaque ligne mène au champ. -->
+          <div id="lv-completeness" class="lv-completeness" hidden>
+            <button type="button" class="lvc-toggle" id="lvc-toggle" aria-expanded="false" aria-controls="lvc-list">
+              <svg class="lvc-warn" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+              <span class="lvc-summary" id="lvc-summary"></span>
+              <svg class="lvc-chevron" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <ul class="lvc-list" id="lvc-list" hidden></ul>
+          </div>
+
           <form id="lv-header-form" class="lv-header-form" autocomplete="off">
             <div class="field">
               <label for="f-date" data-tt="date">Date</label>
@@ -377,6 +388,7 @@
           <div class="view-header"><h1>Projets</h1></div>
           <div class="view-toolbar">
             <input type="search" id="filter-projets" class="filter-input" placeholder="Rechercher un projet, un client…">
+            <label class="check-inline toolbar-filter"><input type="checkbox" id="filter-projets-incomplete"> À compléter</label>
             <button type="button" id="btn-new-projet" class="btn btn-primary">+ Nouveau</button>
           </div>
           <div id="list-projets" class="entity-list"><p class="muted">Chargement…</p></div>
@@ -387,6 +399,7 @@
           <div class="view-header"><h1>Clients</h1></div>
           <div class="view-toolbar">
             <input type="search" id="filter-clients" class="filter-input" placeholder="Rechercher un client…">
+            <label class="check-inline toolbar-filter"><input type="checkbox" id="filter-clients-incomplete"> À compléter</label>
             <button type="button" id="btn-new-client" class="btn btn-primary">+ Nouveau</button>
           </div>
           <div id="list-clients" class="entity-list"><p class="muted">Chargement…</p></div>
@@ -397,6 +410,7 @@
           <div class="view-header"><h1>Sites</h1></div>
           <div class="view-toolbar">
             <input type="search" id="filter-sites" class="filter-input" placeholder="Rechercher un site…">
+            <label class="check-inline toolbar-filter"><input type="checkbox" id="filter-sites-incomplete"> À compléter</label>
             <button type="button" id="btn-new-site" class="btn btn-primary">+ Nouveau</button>
           </div>
           <div id="list-sites" class="entity-list"><p class="muted">Chargement…</p></div>
@@ -593,25 +607,23 @@
   </div>
 
   <!-- ============================================ Feuille « fiche rapide » -->
-  <!-- Panneau en colonne : en-tête fixe + corps défilant + pied collant. La feuille
-       est ajustée à visualViewport (clavier iOS) par app.js pour que le bouton
-       « Enregistrer » reste visible au-dessus du clavier et de la barre d'accessoires. -->
   <!-- Fiche rapide = vue PLEIN ÉCRAN modale (modèle iOS Contacts). Le conteneur
        suit exactement visualViewport (position/hauteur posées par app.js) : fond
        opaque, rien de la lettre visible derrière, défilement de la page verrouillé.
-       En-tête fixe sous la safe-area : Annuler (gauche) / titre (centre) /
-       Enregistrer (droite, action principale, jamais cachée par le clavier). -->
+       AUCUN bouton d'enregistrement : la fiche est créée dès la première saisie et
+       chaque champ s'enregistre en direct (indicateur « Enregistré »). En-tête fixe
+       sous la safe-area : statut (gauche) / titre (centre) / fermer (croix) (droite). -->
   <div id="quick-create-sheet" class="qc-modal" hidden>
     <form id="quick-create-form" class="qc-form" role="dialog" aria-modal="true" aria-labelledby="quick-create-title" autocomplete="off" novalidate>
       <header class="qc-header">
-        <button type="button" class="qc-htext qc-cancel" id="btn-quick-create-close">Annuler</button>
+        <span class="qc-status" id="quick-create-status" aria-live="polite" hidden>Enregistré</span>
         <h2 id="quick-create-title" class="qc-title">Nouvelle fiche</h2>
-        <button type="submit" class="qc-htext qc-save" id="btn-quick-create-save-top">Enregistrer</button>
+        <button type="button" class="qc-close" id="btn-quick-create-close" aria-label="Fermer">
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
       </header>
       <div class="qc-scroll">
         <div id="quick-create-body" class="quick-create-body"></div>
-        <p id="quick-create-error" class="auth-error" role="alert" hidden></p>
-        <button type="submit" id="btn-quick-create-save" class="btn btn-primary btn-block qc-save-bottom">Enregistrer</button>
       </div>
     </form>
   </div>

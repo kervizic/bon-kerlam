@@ -142,6 +142,7 @@ import { statutLabel } from "./status-labels.js?v=13";
 import { canGroupForSignature } from "./signature-group.js?v=13";
 import { enhanceSelect, refreshCombobox, ensureOption } from "./combobox.js?v=17";
 import { initTooltips } from "./tooltips.js?v=20";
+import { lvCompleteness, entityMissingFields } from "./completeness.js?v=20";
 
 /* ============================================================== IndexedDB == */
 /* Deux object stores :
@@ -677,6 +678,28 @@ function wireFilterInput(inputEl, onFilter) {
   });
 }
 
+// Filtre « À compléter » des écrans bureau (beta.20) : état de la case + re-rendu.
+function incompleteChecked(checkboxId) {
+  const el = document.getElementById(checkboxId);
+  return !!(el && el.checked);
+}
+function wireIncompleteToggle(checkboxId, filterInputId, render) {
+  const box = document.getElementById(checkboxId);
+  if (!box || box._wired) return;
+  box._wired = true;
+  box.addEventListener("change", () => {
+    const input = document.getElementById(filterInputId);
+    render(input ? input.value.trim().toLowerCase() : "");
+  });
+}
+// Pastille rouge « À compléter » sur une fiche aux champs obligatoires manquants.
+function incompletePill(kind, row) {
+  const miss = entityMissingFields(kind, row);
+  return miss.length
+    ? `<span class="status-pill status-expired" title="Manque : ${escapeHtml(miss.join(", "))}">À compléter</span>`
+    : "";
+}
+
 function fieldBlock(labelText, inputEl, ttKey) {
   const wrap = document.createElement("div");
   wrap.className = "field";
@@ -846,9 +869,9 @@ const QC_SPECS = {
   client: {
     title: "client",
     fields: [
-      { key: "raison_sociale", label: "Nom / raison sociale", required: true, fromText: true,
+      { key: "raison_sociale", label: "Nom / raison sociale", required: true, fromText: true, reqMsg: "Nom manquant",
         autocomplete: "organization", autocapitalize: "words" },
-      { key: "adresse", label: "Adresse, CP et ville (imprimée sur la lettre)", required: true,
+      { key: "adresse", label: "Adresse, CP et ville (imprimée sur la lettre)", required: true, reqMsg: "Adresse manquante",
         autocomplete: "street-address", autocapitalize: "words" },
       { key: "siren", label: "SIREN (facultatif)", inputmode: "numeric", autocomplete: "off", tt: "qc_siren" },
     ],
@@ -861,7 +884,7 @@ const QC_SPECS = {
   projet: {
     title: "projet",
     needsClient: true,
-    fields: [{ key: "nom", label: "Nom du projet", required: true, fromText: true }],
+    fields: [{ key: "nom", label: "Nom du projet", required: true, fromText: true, reqMsg: "Nom manquant" }],
     create: (v) => createProjet({ client_id: v._client_id, nom: v.nom }),
     update: (id, v) => updateProjet(id, { nom: v.nom }),
     store: "projets",
@@ -872,9 +895,9 @@ const QC_SPECS = {
     title: "contact signataire",
     needsClient: true,
     fields: [
-      { key: "nom", label: "Nom", required: true, fromText: true,
+      { key: "nom", label: "Nom", required: true, fromText: true, reqMsg: "Nom manquant",
         autocomplete: "name", autocapitalize: "words" },
-      { key: "email", label: "E-mail (obligatoire)", type: "email", required: true, email: true,
+      { key: "email", label: "E-mail (obligatoire)", type: "email", required: true, email: true, reqMsg: "E-mail manquant",
         inputmode: "email", autocomplete: "email", autocapitalize: "off", tt: "qc_contact_email" },
       { key: "tel", label: "Téléphone (facultatif)", type: "tel",
         inputmode: "tel", autocomplete: "tel" },
@@ -888,8 +911,8 @@ const QC_SPECS = {
   site: {
     title: "site",
     fields: [
-      { key: "nom", label: "Nom du site", required: true, fromText: true, autocapitalize: "words" },
-      { key: "adresse", label: "Adresse, CP et ville", required: true,
+      { key: "nom", label: "Nom du site", required: true, fromText: true, autocapitalize: "words", reqMsg: "Nom manquant" },
+      { key: "adresse", label: "Adresse, CP et ville", required: true, reqMsg: "Adresse manquante",
         autocomplete: "street-address", autocapitalize: "words" },
     ],
     create: (v) => {
@@ -910,7 +933,7 @@ const QC_SPECS = {
   },
   article: {
     title: "article",
-    fields: [{ key: "nom", label: "Nom de l'article", required: true, fromText: true }],
+    fields: [{ key: "nom", label: "Nom de l'article", required: true, fromText: true, reqMsg: "Nom manquant" }],
     create: (v) => createArticle({ nom: v.nom, actif: true }),
     update: (id, v) => updateArticle(id, { nom: v.nom }),
     store: "articles",
@@ -919,21 +942,114 @@ const QC_SPECS = {
   },
 };
 
+// Fiche rapide SANS bouton « Enregistrer » (beta.20) : enregistrement en temps réel.
+// La fiche est créée dès que le champ primaire (1er, obligatoire) reçoit une saisie,
+// puis chaque champ s'enregistre en direct (indicateur « Enregistré »). Les champs
+// obligatoires manquants passent en rouge (message court sous le champ), sans jamais
+// bloquer : on peut fermer une fiche incomplète (elle reste enregistrée telle quelle).
 let qcResolve = null;
+let qcState = null;         // { entity, spec, id, created, inputs, needsClient, lastItem, saving }
+let qcSaveChain = Promise.resolve();
+const qcDebounce = { t: null };
+
+function qcSetStatus(txt) {
+  const el = document.getElementById("quick-create-status");
+  if (!el) return;
+  if (!txt) { el.hidden = true; el.textContent = ""; return; }
+  el.textContent = txt;
+  el.hidden = false;
+}
+
+function qcFieldErrorEl(input) {
+  let p = input.parentElement.querySelector(".field-error-inline");
+  if (!p) {
+    p = document.createElement("p");
+    p.className = "field-error-inline";
+    p.setAttribute("aria-live", "polite");
+    input.parentElement.appendChild(p);
+  }
+  return p;
+}
+
+function qcValidateField(f, input) {
+  const val = (input.value || "").trim();
+  let msg = "";
+  if (f.required && !val) msg = f.reqMsg || `${f.label} manquant`;
+  else if (f.email && val && !isValidEmail(val)) msg = "E-mail invalide";
+  const p = qcFieldErrorEl(input);
+  if (msg) { input.classList.add("field-invalid"); p.textContent = msg; p.hidden = false; } else { input.classList.remove("field-invalid"); p.textContent = ""; p.hidden = true; }
+  return !msg;
+}
+
+function qcGatherValues(st) {
+  const values = {};
+  for (const f of st.spec.fields) values[f.key] = (st.inputs[f.key].value || "").trim();
+  if (st.needsClient) values._client_id = toIntOrNull(document.getElementById("f-client").value);
+  return values;
+}
+
+async function qcDoSave(st) {
+  if (!st || qcState !== st) return;
+  const values = qcGatherValues(st);
+  const primaryKey = st.spec.fields[0].key;
+  // Création impossible tant que le champ primaire (NOT NULL) est vide, ou qu'un
+  // client est requis mais absent : on attend la prochaine saisie.
+  if (!st.created && !values[primaryKey]) { qcSetStatus(""); return; }
+  if (st.needsClient && values._client_id == null) { qcSetStatus(""); return; }
+  qcSetStatus("Enregistrement…");
+  try {
+    let row;
+    if (!st.created) {
+      row = await st.spec.create(values);
+      st.id = row.id;
+      st.created = true;
+      (state.refs[st.spec.store] = state.refs[st.spec.store] || []).push(row);
+      if (st.entity === "projet" || st.entity === "contact") refreshProjetContactOptions();
+    } else {
+      row = await st.spec.update(st.id, values);
+      if (!row) row = Object.assign({ id: st.id }, values);
+      const arr = state.refs[st.spec.store] || [];
+      const i = arr.findIndex((r) => String(r.id) === String(st.id));
+      if (i >= 0) arr[i] = Object.assign({}, arr[i], row); else arr.push(row);
+    }
+    st.lastItem = st.spec.toItem(row);
+    qcSetStatus("Enregistré");
+  } catch (err) {
+    console.error("[app] fiche rapide : enregistrement en échec", err);
+    qcSetStatus("Non enregistré");
+  }
+}
+
+// Enfile un enregistrement (sérialisé : jamais deux create/update en parallèle).
+function qcQueueSave() {
+  const st = qcState;
+  if (!st) return qcSaveChain;
+  qcSaveChain = qcSaveChain.then(() => qcDoSave(st)).catch(() => {});
+  return qcSaveChain;
+}
+
+function qcOnInput(f) {
+  const st = qcState;
+  if (!st) return;
+  const input = st.inputs[f.key];
+  if (!input || input.disabled) return;
+  qcValidateField(f, input);
+  clearTimeout(qcDebounce.t);
+  qcSetStatus("Enregistrement…");
+  qcDebounce.t = setTimeout(() => qcQueueSave(), 450);
+}
+
 function openQuickCreate(entity, prefillText = "", editValue = null) {
   const spec = QC_SPECS[entity];
   if (!spec) return Promise.resolve(null);
   const sheet = document.getElementById("quick-create-sheet");
   const body = document.getElementById("quick-create-body");
-  const errEl = document.getElementById("quick-create-error");
   const titleEl = document.getElementById("quick-create-title");
   const editing = editValue != null;
 
-  // Garde-fou : projet/contact exigent un client choisi.
-  if (spec.needsClient && !editing && !document.getElementById("f-client").value) {
-    alert("Choisissez d'abord un client.");
-    return Promise.resolve(null);
-  }
+  // projet/contact : besoin d'un client choisi. Non bloquant par une alerte :
+  // on l'indique dans la fiche et on désactive la saisie tant qu'il manque.
+  const clientMissing = spec.needsClient && !editing && !document.getElementById("f-client").value;
 
   const existing = editing
     ? (state.refs[spec.store] || []).find((r) => String(r.id) === String(editValue))
@@ -942,8 +1058,14 @@ function openQuickCreate(entity, prefillText = "", editValue = null) {
 
   titleEl.textContent = (editing ? "Modifier le " : "Nouveau ") + spec.title;
   body.innerHTML = "";
-  errEl.hidden = true;
+  qcSetStatus("");
+
   const inputs = {};
+  qcState = {
+    entity, spec, id: existing ? existing.id : null, created: !!existing,
+    inputs, needsClient: !!spec.needsClient, lastItem: existing ? spec.toItem(existing) : null,
+  };
+
   for (const f of spec.fields) {
     const input = makeTextInput(
       f.type || "text",
@@ -951,16 +1073,27 @@ function openQuickCreate(entity, prefillText = "", editValue = null) {
       { inputmode: f.inputmode, autocomplete: f.autocomplete, autocapitalize: f.autocapitalize, name: f.key },
     );
     input.required = !!f.required;
+    if (clientMissing) input.disabled = true;
     inputs[f.key] = input;
     body.appendChild(fieldBlock(f.label, input, f.tt));
+    input.addEventListener("input", () => qcOnInput(f));
+    input.addEventListener("change", () => qcOnInput(f));
+    input.addEventListener("blur", () => qcValidateField(f, input));
   }
+
+  if (clientMissing) {
+    const warn = document.createElement("p");
+    warn.className = "field-error-inline qc-banner-warn";
+    warn.hidden = false;
+    warn.textContent = "Choisissez d'abord un client sur la lettre.";
+    body.prepend(warn);
+  }
+
   sheet.hidden = false;
   initTooltips(body);
-  // Ajuste la feuille au clavier iOS (visualViewport) : le panneau reste au-dessus
-  // du clavier et de la barre d'accessoires, le bouton « Enregistrer » visible.
+  // Ajuste la fiche plein écran à visualViewport (clavier iOS) + verrou de défilement.
   attachQuickCreateViewport(sheet);
-  // Garder le champ actif visible quand le clavier le pousse hors écran (listener
-  // greffé une seule fois sur le corps, réutilisé à chaque ouverture).
+  // Garder le champ actif visible quand le clavier le pousse hors écran.
   if (!body._qcFocusWired) {
     body._qcFocusWired = true;
     body.addEventListener("focusin", (e) => {
@@ -969,78 +1102,35 @@ function openQuickCreate(entity, prefillText = "", editValue = null) {
       }
     });
   }
+  // Si prérempli (texte tapé dans le combobox) : enregistre d'emblée la fiche.
+  if (!editing && !clientMissing && (preset[spec.fields[0].key] || prefillText)) qcQueueSave();
+  // Édition d'une fiche incomplète : marque les obligatoires manquants en rouge.
+  if (editing) for (const f of spec.fields) qcValidateField(f, inputs[f.key]);
+
   const first = inputs[spec.fields[0].key];
   setTimeout(() => { try { first.focus(); } catch (e) { /* noop */ } }, 50);
 
   return new Promise((resolve) => {
     qcResolve = resolve;
-    const form = document.getElementById("quick-create-form");
-    // Deux boutons « Enregistrer » (en-tête iOS + bas du corps) : même action.
-    const saveBtns = form.querySelectorAll('button[type="submit"]');
-    const setSaveDisabled = (v) => saveBtns.forEach((b) => { b.disabled = v; });
-    const onSubmit = async (e) => {
-      e.preventDefault();
-      const values = {};
-      for (const f of spec.fields) {
-        const val = inputs[f.key].value.trim();
-        if (f.required && !val) {
-          errEl.textContent = `Le champ « ${f.label} » est obligatoire.`;
-          errEl.hidden = false;
-          inputs[f.key].focus();
-          return;
-        }
-        // E-mail du contact obligatoire ET au bon format (création impossible sinon).
-        if (f.email && val && !isValidEmail(val)) {
-          errEl.textContent = "Adresse e-mail invalide (ex. prenom.nom@kerlam.fr).";
-          errEl.hidden = false;
-          inputs[f.key].focus();
-          return;
-        }
-        values[f.key] = val;
-      }
-      if (spec.needsClient) values._client_id = toIntOrNull(document.getElementById("f-client").value);
-      setSaveDisabled(true);
-      try {
-        let row;
-        if (editing) {
-          row = await spec.update(existing.id, values);
-          row = row || Object.assign({}, existing, values);
-          const arr = state.refs[spec.store] || [];
-          const i = arr.findIndex((r) => String(r.id) === String(existing.id));
-          if (i >= 0) arr[i] = Object.assign({}, arr[i], row);
-        } else {
-          row = await spec.create(values);
-          (state.refs[spec.store] = state.refs[spec.store] || []).push(row);
-        }
-        cleanup();
-        sheet.hidden = true;
-        // Projet/Contact : rafraîchir les listes filtrées par client.
-        if (entity === "projet" || entity === "contact") refreshProjetContactOptions();
-        resolve(spec.toItem(row));
-      } catch (err) {
-        errEl.textContent = "Enregistrement impossible : " + (err && err.message ? err.message : err);
-        errEl.hidden = false;
-        setSaveDisabled(false);
-      }
-    };
-    function cleanup() {
-      form.removeEventListener("submit", onSubmit);
-      setSaveDisabled(false);
-      detachQuickCreateViewport(sheet);
-      qcResolve = null;
-    }
-    form.addEventListener("submit", onSubmit);
-    sheet._qcCleanup = cleanup;
+    sheet._qcCleanup = () => { detachQuickCreateViewport(sheet); };
   });
 }
 
-function closeQuickCreate() {
+async function closeQuickCreate() {
   const sheet = document.getElementById("quick-create-sheet");
   if (!sheet || sheet.hidden) return;
+  const st = qcState;
+  // Vide toute saisie en attente (debounce) puis attend la fin des enregistrements :
+  // une fiche incomplète reste enregistrée telle quelle, aucun dialogue « Abandonner ? ».
+  clearTimeout(qcDebounce.t);
+  qcQueueSave();
+  try { await qcSaveChain; } catch (e) { /* noop */ }
   sheet.hidden = true;
   if (sheet._qcCleanup) sheet._qcCleanup();
   detachQuickCreateViewport(sheet);
-  if (qcResolve) { qcResolve(null); qcResolve = null; }
+  const item = st && st.lastItem ? st.lastItem : null;
+  qcState = null;
+  if (qcResolve) { qcResolve(item); qcResolve = null; }
 }
 
 // Format e-mail (validation légère côté client ; GoTrue/API restent la vérité).
@@ -1529,6 +1619,111 @@ async function prefillQuantiteEstimee(clientId) {
   }
 }
 
+/* ---------------------------------------- Complétude de la lettre (beta.20, B+C) ==
+ * Lit l'état EN DIRECT depuis le DOM (les autosaves ne rafraîchissent pas state.lv),
+ * puis la fonction pure lvCompleteness() liste les mentions obligatoires manquantes.
+ * Bandeau « N éléments à compléter avant signature » + champs manquants en rouge. */
+function readLvFromDom() {
+  const val = (id) => { const e = document.getElementById(id); return e ? e.value : ""; };
+  const mode = val("f-dest-mode");
+  const lv = {
+    client_id: val("f-client") || null,
+    date_etablissement: val("f-date") || "",
+    contact_id: val("f-contact") || null,
+    dest_identique: mode !== "autre_client",
+    destinataire_client_id: val("f-dest-client") || null,
+  };
+  const tours = Array.from(document.querySelectorAll("#tours-list .tour-card")).map((card) => {
+    const ch = card.querySelector(".f-site-chargement");
+    const de = card.querySelector(".f-site-dechargement");
+    const lignes = Array.from(card.querySelectorAll(".f-ligne-article"))
+      .map((sel) => ({ article_id: sel.value || null }));
+    return {
+      site_chargement_id: ch && ch.value ? ch.value : null,
+      site_dechargement_id: de && de.value ? de.value : null,
+      lignes,
+    };
+  });
+  return { lv, tours };
+}
+
+function applyLvRedMarks(missing) {
+  document.querySelectorAll("#view-today .field-missing").forEach((el) => el.classList.remove("field-missing"));
+  document.querySelectorAll("#view-today .f-ligne-article.field-invalid, #view-today .f-site-chargement.field-invalid, #view-today .f-site-dechargement.field-invalid")
+    .forEach((el) => el.classList.remove("field-invalid"));
+  for (const m of missing) {
+    let el;
+    try { el = document.querySelector(m.anchor); } catch (e) { el = null; }
+    if (!el) continue;
+    const field = el.closest(".field");
+    if (field) field.classList.add("field-missing"); else el.classList.add("field-invalid");
+  }
+}
+
+function jumpToAnchor(sel) {
+  let el;
+  try { el = document.querySelector(sel); } catch (e) { el = null; }
+  if (!el) return;
+  const target = el.closest(".field") || el;
+  try { target.scrollIntoView({ block: "center", behavior: "smooth" }); } catch (e) { /* noop */ }
+  const cb = target.querySelector ? target.querySelector(".cb-input") : null;
+  const focusable = cb || (el.matches && el.matches("input,select,textarea") ? el
+    : (el.querySelector && el.querySelector("input,select,textarea")) || el);
+  setTimeout(() => { try { focusable.focus({ preventScroll: true }); } catch (e) { /* noop */ } }, 250);
+  target.classList.add("lvc-flash");
+  setTimeout(() => target.classList.remove("lvc-flash"), 1100);
+}
+
+function refreshLvCompleteness() {
+  const box = document.getElementById("lv-completeness");
+  if (!box) return;
+  const todayView = document.getElementById("view-today");
+  if (!state.lv || (todayView && todayView.hidden)) { box.hidden = true; applyLvRedMarks([]); return; }
+  const { lv, tours } = readLvFromDom();
+  const missing = lvCompleteness(lv, tours, state.refs);
+  if (missing.length === 0) { box.hidden = true; applyLvRedMarks([]); return; }
+  box.hidden = false;
+  const n = missing.length;
+  document.getElementById("lvc-summary").textContent =
+    `${n} élément${n > 1 ? "s" : ""} à compléter avant signature`;
+  const list = document.getElementById("lvc-list");
+  list.innerHTML = "";
+  for (const m of missing) {
+    const li = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "lvc-item";
+    btn.textContent = m.label;
+    btn.addEventListener("click", () => jumpToAnchor(m.anchor));
+    li.appendChild(btn);
+    list.appendChild(li);
+  }
+  applyLvRedMarks(missing);
+}
+
+let _lvcTimer = null;
+function scheduleLvCompleteness() {
+  clearTimeout(_lvcTimer);
+  _lvcTimer = setTimeout(refreshLvCompleteness, 150);
+}
+
+function wireLvCompleteness() {
+  const toggle = document.getElementById("lvc-toggle");
+  if (toggle) {
+    toggle.addEventListener("click", () => {
+      const open = toggle.getAttribute("aria-expanded") === "true";
+      toggle.setAttribute("aria-expanded", open ? "false" : "true");
+      document.getElementById("lvc-list").hidden = open;
+    });
+  }
+  const todayView = document.getElementById("view-today");
+  if (todayView) todayView.addEventListener("change", scheduleLvCompleteness);
+  const toursList = document.getElementById("tours-list");
+  if (toursList && typeof MutationObserver !== "undefined") {
+    new MutationObserver(scheduleLvCompleteness).observe(toursList, { childList: true, subtree: true });
+  }
+}
+
 /* ============================================================= Vue "Aujourd'hui" */
 async function loadToday() {
   const chauffeurId = state.chauffeur ? state.chauffeur.id : null;
@@ -1575,6 +1770,7 @@ async function loadToday() {
   refreshDeleteButton();
   await loadPrestationsFor(lv);
   await loadToursFor(lv);
+  scheduleLvCompleteness();
 }
 
 async function loadToursFor(lv) {
@@ -2264,6 +2460,7 @@ async function openLvInToday(lv) {
   await loadPrestationsFor(lv);
   await loadToursFor(lv);
   navigate("today");
+  scheduleLvCompleteness();
 }
 
 /* =============================================================== Réglages bureau == */
@@ -2413,7 +2610,7 @@ async function loadProjetsScreen() {
     reportIfVersionMismatch(e);
   }
   const render = (query) => {
-    const filtered = !query
+    let filtered = !query
       ? rows
       : rows.filter((p) => {
           const client = state.refs.clients.find((c) => c.id === p.client_id);
@@ -2423,6 +2620,9 @@ async function loadProjetsScreen() {
             (client && client.raison_sociale.toLowerCase().includes(query))
           );
         });
+    if (incompleteChecked("filter-projets-incomplete")) {
+      filtered = filtered.filter((p) => entityMissingFields("projets", p).length > 0);
+    }
     listEl.innerHTML = "";
     if (!filtered.length) {
       listEl.innerHTML = '<p class="entity-empty">Aucun projet.</p>';
@@ -2431,6 +2631,7 @@ async function loadProjetsScreen() {
     for (const p of filtered) listEl.appendChild(renderProjetCard(p));
   };
   wireFilterInput(document.getElementById("filter-projets"), render);
+  wireIncompleteToggle("filter-projets-incomplete", "filter-projets", render);
   render("");
 
   document.getElementById("btn-new-projet").onclick = async () => {
@@ -2453,7 +2654,7 @@ function renderProjetCard(p, startOpen = false) {
   return createAccordionCard({
     title: p.nom || p.ref_contrat || `Projet #${p.id}`,
     subtitle: client ? client.raison_sociale : "—",
-    metaHtml: `<span class="badge badge-${escapeHtml(p.statut || "actif")}">${escapeHtml(p.statut || "actif")}</span>`,
+    metaHtml: incompletePill("projets", p) + `<span class="badge badge-${escapeHtml(p.statut || "actif")}">${escapeHtml(p.statut || "actif")}</span>`,
     startOpen,
     bodyBuilder: (body) => {
       const grid = document.createElement("div");
@@ -2521,7 +2722,10 @@ async function loadClientsScreen() {
     reportIfVersionMismatch(e);
   }
   const render = (query) => {
-    const filtered = !query ? rows : rows.filter((c) => c.raison_sociale.toLowerCase().includes(query));
+    let filtered = !query ? rows : rows.filter((c) => c.raison_sociale.toLowerCase().includes(query));
+    if (incompleteChecked("filter-clients-incomplete")) {
+      filtered = filtered.filter((c) => entityMissingFields("clients", c).length > 0);
+    }
     listEl.innerHTML = "";
     if (!filtered.length) {
       listEl.innerHTML = '<p class="entity-empty">Aucun client.</p>';
@@ -2530,6 +2734,7 @@ async function loadClientsScreen() {
     for (const c of filtered) listEl.appendChild(renderClientCard(c));
   };
   wireFilterInput(document.getElementById("filter-clients"), render);
+  wireIncompleteToggle("filter-clients-incomplete", "filter-clients", render);
   render("");
 
   document.getElementById("btn-new-client").onclick = async () => {
@@ -2548,7 +2753,7 @@ function renderClientCard(c, startOpen = false) {
   return createAccordionCard({
     title: c.raison_sociale,
     subtitle: c.siren || "",
-    metaHtml: c.actif ? "" : '<span class="status-pill status-expired">Inactif</span>',
+    metaHtml: incompletePill("clients", c) + (c.actif ? "" : '<span class="status-pill status-expired">Inactif</span>'),
     startOpen,
     bodyBuilder: (body) => {
       const grid = document.createElement("div");
@@ -2634,7 +2839,7 @@ function renderContactRow(contact, client, onDeleted) {
   const card = createAccordionCard({
     title: contact.nom,
     subtitle: contact.email,
-    metaHtml: contact.signataire ? '<span class="status-pill status-ok">Signataire</span>' : "",
+    metaHtml: incompletePill("contacts", contact) + (contact.signataire ? '<span class="status-pill status-ok">Signataire</span>' : ""),
     bodyBuilder: (body) => {
       const grid = document.createElement("div");
       grid.className = "field-grid";
@@ -2708,7 +2913,10 @@ async function loadSitesScreen() {
     reportIfVersionMismatch(e);
   }
   const render = (query) => {
-    const filtered = !query ? rows : rows.filter((s) => (s.nom + " " + (s.adresse || "")).toLowerCase().includes(query));
+    let filtered = !query ? rows : rows.filter((s) => (s.nom + " " + (s.adresse || "")).toLowerCase().includes(query));
+    if (incompleteChecked("filter-sites-incomplete")) {
+      filtered = filtered.filter((s) => entityMissingFields("sites", s).length > 0);
+    }
     listEl.innerHTML = "";
     if (!filtered.length) {
       listEl.innerHTML = '<p class="entity-empty">Aucun site.</p>';
@@ -2717,6 +2925,7 @@ async function loadSitesScreen() {
     for (const s of filtered) listEl.appendChild(renderSiteCard(s));
   };
   wireFilterInput(document.getElementById("filter-sites"), render);
+  wireIncompleteToggle("filter-sites-incomplete", "filter-sites", render);
   render("");
 
   document.getElementById("btn-new-site").onclick = async () => {
@@ -2735,7 +2944,7 @@ function renderSiteCard(s, startOpen = false) {
   return createAccordionCard({
     title: s.nom,
     subtitle: s.adresse || "",
-    metaHtml: `<span class="badge badge-${s.portee === "chantier" ? "preparee" : "en_cours"}">${escapeHtml(s.portee)}</span>${s.statut === "termine" ? '<span class="status-pill status-expired">Terminé</span>' : ""}`,
+    metaHtml: incompletePill("sites", s) + `<span class="badge badge-${s.portee === "chantier" ? "preparee" : "en_cours"}">${escapeHtml(s.portee)}</span>${s.statut === "termine" ? '<span class="status-pill status-expired">Terminé</span>' : ""}`,
     startOpen,
     bodyBuilder: (body) => {
       const grid = document.createElement("div");
@@ -4268,6 +4477,7 @@ async function boot() {
   // Infobulles ⓘ du formulaire principal (libellés statiques). Les parties
   // rendues dynamiquement (tours, fiches rapides) rappellent initTooltips().
   initTooltips(document);
+  wireLvCompleteness();
   // Mode démo (captures CI) : exposer l'ouverture de fiche rapide pour scénariser
   // la capture « fiche contact avec ⓘ ». Jamais exposé hors démo.
   if (isDemoMode()) window.openQuickCreate = openQuickCreate;

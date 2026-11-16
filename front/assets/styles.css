@@ -1181,24 +1181,70 @@ h2.form-section-title.tt-row, .tt-row > h2.form-section-title { margin-bottom: 8
   text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   max-width: 62vw;
 }
-.qc-htext {
-  background: none; border: none; font-size: 16px; padding: 6px 4px; cursor: pointer;
-  color: var(--c-blue); -webkit-tap-highlight-color: transparent;
+/* Indicateur discret « Enregistré » (gauche) : aucune action, juste le statut. */
+.qc-status { grid-column: 1; justify-self: start; font-size: 13px; color: var(--text-muted); }
+/* Bouton fermer ✕ (droite), seule action de l'en-tête. */
+.qc-close {
+  grid-column: 3; justify-self: end; display: inline-flex; align-items: center;
+  justify-content: center; width: 36px; height: 36px; padding: 0; border: none;
+  border-radius: 50%; background: transparent; color: var(--text); cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
-.qc-htext:focus-visible { outline: 2px solid var(--c-blue); outline-offset: 2px; border-radius: 4px; }
-.qc-cancel { grid-column: 1; justify-self: start; }
-.qc-save { grid-column: 3; justify-self: end; font-weight: 700; }
-.qc-htext:disabled { opacity: 0.5; cursor: default; }
+.qc-close:hover, .qc-close:focus-visible { background: var(--bg); outline: none; }
+.qc-close:focus-visible { box-shadow: 0 0 0 2px var(--c-blue); }
 .qc-scroll {
   flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
   padding: 16px 16px calc(24px + env(safe-area-inset-bottom));
 }
-.qc-save-bottom { margin-top: 8px; }
 /* Verrou de défilement de la page quand une fiche est ouverte. */
 body.qc-lock { position: fixed; left: 0; right: 0; width: 100%; overflow: hidden; }
+
+/* Champ obligatoire manquant / invalide : bordure rouge + message court dessous. */
+.field-invalid, input.field-invalid, select.field-invalid {
+  border-color: var(--c-red) !important; box-shadow: 0 0 0 1px var(--c-red);
+}
+.field-error-inline {
+  margin: 4px 0 0; font-size: 12.5px; line-height: 1.3; color: var(--c-red);
+}
+.field-error-inline[hidden] { display: none; }
+.qc-banner-warn { font-weight: 600; margin-bottom: 8px; }
 
 /* Quantité estimée de la journée (beta.20) : nombre + unité sur une ligne. */
 .qte-estimee-row { display: flex; gap: 8px; align-items: center; }
 .qte-estimee-row input { flex: 1 1 auto; min-width: 0; }
 .qte-estimee-row select { flex: 0 0 auto; width: auto; }
+
+/* ===================================================== Complétude lettre (beta.20)
+   Bandeau discret listant les mentions obligatoires manquantes avant signature,
+   dépliable ; chaque ligne mène au champ. Mentions manquantes marquées en rouge. */
+.lv-completeness {
+  margin: 0 0 14px; border: 1px solid var(--c-red); border-radius: 8px;
+  background: rgba(198, 40, 40, 0.06);
+}
+.lvc-toggle {
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px 12px;
+  background: none; border: none; cursor: pointer; color: var(--c-red);
+  font-weight: 600; font-size: 14px; text-align: left; -webkit-tap-highlight-color: transparent;
+}
+.lvc-summary { flex: 1 1 auto; }
+.lvc-warn { flex: 0 0 auto; }
+.lvc-chevron { flex: 0 0 auto; transition: transform 0.15s ease; }
+.lvc-toggle[aria-expanded="true"] .lvc-chevron { transform: rotate(180deg); }
+.lvc-list { list-style: none; margin: 0; padding: 0 8px 6px; }
+.lvc-list[hidden] { display: none; }
+.lvc-item {
+  display: block; width: 100%; text-align: left; background: none; border: none;
+  border-top: 1px solid var(--border); padding: 8px; color: var(--text);
+  font-size: 13.5px; cursor: pointer;
+}
+.lvc-item:hover, .lvc-item:focus-visible { color: var(--c-blue); text-decoration: underline; outline: none; }
+/* Champ obligatoire manquant sur la lettre : libellé rouge + bordure rouge. */
+.field.field-missing > label,
+.field.field-missing > .tt-row > label { color: var(--c-red); }
+.field.field-missing select,
+.field.field-missing input,
+.field.field-missing .cb-input { border-color: var(--c-red); box-shadow: 0 0 0 1px var(--c-red); }
+/* Flash bref quand on saute à un champ depuis le bandeau. */
+@keyframes lvc-flash { 0%, 100% { background: transparent; } 30% { background: rgba(21, 101, 192, 0.18); } }
+.lvc-flash { animation: lvc-flash 1s ease; border-radius: 6px; }
