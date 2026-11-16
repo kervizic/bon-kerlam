@@ -796,7 +796,7 @@ async function getSiteOptionsList() {
 
 /* ============================================================ Référentiels == */
 async function loadRefs() {
-  const [camions, clients, projets, contacts, articles, sites, chauffeurs, prestations, materiels, reglages] = await Promise.all([
+  const [camions, clients, projets, contacts, articles, sites, chauffeurs, prestations, materiels, reglages, siteSocietes] = await Promise.all([
     listCamions().catch((e) => { reportIfVersionMismatch(e); return []; }),
     listClients().catch((e) => { reportIfVersionMismatch(e); return []; }),
     listProjets().catch((e) => { reportIfVersionMismatch(e); return []; }),
@@ -807,8 +807,9 @@ async function loadRefs() {
     listPrestations().catch(() => []),
     listMateriels().catch(() => []),
     listReglages().catch(() => []),
+    listSiteSocietes().catch(() => []),
   ]);
-  state.refs = { camions, clients, projets, contacts, articles, sites, chauffeurs, prestations, materiels };
+  state.refs = { camions, clients, projets, contacts, articles, sites, chauffeurs, prestations, materiels, siteSocietes };
   state.reglages = Object.fromEntries(reglages.map((r) => [r.cle, r.valeur]));
   populateSelect(document.getElementById("f-camion"), camions, (c) => c.id, (c) => c.immatriculation);
   populateSelect(document.getElementById("f-client"), clients, (c) => c.id, (c) => c.raison_sociale, "Choisir ou taper…", (c) => c.alias);
@@ -1936,7 +1937,7 @@ async function renderTourCard(entry) {
   const chargementNav = navLinks[0];
   const dechargementNav = navLinks[1];
 
-  const siteOptions = await getSiteOptionsList();
+  const siteOptions = state.refs.sites || [];
   populateSelect(chargementSel, siteOptions, (s) => s.id, (s) => s.nom, "Choisir un site…");
   populateSelect(dechargementSel, siteOptions, (s) => s.id, (s) => s.nom, "Choisir un site…");
   chargementSel.value = tour.site_chargement_id != null ? String(tour.site_chargement_id) : "";
@@ -1954,14 +1955,9 @@ async function renderTourCard(entry) {
   pickerBtns[0].addEventListener("click", () => openSitePicker(chargementSel));
   pickerBtns[1].addEventListener("click", () => openSitePicker(dechargementSel));
 
-  const siteCbOpts = (sel) => ({
-    entity: "site", driverId: driverIdForRecents, placeholder: "Choisir un site…",
-    createLabel: "un site",
-    onCreate: (text) => openQuickCreate("site", text),
-    onEdit: (value) => openQuickCreate("site", "", value), canEdit: () => true,
-  });
-  enhanceSelect(chargementSel, siteCbOpts(chargementSel));
-  enhanceSelect(dechargementSel, siteCbOpts(dechargementSel));
+  // beta.22.1 : sélecteur hiérarchique (sociétés -> adresses) au lieu d'une liste à plat.
+  setupSiteDisplay(chargementSel);
+  setupSiteDisplay(dechargementSel);
 
   node.querySelector(".btn-delete-tour").addEventListener("click", () => handleDeleteTour(entry, node));
   node.querySelector(".btn-add-ligne").addEventListener("click", () => handleAddLigne(entry, node));
@@ -2097,7 +2093,7 @@ async function renderDraftTour() {
 
   const chargementSel = node.querySelector(".f-site-chargement");
   const dechargementSel = node.querySelector(".f-site-dechargement");
-  const siteOptions = await getSiteOptionsList();
+  const siteOptions = state.refs.sites || [];
   populateSelect(chargementSel, siteOptions, (s) => s.id, (s) => s.nom, "Choisir un site…");
   populateSelect(dechargementSel, siteOptions, (s) => s.id, (s) => s.nom, "Choisir un site…");
 
@@ -2123,22 +2119,20 @@ async function renderDraftTour() {
     if (!v) return;
     materialize(async (entry, realNode) => {
       const sel = realNode.querySelector(cssSel);
+      ensureOption(sel, v, (findSiteById(v) || {}).nom || v);
       sel.value = v;
-      refreshCombobox(sel);
       sel.dispatchEvent(new Event("change", { bubbles: true }));
     });
   };
   chargementSel.addEventListener("change", onPickSite(".f-site-chargement"));
   dechargementSel.addEventListener("change", onPickSite(".f-site-dechargement"));
 
-  const siteCbOpts = (sel) => ({
-    entity: "site", driverId: driverIdForRecents, placeholder: "Choisir un site…",
-    createLabel: "un site",
-    onCreate: (text) => openQuickCreate("site", text),
-    onEdit: (value) => openQuickCreate("site", "", value), canEdit: () => true,
-  });
-  enhanceSelect(chargementSel, siteCbOpts(chargementSel));
-  enhanceSelect(dechargementSel, siteCbOpts(dechargementSel));
+  // beta.22.1 : sélecteur hiérarchique (sociétés -> adresses).
+  const pickerBtns = node.querySelectorAll(".btn-site-picker");
+  pickerBtns[0].addEventListener("click", () => openSitePicker(chargementSel));
+  pickerBtns[1].addEventListener("click", () => openSitePicker(dechargementSel));
+  setupSiteDisplay(chargementSel);
+  setupSiteDisplay(dechargementSel);
 
   node.querySelector(".btn-delete-tour").addEventListener("click", () => node.remove());
   node.querySelector(".btn-add-ligne").addEventListener("click", () =>
@@ -4411,8 +4405,57 @@ function formatDistance(m) {
   return m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`;
 }
 
+// beta.22.1 : modèle « société de sites -> adresses ». Helpers d'affichage.
+function siteSocieteOf(site) {
+  if (!site || site.societe_id == null) return null;
+  return (state.refs.siteSocietes || []).find((x) => String(x.id) === String(site.societe_id)) || null;
+}
+function siteAdrLabel(site) {
+  const soc = siteSocieteOf(site);
+  const nom = site.nom || "";
+  if (soc && nom.toLowerCase().startsWith((soc.nom + " ").toLowerCase())) return nom.slice(soc.nom.length + 1);
+  return nom;
+}
+function siteGroupedLabel(site) {
+  if (!site) return "";
+  const soc = siteSocieteOf(site);
+  return soc ? `${soc.nom} · ${siteAdrLabel(site)}` : (site.nom || "");
+}
+
+// Champ site = bouton d'affichage qui ouvre la feuille hiérarchique (plus de liste
+// à plat). Le <select> (caché) conserve la valeur pour l'autosave et la navigation.
+function setupSiteDisplay(sel) {
+  if (!sel) return;
+  sel.classList.add("is-picker-hidden");
+  let disp = sel.parentNode.querySelector(".site-display");
+  if (!disp) {
+    disp = document.createElement("button");
+    disp.type = "button";
+    disp.className = "site-display";
+    sel.parentNode.insertBefore(disp, sel);
+  }
+  const refresh = () => {
+    const s = findSiteById(sel.value);
+    disp.textContent = s ? siteGroupedLabel(s) : "Choisir un site…";
+    disp.classList.toggle("is-placeholder", !s);
+  };
+  refresh();
+  sel.addEventListener("change", refresh);
+  disp.addEventListener("click", () => openSitePicker(sel));
+}
+
+function pickSite(site) {
+  const target = state.sitePicker && state.sitePicker.target;
+  if (target && site) {
+    ensureOption(target, String(site.id), site.nom);
+    target.value = String(site.id);
+    target.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  closeSitePicker();
+}
+
 function openSitePicker(targetSelect) {
-  state.sitePickerTarget = targetSelect;
+  state.sitePicker = { target: targetSelect, level: "societes", societeId: null };
   const sheet = document.getElementById("site-picker-sheet");
   sheet.hidden = false;
   document.getElementById("site-picker-search").value = "";
@@ -4442,66 +4485,115 @@ async function toggleNearMe() {
 }
 function closeSitePicker() {
   document.getElementById("site-picker-sheet").hidden = true;
-  state.sitePickerTarget = null;
+  state.sitePicker = null;
 }
+// Tri d'adresses : « Près de moi » si géoloc, sinon alphabétique ; la dernière
+// adresse utilisée remonte en tête.
+function sortSiteAdresses(arr) {
+  let out = arr.slice();
+  if (state.nearPos) {
+    out = out
+      .map((s) => ({ ...s, _dist: (s.lat != null && s.lon != null) ? haversineM(state.nearPos.lat, state.nearPos.lon, s.lat, s.lon) : Infinity }))
+      .sort((a, b) => a._dist - b._dist);
+  } else {
+    out.sort((a, b) => siteAdrLabel(a).localeCompare(siteAdrLabel(b), "fr"));
+  }
+  let idx = -1, ts = -Infinity;
+  out.forEach((s, i) => {
+    const t = s.derniere_utilisation ? Date.parse(s.derniere_utilisation) : -Infinity;
+    if (t > ts) { ts = t; idx = i; }
+  });
+  if (idx > 0) { const [r] = out.splice(idx, 1); out.unshift(r); }
+  return out;
+}
+
+function siteSheetItem(site, { grouped }) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "sheet-item";
+  const primary = grouped ? siteGroupedLabel(site) : siteAdrLabel(site);
+  const dist = (site._dist != null && isFinite(site._dist)) ? ` · ${formatDistance(site._dist)}` : "";
+  btn.innerHTML = `${escapeHtml(primary)}<span>${escapeHtml(site.adresse || "")}${escapeHtml(dist)}</span>`;
+  btn.addEventListener("click", () => pickSite(site));
+  return btn;
+}
+
 async function renderSitePickerList(query) {
   const listEl = document.getElementById("site-picker-list");
-  const clientId = document.getElementById("f-client").value;
-  let ranked = [];
-  try {
-    ranked = state.chauffeur && clientId ? await rpcSitesPour(state.chauffeur.id, parseInt(clientId, 10)) : [];
-  } catch (e) {
-    /* on retombe sur la liste plate */
-  }
-  const needle = (query || "").toLowerCase();
-  const all = state.refs.sites.filter((s) => !needle || (s.nom + " " + (s.adresse || "")).toLowerCase().includes(needle));
-
-  const sections = [];
-  if (state.nearPos) {
-    const near = all
-      .filter((s) => s.lat != null && s.lon != null)
-      .map((s) => ({ ...s, _dist: haversineM(state.nearPos.lat, state.nearPos.lon, s.lat, s.lon) }))
-      .sort((a, b) => a._dist - b._dist)
-      .slice(0, 10);
-    sections.push({ title: "Près de moi", items: near });
-  }
-  if (ranked.length) {
-    sections.push({
-      title: "5 derniers / suggérés",
-      items: ranked.filter((s) => !needle || s.nom.toLowerCase().includes(needle)).slice(0, 5),
-    });
-  }
-  const chantiers = all.filter((s) => s.portee === "chantier" && (!clientId || String(s.client_id) === clientId));
-  sections.push({ title: "Chantiers du client", items: chantiers });
-  const communs = all.filter((s) => s.portee === "commun");
-  sections.push({ title: "Sites communs", items: communs });
-
+  const titleEl = document.getElementById("site-picker-title");
+  const sp = state.sitePicker || { level: "societes", societeId: null };
+  const needle = (query || "").trim().toLowerCase();
+  const societes = (state.refs.siteSocietes || []).filter((s) => s.actif !== false);
+  const sites = (state.refs.sites || []).filter((s) => s.statut !== "termine" && !s.merged_into_id);
   listEl.innerHTML = "";
-  let any = false;
-  for (const section of sections) {
-    if (!section.items.length) continue;
-    any = true;
-    const titleEl = document.createElement("div");
-    titleEl.className = "sheet-section-title";
-    titleEl.textContent = section.title;
-    listEl.appendChild(titleEl);
-    for (const site of section.items) {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "sheet-item";
-      const distHtml = site._dist != null ? ` · ${escapeHtml(formatDistance(site._dist))}` : "";
-      btn.innerHTML = `${escapeHtml(site.nom)}<span>${escapeHtml(site.adresse || "")}${distHtml}</span>`;
-      btn.addEventListener("click", () => {
-        if (state.sitePickerTarget) {
-          state.sitePickerTarget.value = String(site.id);
-          state.sitePickerTarget.dispatchEvent(new Event("change"));
-        }
-        closeSitePicker();
-      });
-      listEl.appendChild(btn);
-    }
+
+  // --- Recherche : à plat sur sociétés ET adresses ---
+  if (needle) {
+    titleEl.textContent = "Choisir un site";
+    const matches = sites.filter((s) => {
+      const soc = siteSocieteOf(s);
+      return `${soc ? soc.nom + " " : ""}${s.nom} ${s.adresse || ""}`.toLowerCase().includes(needle);
+    });
+    for (const s of sortSiteAdresses(matches)) listEl.appendChild(siteSheetItem(s, { grouped: true }));
+    if (!matches.length) listEl.innerHTML = '<p class="entity-empty">Aucun site trouvé.</p>';
+    return;
   }
-  if (!any) listEl.innerHTML = '<p class="entity-empty">Aucun site trouvé.</p>';
+
+  // --- Niveau ADRESSES d'une société ---
+  if (sp.level === "adresses" && sp.societeId != null) {
+    const soc = societes.find((s) => String(s.id) === String(sp.societeId));
+    titleEl.textContent = soc ? soc.nom : "Adresses";
+    const back = document.createElement("button");
+    back.type = "button";
+    back.className = "sheet-item sheet-back";
+    back.textContent = "‹ Sociétés";
+    back.addEventListener("click", () => {
+      sp.level = "societes"; sp.societeId = null;
+      document.getElementById("site-picker-search").value = "";
+      renderSitePickerList("");
+    });
+    listEl.appendChild(back);
+    const adr = sortSiteAdresses(sites.filter((s) => String(s.societe_id) === String(sp.societeId)));
+    for (const s of adr) listEl.appendChild(siteSheetItem(s, { grouped: false }));
+    return;
+  }
+
+  // --- Niveau SOCIÉTÉS (défaut) ---
+  titleEl.textContent = "Choisir un site";
+  const bySoc = new Map();
+  for (const s of sites) {
+    const k = s.societe_id != null ? String(s.societe_id) : null;
+    if (!bySoc.has(k)) bySoc.set(k, []);
+    bySoc.get(k).push(s);
+  }
+  const socEntries = societes
+    .filter((soc) => (bySoc.get(String(soc.id)) || []).length > 0)
+    .map((soc) => ({ soc, items: bySoc.get(String(soc.id)) }))
+    .sort((a, b) => a.soc.nom.localeCompare(b.soc.nom, "fr"));
+
+  for (const { soc, items } of socEntries) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "sheet-item";
+    if (items.length === 1) {
+      btn.innerHTML = `${escapeHtml(soc.nom)}<span>${escapeHtml(items[0].adresse || siteAdrLabel(items[0]))}</span>`;
+      btn.addEventListener("click", () => pickSite(items[0]));
+    } else {
+      btn.classList.add("sheet-item-group");
+      btn.innerHTML = `${escapeHtml(soc.nom)}<span>${items.length} adresses</span>`
+        + `<span class="sheet-chevron" aria-hidden="true">›</span>`;
+      btn.addEventListener("click", () => {
+        sp.level = "adresses"; sp.societeId = soc.id;
+        renderSitePickerList("");
+      });
+    }
+    listEl.appendChild(btn);
+  }
+  // Sites autonomes (sans société) : choix direct.
+  for (const s of sortSiteAdresses(bySoc.get(null) || [])) {
+    listEl.appendChild(siteSheetItem(s, { grouped: false }));
+  }
+  if (!listEl.children.length) listEl.innerHTML = '<p class="entity-empty">Aucun site.</p>';
 }
 
 /* ================================================================ Prestations == */

@@ -72,13 +72,34 @@ export const PROJETS = [
 ];
 
 /* ----------------------------------------------------------------------- Sites */
-const nextSiteId = makeCounter(5);
+const nextSiteId = makeCounter(12);
 export const SITES = [
-  { id: 1, nom: "Dépôt Démo Claye", adresse: "15 rue des Démonstrations, 77410 Claye-Démo", lat: 48.9465, lon: 2.7765, type: "depot", portee: "commun", client_id: null, statut: "actif", derniere_utilisation: addDays(-1) },
-  { id: 2, nom: "Plateforme recyclage Démo", adresse: "6 rue Fictive, 77400 Lagny-Démo", lat: 48.8773, lon: 2.7050, type: "recyclage", portee: "commun", client_id: null, statut: "actif", derniere_utilisation: addDays(-2) },
-  { id: 3, nom: "Chantier Chantereine Lot 3", adresse: "12 avenue des Peupliers, 77400 Lagny-Démo", lat: 48.8790, lon: 2.7110, type: "chantier", portee: "chantier", client_id: 1, statut: "actif", derniere_utilisation: addDays(-1) },
-  { id: 4, nom: "Site Nord Valoris", adresse: "4 rue des Tanneries, 93160 Noisy-Démo", lat: 48.8460, lon: 2.5540, type: "chantier", portee: "chantier", client_id: 2, statut: "actif", derniere_utilisation: addDays(-3) },
-  { id: 5, nom: "Centrale à béton Démo Gournay", adresse: "27 rue du Port, 93460 Gournay-Démo", lat: 48.8700, lon: 2.5850, type: "chantier", portee: "chantier", client_id: 3, statut: "termine", derniere_utilisation: addDays(-90) },
+  { id: 1, nom: "Dépôt Démo Claye", adresse: "15 rue des Démonstrations, 77410 Claye-Démo", lat: 48.9465, lon: 2.7765, type: "depot", portee: "commun", client_id: null, societe_id: null, statut: "actif", derniere_utilisation: addDays(-1) },
+  { id: 2, nom: "Plateforme recyclage Démo", adresse: "6 rue Fictive, 77400 Lagny-Démo", lat: 48.8773, lon: 2.7050, type: "recyclage", portee: "commun", client_id: null, societe_id: null, statut: "actif", derniere_utilisation: addDays(-2) },
+  { id: 3, nom: "Chantier Chantereine Lot 3", adresse: "12 avenue des Peupliers, 77400 Lagny-Démo", lat: 48.8790, lon: 2.7110, type: "chantier", portee: "chantier", client_id: 1, societe_id: null, statut: "actif", derniere_utilisation: addDays(-1) },
+  { id: 4, nom: "Site Nord Valoris", adresse: "4 rue des Tanneries, 93160 Noisy-Démo", lat: 48.8460, lon: 2.5540, type: "chantier", portee: "chantier", client_id: 2, societe_id: null, statut: "actif", derniere_utilisation: addDays(-3) },
+  { id: 5, nom: "Centrale à béton Démo Gournay", adresse: "27 rue du Port, 93460 Gournay-Démo", lat: 48.8700, lon: 2.5850, type: "chantier", portee: "chantier", client_id: 3, societe_id: null, statut: "termine", derniere_utilisation: addDays(-90) },
+  // beta.22.1 : sociétés de sites à PLUSIEURS adresses (test du sélecteur groupé).
+  { id: 6, nom: "Cemex Nanterre", adresse: "5 rue Lavoisier, 92000 Nanterre-Démo", lat: 48.8954, lon: 2.1727, type: "BPE", portee: "commun", client_id: null, societe_id: 1, statut: "actif", derniere_utilisation: addDays(-5) },
+  { id: 7, nom: "Cemex Ivry béton", adresse: "Quai Marcel Boyer, 94200 Ivry-Démo", lat: 48.8234, lon: 2.3908, type: "BPE", portee: "commun", client_id: null, societe_id: 1, statut: "actif", derniere_utilisation: addDays(-2) },
+  { id: 8, nom: "Cemex Ivry granulats", adresse: "3 quai Marcel Boyer, 94200 Ivry-Démo", lat: 48.8248, lon: 2.3892, type: "granulats", portee: "commun", client_id: null, societe_id: 1, statut: "actif", derniere_utilisation: addDays(-10) },
+  { id: 9, nom: "Cemex Le Mée-sur-Seine", adresse: "ZAC Courtilleraies, 77350 Le Mée-Démo", lat: 48.5395, lon: 2.6451, type: "BPE", portee: "commun", client_id: null, societe_id: 1, statut: "actif", derniere_utilisation: addDays(-20) },
+  { id: 10, nom: "RFM Bondy", adresse: "Chemin de Halage, 93140 Bondy-Démo", lat: 48.8895, lon: 2.4961, type: "plateforme", portee: "commun", client_id: null, societe_id: 2, statut: "actif", derniere_utilisation: addDays(-7) },
+  { id: 11, nom: "RFM Livry-Gargan", adresse: "60 allée de l'Est, 93190 Livry-Démo", lat: 48.9324, lon: 2.5597, type: "plateforme", portee: "commun", client_id: null, societe_id: 2, statut: "actif", derniere_utilisation: addDays(-9) },
+  { id: 12, nom: "Asten Gennevilliers", adresse: "1 route du Môle Central, 92230 Gennevilliers-Démo", lat: 48.9401, lon: 2.2863, type: "enrobés", portee: "commun", client_id: null, societe_id: 3, statut: "actif", derniere_utilisation: addDays(-15) },
+];
+
+/* Sociétés de sites (beta.22) : Cemex a 4 adresses, RFM 2, Asten 1 (choix direct). */
+export const SITE_SOCIETES = [
+  { id: 1, nom: "Cemex", siren: null, actif: true },
+  { id: 2, nom: "RFM", siren: "478603228", actif: true },
+  { id: 3, nom: "Asten", siren: "542057336", actif: true },
+];
+
+/* Adresses de clients (beta.22) : Groupe Valoris a 2 adresses (test société->adresse). */
+export const CLIENT_ADRESSES = [
+  { id: 1, client_id: 2, libelle: "Siège", adresse: "4 rue des Tanneries, 93160 Noisy-Démo", lat: 48.846, lon: 2.554, is_principale: true, actif: true },
+  { id: 2, client_id: 2, libelle: "Agence Est", adresse: "18 avenue de l'Industrie, 77100 Meaux-Démo", lat: 48.96, lon: 2.88, is_principale: false, actif: true },
 ];
 
 /* -------------------------------------------------------------------- Articles */

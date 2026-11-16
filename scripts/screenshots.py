@@ -434,6 +434,7 @@ def shoot_combobox(ctx, prefix: str) -> None:
 beta19_failures: list[str] = []
 beta20_failures: list[str] = []
 beta21_failures: list[str] = []
+beta221_failures: list[str] = []
 
 
 def _assert(cond: bool, msg: str) -> None:
@@ -1155,6 +1156,75 @@ def shoot_beta21_contraste_onglet(ctx, prefix: str) -> None:
             page.close()
 
 
+def shoot_sites_groupes(ctx, prefix: str) -> None:
+    """beta.22.1 : le sélecteur de site de tour est HIÉRARCHIQUE (sociétés ->
+    adresses), plus de liste à plat. Vérifie + capture (clair + sombre) : liste des
+    sociétés (Cemex en UNE ligne groupée, pas d'adresse Cemex à plat), adresses de
+    Cemex (préfixe retiré), recherche « ivry »."""
+    for theme in ("clair", "sombre"):
+        page = ctx.new_page()
+        try:
+            page.goto(f"{BASE}?demo=1&screen=today&role=chauffeur&theme={theme}", wait_until="load")
+            page.wait_for_timeout(700)
+            disp = page.locator("#tours-list .site-display").first
+            disp.scroll_into_view_if_needed()
+            disp.click()
+            page.wait_for_timeout(400)
+            info = page.evaluate(
+                """() => {
+                    const items=[...document.querySelectorAll('#site-picker-list .sheet-item')]
+                      .map(b=>({t:b.textContent.replace(/\\s+/g,' ').trim(), g:b.classList.contains('sheet-item-group')}));
+                    return {
+                      cemexGroup: items.some(i=>i.g && /Cemex/.test(i.t) && /adresses/.test(i.t)),
+                      cemexFlat: items.some(i=>!i.g && /^Cemex /.test(i.t)),
+                    };
+                }"""
+            )
+            if not info["cemexGroup"]:
+                beta221_failures.append(f"sites-groupes/{theme}: Cemex n'apparaît pas comme société groupée")
+            if info["cemexFlat"]:
+                beta221_failures.append(f"sites-groupes/{theme}: adresse Cemex affichée À PLAT au niveau société")
+            page.screenshot(path=str(OUT / f"{prefix}-sites-groupes-societes-{theme}.png"), full_page=False)
+            page.evaluate(
+                """() => {
+                    const b=[...document.querySelectorAll('#site-picker-list .sheet-item')]
+                      .find(x=>x.classList.contains('sheet-item-group') && /Cemex/.test(x.textContent));
+                    if (b) b.click();
+                }"""
+            )
+            page.wait_for_timeout(300)
+            adr = page.evaluate(
+                """() => {
+                    const back=!!document.querySelector('#site-picker-list .sheet-back');
+                    const items=[...document.querySelectorAll('#site-picker-list .sheet-item:not(.sheet-back)')]
+                      .map(b=>b.textContent.replace(/\\s+/g,' ').trim());
+                    return { back, hasStripped: items.some(t=>/^Ivry béton/.test(t)) };
+                }"""
+            )
+            if not adr["back"]:
+                beta221_failures.append(f"sites-groupes/{theme}: bouton retour « Sociétés » absent")
+            if not adr["hasStripped"]:
+                beta221_failures.append(f"sites-groupes/{theme}: adresse Cemex non affichée sans préfixe")
+            page.screenshot(path=str(OUT / f"{prefix}-sites-groupes-cemex-{theme}.png"), full_page=False)
+            page.evaluate("() => { const b=document.querySelector('#site-picker-list .sheet-back'); if (b) b.click(); }")
+            page.wait_for_timeout(150)
+            page.fill("#site-picker-search", "ivry")
+            page.wait_for_timeout(300)
+            found = page.evaluate(
+                "() => [...document.querySelectorAll('#site-picker-list .sheet-item')]"
+                ".some(b=>/Cemex · Ivry béton/.test(b.textContent.replace(/\\s+/g,' ')))"
+            )
+            if not found:
+                beta221_failures.append(f"sites-groupes/{theme}: recherche « ivry » ne donne pas « Cemex · Ivry béton »")
+            page.screenshot(path=str(OUT / f"{prefix}-sites-groupes-recherche-{theme}.png"), full_page=False)
+            print(f"   sites-groupes-{theme} (société={info['cemexGroup']}, à-plat={info['cemexFlat']})")
+        except Exception as exc:  # noqa: BLE001
+            beta221_failures.append(f"sites-groupes/{theme}: exception {exc}")
+            print(f"   !! sites-groupes/{theme}: {exc}")
+        finally:
+            page.close()
+
+
 def main() -> int:
     with sync_playwright() as p:
         # --lang=fr-FR : les contrôles natifs <input type="date"|"time"> suivent la
@@ -1252,6 +1322,8 @@ def main() -> int:
         print("WebKit (Safari iOS, DSR 2) : écran lettre beta.22 (clair + sombre)")
         shoot(wk_iphone2, "webkit-iphone-chauffeur", "today", "clair", "aujourdhui", role="chauffeur")
         shoot(wk_iphone2, "webkit-iphone-chauffeur", "today", "sombre", "aujourdhui", role="chauffeur")
+        print("WebKit (Safari iOS, DSR 2) : sélecteur de site groupé beta.22.1")
+        shoot_sites_groupes(wk_iphone2, "webkit-iphone")
         print("WebKit (Safari iOS, DSR 2) : fiches rapides autosave beta.20")
         shoot_beta20_fiches(wk_iphone2, "webkit-iphone")
         print("WebKit (Safari iOS, DSR 2) : fiche plein écran + clavier beta.20")
@@ -1327,6 +1399,13 @@ def main() -> int:
         rc = 1
     else:
         print("OK : beta.21.1 (swipe visible sans visionneuse PDF ; barre d'onglets masquée au clavier).")
+    if beta221_failures:
+        print("beta.22.1 KO (sélecteur de site non groupé par société) :")
+        for f in beta221_failures:
+            print("  -", f)
+        rc = 1
+    else:
+        print("OK : beta.22.1 (sélecteur de site groupé sociétés -> adresses).")
     return rc
 
 

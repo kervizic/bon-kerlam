@@ -4,6 +4,23 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.22.1] — 2026-11-16
+
+Correctif (front uniquement, aucune migration) : le sélecteur de site de tour
+regroupe enfin par société.
+
+### Corrigé
+- **Sélecteur de site hiérarchique** (« Site de chargement » / « Site de
+  déchargement ») : la liste montre les **sociétés** (Cemex, RFM, YPREMA…), pas
+  les adresses à plat. Une société à plusieurs adresses affiche « Nom — N
+  adresses › » et se déplie (bouton retour « ‹ Sociétés ») ; une société à une
+  seule adresse se choisit directement. Les adresses sont libellées sans le
+  préfixe société (« Ivry béton »), triées « Près de moi » (ou alphabétique), la
+  dernière utilisée en tête. La recherche porte sur sociétés ET adresses
+  (« ivry » → « Cemex · Ivry béton »). Le champ affiche « Société · adresse ».
+- **Démo** : ajout de sociétés de sites à plusieurs adresses (Cemex ×4, RFM ×2) et
+  d'un client à 2 adresses, pour exercer le cas en démo et en test e2e.
+
 ## [0.1.0-beta.22] — 2026-11-16
 
 Modèle « société → adresses » pour les clients et les sites de chargement, fusion

@@ -956,6 +956,22 @@ body.pdf-viewer-open { overflow: hidden; }
 .sheet-item:hover { background: var(--bg); }
 .sheet-item span { display: block; color: var(--text-muted); font-size: 12px; }
 
+/* beta.22.1 : sélecteur de site hiérarchique (sociétés -> adresses). */
+.sheet-item-group { position: relative; padding-right: 36px; }
+.sheet-chevron { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 22px; line-height: 1; }
+.sheet-back { font-weight: 600; color: var(--c-blue); min-height: 44px; }
+/* Champ site = bouton d'affichage ouvrant la feuille (le <select> est masqué). */
+.site-display {
+  flex: 1; min-width: 0; text-align: left; cursor: pointer;
+  min-height: var(--control-h); padding: 0 12px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); color: var(--text); font: inherit;
+  display: flex; align-items: center;
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+.site-display.is-placeholder { color: var(--text-muted); }
+.site-row select.is-picker-hidden { display: none; }
+
 /* ----------------------------------------------------------------- Signature */
 .bulk-send-bar {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
