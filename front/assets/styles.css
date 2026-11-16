@@ -284,7 +284,9 @@ a { color: var(--c-blue); }
   color: var(--text-muted); font: inherit; font-size: 14px; font-weight: 600;
 }
 .mode-seg + .mode-seg { border-left: 1px solid var(--border); }
-.mode-seg[aria-pressed="true"] { background: var(--c-orange); color: #fff; }
+/* Onglet actif Chauffeur/Bureau : fond orange = SURFACE, texte ANTHRACITE
+   (jamais de texte blanc sur l'orange de marque, cf. règle WCAG en tête). */
+.mode-seg[aria-pressed="true"] { background: var(--c-orange); color: var(--c-anthracite); }
 .mode-seg svg { flex-shrink: 0; }
 /* Le sélecteur du header est caché sur mobile ; celui du tiroir « Plus » est
    caché sur ordinateur (cf. media queries). L'en-tête mobile reste logo seul. */
@@ -312,16 +314,23 @@ body.mode-bureau .side-nav li.nav-bureau { display: block; }
 .lv-row-check input { width: 20px; height: 20px; }
 .lv-row.is-selected { border-color: var(--c-orange); box-shadow: 0 0 0 1px var(--c-orange) inset; }
 
-.signer-bar {
-  position: fixed; left: 0; right: 0; z-index: 35;
-  bottom: calc(72px + env(safe-area-inset-bottom)); /* au-dessus de la barre d'onglets */
-  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+/* Barre de SÉLECTION (beta.21) : tout en bas, REMPLACE la barre d'onglets quand
+   au moins une lettre est cochée (body.has-selection), safe-area respectée. */
+.selection-bar {
+  display: none; /* visible via body.has-selection */
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 36;
+  align-items: center; gap: 10px;
+  padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
   background: var(--surface); border-top: 1px solid var(--border);
 }
-.signer-bar[hidden] { display: none; }
-.signer-bar .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+body.has-selection .selection-bar { display: flex; }
+body.has-selection .bottom-bar { display: none !important; } /* la sélection prend sa place */
+.selection-signer { flex: 1 1 auto; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; }
+.selection-icon { flex: 0 0 auto; width: 48px; height: 48px; } /* nettement plus petit que « Signer » */
+.selection-icon svg { width: 22px; height: 22px; }
+.selection-delete { color: var(--c-red); }
 @media (min-width: 900px) {
-  .signer-bar { bottom: 0; left: 220px; } /* pas de bottom-bar sur ordinateur, place pour le menu latéral */
+  .selection-bar { left: 220px; } /* place pour le menu latéral (pas de bottom-bar) */
 }
 
 .app-body { flex: 1; display: flex; min-height: 0; }
@@ -656,6 +665,7 @@ input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
 .badge-signee     { background: rgba(46,125,50,0.12);  color: var(--c-green); }
 .badge-facturee   { background: rgba(46,125,50,0.12);  color: var(--c-green); }
 .badge-annulee    { background: rgba(198,40,40,0.12);  color: var(--c-red); }
+.badge-brouillon  { background: rgba(94,94,94,0.12);   color: var(--c-grey-text); }
 
 /* Puces de statut d'échéance (camions/chauffeurs/documents) : l'orange est ici
    une SURFACE (fond teinté) avec un texte anthracite dessus, jamais du texte

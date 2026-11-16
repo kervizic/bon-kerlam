@@ -25,7 +25,7 @@ async def lifespan(app: FastAPI):
     if settings.geocode_on_start:
         with contextlib.suppress(Exception):
             geocode.geocode_missing()
-    tasks = [asyncio.create_task(_midnight_loop())]
+    tasks = [asyncio.create_task(_maintenance_loop())]
     if settings.documenso_api_key:
         tasks.append(asyncio.create_task(_signature_loop()))
     try:
@@ -302,7 +302,14 @@ def lv_pdf_user(lv_id: int, user=Depends(require_user)):
 
 @router.post("/close-midnight")
 def close_midnight(_=Depends(require_token("write"))):
+    # Clôture MANUELLE des lettres numérotées en retard (jamais planifiée depuis
+    # beta.21 ; jamais un brouillon). Conservée pour un usage administrateur.
     return {"closed": closing.close_overdue()}
+
+
+@router.post("/purge-corbeille")
+def purge_corbeille(_=Depends(require_token("write"))):
+    return closing.purge_corbeille()
 
 
 @router.post("/geocode")
@@ -313,13 +320,15 @@ def run_geocode(_=Depends(require_token("write"))):
 app.include_router(router)
 
 
-async def _midnight_loop() -> None:
+async def _maintenance_loop() -> None:
+    """Maintenance quotidienne (00:05). beta.21 : plus d'auto-clôture (bug
+    « Clôturée ») ; on purge physiquement les brouillons en corbeille > 30 j."""
     while True:
         now = datetime.now()
         nxt = (now + timedelta(days=1)).replace(hour=0, minute=5, second=0, microsecond=0)
         await asyncio.sleep(max((nxt - now).total_seconds(), 60))
         with contextlib.suppress(Exception):
-            closing.close_overdue()
+            closing.purge_corbeille()
 
 
 async def _signature_loop() -> None:

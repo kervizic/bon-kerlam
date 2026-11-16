@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { STATUT_LV_LABELS, statutLabel } from "./status-labels.js";
+import { STATUT_LV_LABELS, statutLabel, lvBadge } from "./status-labels.js";
 
 // Toutes les valeurs de l'enum bon.statut_lv (+ en_attente_signature).
 const ENUM = [
@@ -35,4 +35,25 @@ test("exemples attendus", () => {
 
 test("la table couvre exactement l'enum (pas d'oubli)", () => {
   for (const code of ENUM) assert.ok(code in STATUT_LV_LABELS, `absent de la table: ${code}`);
+});
+
+test("lvBadge : une lettre SANS numéro est toujours « Brouillon » (bug Clôturée)", () => {
+  // Quel que soit le statut en base (y compris 'cloturee' posé à tort), un
+  // brouillon (numero null) affiche « Brouillon », jamais « Clôturée ».
+  for (const statut of ["en_cours", "preparee", "cloturee", "a_signer"]) {
+    const b = lvBadge({ numero: null, statut });
+    assert.equal(b.label, "Brouillon", `statut ${statut}`);
+    assert.equal(b.cls, "brouillon");
+  }
+  assert.equal(lvBadge({ numero: "", statut: "cloturee" }).label, "Brouillon");
+  assert.equal(lvBadge(null).label, "Brouillon");
+});
+
+test("lvBadge : une lettre numérotée garde son statut", () => {
+  assert.deepEqual(lvBadge({ numero: "KER-03000", statut: "en_cours" }), {
+    label: "En cours", cls: "en_cours",
+  });
+  assert.deepEqual(lvBadge({ numero: "KER-03000", statut: "signee" }), {
+    label: "Signée", cls: "signee",
+  });
 });

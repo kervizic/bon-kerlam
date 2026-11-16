@@ -442,6 +442,17 @@ export async function rpcLvRestaurer(lvId) {
   return data;
 }
 
+// Suppression GROUPÉE d'une sélection (0021). Applique par lot : brouillon ->
+// corbeille, numérotée non signée -> annulée, signée -> ignorée. Renvoie le
+// récapitulatif { corbeille, annulee, ignore_signee, ignore_autre }.
+export async function rpcLvSupprimerLot(lvIds, categorie, motif) {
+  const { data, error } = await requireClient().rpc("lv_supprimer_lot", {
+    p_lv_ids: lvIds, p_categorie: categorie ?? null, p_motif: motif ?? null,
+  });
+  if (error) throw error;
+  return data;
+}
+
 // Mémoire des créneaux horaires : créneaux de la dernière lettre du chauffeur.
 export async function rpcDernieresHeures(chauffeurId) {
   const { data, error } = await requireClient().rpc("dernieres_heures", { p_chauffeur_id: chauffeurId });

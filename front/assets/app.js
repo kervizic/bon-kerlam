@@ -130,6 +130,7 @@ import {
   rpcSetDerniereUnite,
   rpcDernieresHeures,
   rpcLvSupprimer,
+  rpcLvSupprimerLot,
   rpcLvRestaurer,
   listCorbeille,
   todayIso,
@@ -138,7 +139,7 @@ import {
 import { initInstall } from "./install.js?v=13";
 import { UndoStack } from "./undo-stack.js?v=13";
 import { PdfCache, shouldCachePdf, formatGeneratedAt } from "./pdf-cache.js?v=13";
-import { statutLabel } from "./status-labels.js?v=13";
+import { statutLabel, lvBadge } from "./status-labels.js?v=21";
 import { canGroupForSignature } from "./signature-group.js?v=13";
 import { enhanceSelect, refreshCombobox, ensureOption } from "./combobox.js?v=17";
 import { initTooltips } from "./tooltips.js?v=20";
@@ -2175,12 +2176,13 @@ function buildLvRow(lv, { dateText } = {}) {
   const open = document.createElement("button");
   open.type = "button";
   open.className = "lv-row-open";
+  const badge = lvBadge(lv);
   open.innerHTML = `
     <span class="lv-row-main">
       <span class="lv-row-numero">${escapeHtml(lvRowTitle(lv))}</span>
       <span class="lv-row-date">${escapeHtml(dateText != null ? dateText : formatDateFr(lv.date_etablissement))}</span>
     </span>
-    <span class="badge badge-${escapeHtml(lv.statut)}">${escapeHtml(statutLabel(lv.statut))}</span>`;
+    <span class="badge badge-${escapeHtml(badge.cls)}">${escapeHtml(badge.label)}</span>`;
   open.addEventListener("click", () => openLvInToday(lv));
   const pdf = document.createElement("button");
   pdf.type = "button";
@@ -2276,17 +2278,22 @@ function isSignable(lv) {
   return lv.statut !== "signee" && lv.statut !== "envoyee";
 }
 
-function refreshSignerBar() {
-  const bar = document.getElementById("signer-bar");
+function refreshSelectionBar() {
   const countEl = document.getElementById("signer-count");
   const n = signSelection.size;
   if (countEl) countEl.textContent = String(n);
-  if (bar) bar.hidden = !(n > 0 && state.route === "mes-lv");
+  // La barre de sélection REMPLACE la barre d'onglets dès qu'une lettre est
+  // cochée (body.has-selection pilote l'affichage en CSS).
+  const active = n > 0 && state.route === "mes-lv";
+  document.body.classList.toggle("has-selection", active);
+  // Icône PDF : utile seulement quand une SEULE lettre est cochée.
+  const pdfBtn = document.getElementById("btn-selection-pdf");
+  if (pdfBtn) pdfBtn.hidden = n !== 1;
 }
 
 function clearSignSelection() {
   signSelection.clear();
-  refreshSignerBar();
+  refreshSelectionBar();
 }
 
 async function loadMesLv() {
@@ -2371,7 +2378,7 @@ function buildSignableRow(lv, isSigned) {
     if (input.checked) signSelection.set(lv.id, lv);
     else signSelection.delete(lv.id);
     row.classList.toggle("is-selected", input.checked);
-    refreshSignerBar();
+    refreshSelectionBar();
     syncSelectAllCheckbox();
   });
   check.appendChild(input);
@@ -2444,6 +2451,67 @@ async function doSignParMail() {
   } catch (err) {
     alert("Échec de l'envoi par mail : " + (err.message || err));
   }
+}
+
+/* ---- Actions de la sélection : corbeille groupée + PDF (beta.21) ------------ */
+// Répartit la sélection selon la règle existante (lv_supprimer) : brouillon sans
+// numéro -> corbeille ; numérotée non signée -> annulée ; signée -> ignorée.
+function describeSelectionDeletion(lvs) {
+  const corbeille = lvs.filter((lv) => !lv.numero && lv.statut !== "signee");
+  const annulee = lvs.filter((lv) => lv.numero && lv.statut !== "signee" && lv.statut !== "annulee");
+  const signee = lvs.filter((lv) => lv.statut === "signee");
+  const parts = [];
+  if (corbeille.length) parts.push(`${plur(corbeille.length, "brouillon", "brouillons")} → corbeille`);
+  if (annulee.length) parts.push(`${plur(annulee.length, "lettre", "lettres")} → annulée${annulee.length > 1 ? "s" : ""}`);
+  let text = parts.join(", ") || "Aucune lettre supprimable dans la sélection.";
+  if (signee.length) text += ` (${plur(signee.length, "lettre signée non modifiée", "lettres signées non modifiées")})`;
+  return { corbeille, annulee, signee, text, needsMotif: annulee.length > 0, actionable: corbeille.length + annulee.length > 0 };
+}
+
+function openDeleteSelectionSheet() {
+  const lvs = [...signSelection.values()];
+  if (!lvs.length) return;
+  const plan = describeSelectionDeletion(lvs);
+  document.getElementById("delete-selection-summary").textContent = plan.text;
+  const motifBlock = document.getElementById("delete-selection-motif");
+  if (motifBlock) motifBlock.hidden = !plan.needsMotif;
+  if (plan.needsMotif) document.getElementById("f-annul-lot-categorie").value = "doublon";
+  const confirmBtn = document.getElementById("btn-delete-selection-confirm");
+  if (confirmBtn) confirmBtn.disabled = !plan.actionable;
+  document.getElementById("delete-selection-sheet").hidden = false;
+}
+
+function closeDeleteSelectionSheet() {
+  const sheet = document.getElementById("delete-selection-sheet");
+  if (sheet) sheet.hidden = true;
+}
+
+async function confirmDeleteSelection() {
+  const lvs = [...signSelection.values()];
+  const plan = describeSelectionDeletion(lvs);
+  if (!plan.actionable) { closeDeleteSelectionSheet(); return; }
+  const ids = lvs.map((lv) => lv.id);
+  const categorie = plan.needsMotif ? (document.getElementById("f-annul-lot-categorie").value || null) : null;
+  try {
+    const res = await rpcLvSupprimerLot(ids, categorie, null);
+    closeDeleteSelectionSheet();
+    clearSignSelection();
+    await loadMesLv();
+    const done = [];
+    if (res && res.corbeille) done.push(`${plur(res.corbeille, "brouillon mis à la corbeille", "brouillons mis à la corbeille")}`);
+    if (res && res.annulee) done.push(`${plur(res.annulee, "lettre annulée", "lettres annulées")}`);
+    if (res && res.ignore_signee) done.push(`${plur(res.ignore_signee, "lettre signée non modifiée", "lettres signées non modifiées")}`);
+    alert(done.length ? done.join(", ") + "." : "Rien à supprimer.");
+  } catch (err) {
+    alert("Suppression impossible : " + (err.message || err));
+  }
+}
+
+// Icône PDF de la barre de sélection : active quand une SEULE lettre est cochée.
+function exportSelectedPdf() {
+  if (signSelection.size !== 1) return;
+  const lv = [...signSelection.values()][0];
+  exportLvPdf(lv);
 }
 
 // « Nouvelle lettre de voiture » : ouvre l'éditeur du jour (la lettre est créée
@@ -4086,6 +4154,18 @@ function wireStaticUI() {
   if (btnSurPlace) btnSurPlace.addEventListener("click", doSignSurPlace);
   const btnParMail = document.getElementById("btn-sign-par-mail");
   if (btnParMail) btnParMail.addEventListener("click", doSignParMail);
+
+  // Barre de sélection (beta.21) : corbeille groupée + PDF (si 1 cochée).
+  const btnSelDelete = document.getElementById("btn-selection-delete");
+  if (btnSelDelete) btnSelDelete.addEventListener("click", openDeleteSelectionSheet);
+  const btnSelPdf = document.getElementById("btn-selection-pdf");
+  if (btnSelPdf) btnSelPdf.addEventListener("click", exportSelectedPdf);
+  const btnSelDelClose = document.getElementById("btn-delete-selection-close");
+  if (btnSelDelClose) btnSelDelClose.addEventListener("click", closeDeleteSelectionSheet);
+  const selDelSheet = document.getElementById("delete-selection-sheet");
+  if (selDelSheet) selDelSheet.addEventListener("click", (e) => { if (e.target.id === "delete-selection-sheet") closeDeleteSelectionSheet(); });
+  const btnSelDelConfirm = document.getElementById("btn-delete-selection-confirm");
+  if (btnSelDelConfirm) btnSelDelConfirm.addEventListener("click", confirmDeleteSelection);
 
   // Suppression / annulation de la lettre ouverte (beta.15).
   const btnDeleteLv = document.getElementById("btn-delete-lv");
