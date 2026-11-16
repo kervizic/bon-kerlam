@@ -438,6 +438,7 @@ beta21_failures: list[str] = []
 beta221_failures: list[str] = []
 beta222_failures: list[str] = []
 beta225_failures: list[str] = []
+beta226_failures: list[str] = []
 
 
 def _assert(cond: bool, msg: str) -> None:
@@ -1302,6 +1303,124 @@ def shoot_sites_veolia_sep(ctx, prefix: str) -> None:
             page.close()
 
 
+def shoot_keyboard_dismiss(ctx, prefix: str) -> None:
+    """beta.22.6 : fermeture du clavier façon iOS, 3 gestes. (1) tap hors champ ->
+    blur + barre d'onglets revenue ; (2) touchmove volontaire -> blur, mais un scroll
+    programmatique ne ferme pas ; (3) Entrée sur un champ d'une ligne -> blur + valeur
+    enregistrée. Captures avant/après (clavier ouvert / barre d'onglets visible)."""
+    theme = "clair"
+    page = ctx.new_page()
+    try:
+        page.goto(f"{BASE}?demo=1&screen=today&role=chauffeur&theme={theme}", wait_until="load")
+        page.wait_for_timeout(700)
+        # 1. Tap hors champ -> blur + barre d'onglets visible.
+        cb = page.locator(".combobox .cb-input").first
+        cb.scroll_into_view_if_needed()
+        cb.evaluate("el => el.focus()")
+        page.wait_for_timeout(250)
+        before = page.evaluate(
+            """() => {
+                const bar = document.querySelector('.bottom-bar');
+                return {
+                  open: document.body.classList.contains('keyboard-open'),
+                  barHidden: bar ? getComputedStyle(bar).display === 'none' : null,
+                };
+            }"""
+        )
+        if not before["open"]:
+            beta226_failures.append("clavier: le focus d'un champ n'arme pas keyboard-open")
+        page.screenshot(path=str(OUT / f"{prefix}-clavier-avant-{theme}.png"), full_page=False)
+        box = page.locator("h2.form-section-title").first.bounding_box()
+        if box:
+            page.touchscreen.tap(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        page.wait_for_timeout(300)
+        after = page.evaluate(
+            """() => {
+                const bar = document.querySelector('.bottom-bar');
+                const a = document.activeElement;
+                return {
+                  stillFocused: !!(a && a.classList && a.classList.contains('cb-input')),
+                  barHidden: bar ? getComputedStyle(bar).display === 'none' : null,
+                };
+            }"""
+        )
+        if after["stillFocused"]:
+            beta226_failures.append("clavier/tap: le champ garde le focus après un tap hors champ")
+        if after["barHidden"]:
+            beta226_failures.append("clavier/tap: la barre d'onglets reste masquée après fermeture")
+        page.screenshot(path=str(OUT / f"{prefix}-clavier-apres-{theme}.png"), full_page=False)
+        # 2. touchmove volontaire -> blur ; scroll programmatique -> PAS de blur.
+        moved = page.evaluate(
+            """() => {
+                const el = document.querySelector('.combobox .cb-input');
+                el.focus();
+                const s = new Event('touchstart', { bubbles: true });
+                s.touches = [{ clientX: 120, clientY: 420 }];
+                document.dispatchEvent(s);
+                const m = new Event('touchmove', { bubbles: true });
+                m.touches = [{ clientX: 120, clientY: 360 }];
+                document.dispatchEvent(m);
+                return document.activeElement === el;
+            }"""
+        )
+        if moved:
+            beta226_failures.append("clavier/scroll: un touchmove volontaire ne ferme pas le clavier")
+        prog = page.evaluate(
+            """() => {
+                const el = document.querySelector('.combobox .cb-input');
+                el.focus();
+                window.dispatchEvent(new Event('scroll'));
+                document.dispatchEvent(new Event('scroll'));
+                return document.activeElement === el;
+            }"""
+        )
+        if not prog:
+            beta226_failures.append("clavier/scroll: un scroll programmatique ferme le clavier (faux positif)")
+        # 3. Entrée sur un champ d'une ligne -> blur + valeur enregistrée (fiche rapide).
+        prep = page.evaluate(
+            """async () => {
+                if (!window.openQuickCreate) return { err: 'openQuickCreate indisponible' };
+                window.openQuickCreate('client', '');
+                await new Promise((r) => setTimeout(r, 250));
+                const input = document.querySelector('#quick-create-body input');
+                if (!input) return { err: 'champ fiche absent' };
+                input.focus();
+                input.value = 'Client Clavier Démo';
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+                return { ok: true };
+            }"""
+        )
+        if prep.get("err"):
+            beta226_failures.append(f"clavier/entrée: {prep['err']}")
+        else:
+            page.wait_for_timeout(150)
+            page.locator("#quick-create-body input").first.press("Enter")
+            page.wait_for_timeout(900)
+            enter = page.evaluate(
+                """() => {
+                    const input = document.querySelector('#quick-create-body input');
+                    const status = document.getElementById('quick-create-status');
+                    return {
+                      stillFocused: document.activeElement === input,
+                      value: input ? input.value : null,
+                      status: status ? status.textContent : null,
+                    };
+                }"""
+            )
+            if enter["stillFocused"]:
+                beta226_failures.append("clavier/entrée: le champ garde le focus après Entrée")
+            if enter["value"] != "Client Clavier Démo":
+                beta226_failures.append(f"clavier/entrée: valeur perdue ({enter['value']!r})")
+            if "Enregistr" not in (enter["status"] or ""):
+                beta226_failures.append(f"clavier/entrée: autosave non déclenché (statut={enter['status']!r})")
+        print(f"   clavier-dismiss (avant.open={before['open']}, après.focus={after['stillFocused']})")
+    except Exception as exc:  # noqa: BLE001
+        beta226_failures.append(f"clavier: exception {exc}")
+        print(f"   !! clavier: {exc}")
+    finally:
+        page.close()
+
+
 def shoot_overflow_veolia(ctx, prefix: str) -> None:
     """beta.22.2 : AUCUN débordement horizontal sur l'écran lettre rempli avec des
     noms longs (client « Veolia » + adresse « Épinay · 2 rue Pasteur, 93800
@@ -1511,6 +1630,8 @@ def main() -> int:
         shoot_sites_groupes(wk_iphone2, "webkit-iphone")
         print("WebKit (Safari iOS, DSR 2) : libellé Veolia sans séparateur beta.22.5")
         shoot_sites_veolia_sep(wk_iphone2, "webkit-iphone")
+        print("WebKit (Safari iOS, DSR 2) : fermeture du clavier (3 gestes) beta.22.6")
+        shoot_keyboard_dismiss(wk_iphone2, "webkit-iphone")
         print("WebKit (Safari iOS) : pas de débordement + Veolia beta.22.2")
         shoot_overflow_veolia(wk_iphone2, "webkit-iphone")
         print("WebKit (Safari iOS, DSR 2) : fiches rapides autosave beta.20")
@@ -1609,6 +1730,13 @@ def main() -> int:
         rc = 1
     else:
         print("OK : beta.22.5 (libellé court Veolia sans séparateur : « Noisy », « Usine des Terres »).")
+    if beta226_failures:
+        print("beta.22.6 KO (fermeture du clavier : tap / scroll / Entrée) :")
+        for f in beta226_failures:
+            print("  -", f)
+        rc = 1
+    else:
+        print("OK : beta.22.6 (clavier fermé au tap hors champ, au défilement, et à Entrée ; valeur enregistrée).")
     return rc
 
 

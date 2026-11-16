@@ -1867,6 +1867,126 @@ function wireKeyboardAwareBars() {
   }
 }
 
+/* ============================== Fermeture du clavier façon iOS (beta.22.6)
+ * Manu (vrai iPhone, PWA) : le clavier se masque bien mais rien ne permettait d'en
+ * sortir. On ajoute les trois gestes standards iOS, qui COEXISTENT :
+ *   1. Tap sur une zone non interactive (fond, titre, espace) -> blur du champ.
+ *   2. Défilement tactile VOLONTAIRE (> ~10 px, doigt) -> blur. On ignore le
+ *      recentrage automatique d'iOS (scroll programmatique : aucun touchmove) et
+ *      le scroll DANS une liste ouverte (combobox .cb-list, feuille .sheet-list).
+ *   3. Entrée sur un champ d'une ligne -> blur (enterkeyhint="done"). Dans la
+ *      recherche d'une feuille : Entrée choisit l'unique résultat, sinon blur.
+ * L'autosave étant câblé sur blur/change (cf. autosaveField), aucune saisie n'est
+ * perdue : fermer le clavier revient à toucher ailleurs. */
+
+// Champ à clavier TEXTE logiciel (hors date/heure/select : pickers natifs iOS,
+// fermés nativement au tap extérieur, et hors boutons/cases).
+function isTextKeyboardField(el) {
+  if (!el) return false;
+  if (el.isContentEditable) return true;
+  if (el.tagName === "TEXTAREA") return true;
+  if (el.tagName === "INPUT") {
+    const t = (el.type || "text").toLowerCase();
+    return ["text", "search", "email", "tel", "url", "password", "number"].includes(t);
+  }
+  return false;
+}
+
+// Cibles interactives : un tap dessus garde/déplace le focus ou déclenche une
+// action -> on ne le traite PAS comme un tap hors champ.
+const DISMISS_INTERACTIVE_SEL =
+  'input, textarea, select, button, a, label, summary, [role="button"],'
+  + ' [role="option"], [contenteditable=""], [contenteditable="true"],'
+  + ' .cb-input, .cb-option, .sheet-item';
+// Conteneurs scrollables où un défilement ne doit PAS fermer le clavier.
+const DISMISS_KEEP_SCROLL_SEL = ".cb-list, .sheet-list";
+
+// Champ texte d'une ligne (INPUT, pas TEXTAREA) qui mérite enterkeyhint="done"
+// et la touche Entrée = Terminé. Le combobox (.cb-input) gère son propre Entrée.
+function isSingleLineTextInput(el) {
+  if (!(el instanceof HTMLInputElement)) return false;
+  if (el.classList.contains("cb-input")) return false;
+  const t = (el.type || "text").toLowerCase();
+  return ["text", "search", "email", "tel", "url", "number"].includes(t);
+}
+
+// Entrée dans un champ de recherche de feuille (« Choisir un site »…) : sélectionne
+// l'unique résultat s'il n'y en a qu'un, sinon ferme le clavier. Renvoie true si
+// le cas a été traité (l'appelant a déjà fait preventDefault).
+function sheetSearchSubmit(el) {
+  const sheet = el.closest(".sheet-overlay");
+  if (!sheet || !el.classList.contains("filter-input")) return false;
+  const list = sheet.querySelector(".sheet-list");
+  const items = list
+    ? list.querySelectorAll(".sheet-item:not(.sheet-back):not(.sheet-create)")
+    : [];
+  if (items.length === 1) items[0].click();
+  else el.blur();
+  return true;
+}
+
+function wireKeyboardDismiss() {
+  const doc = document;
+  const activeTextField = () => {
+    const el = doc.activeElement;
+    return isTextKeyboardField(el) ? el : null;
+  };
+
+  // enterkeyhint="done" sur les champs d'une ligne (sauf si déjà fixé). Posé au
+  // focus pour couvrir les champs rendus dynamiquement (tours, fiches, feuilles).
+  doc.addEventListener("focusin", (e) => {
+    const el = e.target;
+    if (isSingleLineTextInput(el) && !el.getAttribute("enterkeyhint")) {
+      const isSheetSearch = el.classList.contains("filter-input") && el.closest(".sheet-overlay");
+      el.setAttribute("enterkeyhint", isSheetSearch ? "go" : "done");
+    }
+  });
+
+  // 1. Tap hors champ : blur. touchend passif, aucun preventDefault -> on ne casse
+  // ni l'ouverture des listes ni les boutons (eux gardent leur comportement).
+  doc.addEventListener("touchend", (e) => {
+    const ed = activeTextField();
+    if (!ed) return;
+    const target = e.target;
+    if (target && target.closest && target.closest(DISMISS_INTERACTIVE_SEL)) return;
+    ed.blur();
+  }, { passive: true });
+
+  // 2. Défilement tactile volontaire : blur. On mémorise le point de départ et si
+  // le geste a démarré dans une liste défilante à préserver.
+  let startY = null;
+  let keepScroll = false;
+  doc.addEventListener("touchstart", (e) => {
+    const t = e.touches && e.touches[0];
+    startY = t ? t.clientY : null;
+    keepScroll = !!(e.target && e.target.closest && e.target.closest(DISMISS_KEEP_SCROLL_SEL));
+  }, { passive: true });
+  doc.addEventListener("touchmove", (e) => {
+    if (startY == null || keepScroll) return;
+    const ed = activeTextField();
+    if (!ed) return;
+    const t = e.touches && e.touches[0];
+    if (!t) return;
+    if (Math.abs(t.clientY - startY) > 10) {
+      ed.blur();
+      startY = null;
+    }
+  }, { passive: true });
+
+  // 3. Entrée sur un champ d'une ligne : Terminé (blur) ou, en recherche de feuille,
+  // sélection de l'unique résultat. Les champs d'un <form> à bouton submit (login
+  // OTP) gardent leur soumission native. Le combobox gère son propre Entrée.
+  doc.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" || e.isComposing) return;
+    const el = e.target;
+    if (!isSingleLineTextInput(el)) return;
+    if (el.form && el.form.querySelector('button[type="submit"], input[type="submit"]')) return;
+    e.preventDefault();
+    if (sheetSearchSubmit(el)) return;
+    el.blur();
+  });
+}
+
 /* ============================================================= Vue "Aujourd'hui" */
 async function loadToday() {
   const chauffeurId = state.chauffeur ? state.chauffeur.id : null;
@@ -5237,6 +5357,7 @@ async function boot() {
   initTooltips(document);
   wireLvCompleteness();
   wireKeyboardAwareBars();
+  wireKeyboardDismiss();
   // Mode démo (captures CI) : exposer l'ouverture de fiche rapide pour scénariser
   // la capture « fiche contact avec ⓘ ». Jamais exposé hors démo.
   if (isDemoMode()) window.openQuickCreate = openQuickCreate;

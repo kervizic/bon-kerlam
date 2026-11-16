@@ -4,6 +4,25 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.22.6] — 2026-11-16
+
+Correctif clavier (front uniquement), signalé sur un vrai iPhone en PWA.
+
+### Corrigé
+- **Fermeture du clavier** : trois gestes iOS standards, qui coexistent, pour
+  sortir d'un champ (auparavant aucun moyen évident) :
+  1. **Tap hors du champ** (fond de page, titre de section, espace) ferme le
+     clavier, sans déclencher d'autre action ni casser les listes et boutons.
+  2. **Défilement tactile volontaire** (> ~10 px au doigt) ferme le clavier,
+     comme dans Messages ou Réglages ; le recentrage automatique d'iOS (scroll
+     programmatique) et le défilement d'une liste de combobox ouverte sont ignorés.
+  3. **Touche « Terminé »** : `enterkeyhint="done"` et, sur Entrée, sortie du
+     champ ; dans la recherche d'une feuille (« Choisir un site »…), Entrée
+     sélectionne l'unique résultat s'il n'y en a qu'un, sinon ferme le clavier.
+  La barre d'onglets réapparaît à la fermeture, et l'enregistrement automatique
+  se déclenche bien au blur (aucune saisie perdue). Les formulaires à bouton de
+  soumission (connexion par code) conservent leur comportement natif.
+
 ## [0.1.0-beta.22.5] — 2026-11-16
 
 Correctif d'affichage (front uniquement), signalé sur un vrai iPhone en PWA.
