@@ -35,9 +35,12 @@ test("aucun id dupliqué dans index.html", () => {
 test("ancres de la fiche rapide présentes et uniques", () => {
   const counts = idCounts(HTML);
   for (const id of ["quick-create-sheet", "quick-create-body", "quick-create-title",
-    "quick-create-error", "quick-create-form", "btn-quick-create-save"]) {
+    "quick-create-status", "quick-create-form", "btn-quick-create-close"]) {
     assert.equal(counts.get(id), 1, `#${id} doit exister exactement une fois`);
   }
   // L'ancien conteneur (quick-create-fields) ne doit plus exister.
   assert.equal(counts.get("quick-create-fields"), undefined, "ancien #quick-create-fields non supprimé");
+  // beta.20 : plus de bouton « Enregistrer » dans la fiche (autosave temps réel).
+  assert.equal(counts.get("btn-quick-create-save"), undefined, "le bouton Enregistrer ne doit plus exister");
+  assert.equal(counts.get("btn-quick-create-save-top"), undefined, "le bouton Enregistrer (haut) ne doit plus exister");
 });

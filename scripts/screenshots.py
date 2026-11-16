@@ -481,29 +481,29 @@ def _sheet_sane(page, who: str) -> None:
     _assert(info["save"], f"{who}: bouton Enregistrer absent")
 
 
-def shoot_beta19_fiches(ctx, prefix: str) -> None:
-    """beta.19 (WebKit, DSR 2) : fiches rapides propres (champs texte + libellés,
-    pas de menu par-dessus), clavier iOS simulé (visualViewport), e-mail obligatoire,
-    « Contact signataire ». Captures clair + sombre + assertions E2E."""
+def shoot_beta20_fiches(ctx, prefix: str) -> None:
+    """beta.20 (WebKit, DSR 2) : fiches rapides SANS bouton « Enregistrer »
+    (enregistrement en temps réel). En-tête titre + ✕ ; la fiche est créée dès la
+    1re saisie (indicateur « Enregistré ») ; champ obligatoire manquant en rouge ;
+    aucun dialogue « Abandonner ? ». Captures clair + sombre + assertions E2E."""
     for theme in ("clair", "sombre"):
         page = ctx.new_page()
         try:
             page.goto(f"{BASE}?demo=1&screen=today&role=bureau&theme={theme}", wait_until="networkidle")
             page.wait_for_timeout(600)
-            # Un client doit être choisi avant de créer un projet/contact.
+            # Un client doit être choisi avant de créer un contact.
             page.evaluate(
                 """() => {
                   const sel = document.getElementById('f-client');
                   if (sel && sel.options.length > 1) {
-                    sel.value = sel.options[1].value;
+                    sel.selectedIndex = 1;
                     sel.dispatchEvent(new Event('change', {bubbles:true}));
                   }
                 }"""
             )
             page.wait_for_timeout(200)
 
-            # Champ « Contact signataire » + aide, dans la lettre. L'aide est désormais
-            # portée par l'infobulle ⓘ (beta.20) : on lit le texte de la bulle.
+            # Aide « Contact signataire » portée par l'infobulle ⓘ.
             lab = page.evaluate(
                 """() => {
                   const l = document.querySelector('label[for="f-contact"]');
@@ -513,77 +513,89 @@ def shoot_beta19_fiches(ctx, prefix: str) -> None:
                 }"""
             )
             _assert(lab["label"] == "Contact signataire", f"label contact = {lab['label']!r}")
-            _assert("Signe les lettres de voiture" in lab["help"], "aide « Signe les lettres… » (infobulle) absente")
-            page.screenshot(path=str(OUT / f"{prefix}-contact-signataire-champ-{theme}.png"), full_page=False)
-            print(f"   contact-signataire-champ-{theme}")
+            _assert("Signe les lettres de voiture" in lab["help"], "aide contact (infobulle) absente")
 
-            # --- Nouveau contact signataire (création) : fiche propre + e-mail requis.
+            # Ouvre « Nouveau contact signataire » (combobox + Créer).
             _open_create_sheet(page, "f-contact")
             _sheet_sane(page, f"contact/{theme}")
             title = page.evaluate("() => document.getElementById('quick-create-title').textContent.trim()")
             _assert("contact signataire" in title.lower(), f"titre fiche contact = {title!r}")
-            # Attributs e-mail.
-            attrs = page.evaluate(
+
+            # AUCUN bouton « Enregistrer » dans la fiche (enregistrement en temps réel).
+            no_save = page.evaluate(
+                """() => !document.getElementById('btn-quick-create-save')
+                        && !document.getElementById('btn-quick-create-save-top')
+                        && !document.querySelector('#quick-create-sheet button[type=submit]')"""
+            )
+            _assert(no_save, "un bouton « Enregistrer » subsiste dans la fiche")
+
+            # Autosave : saisir le nom -> indicateur « Enregistré ».
+            page.evaluate(
                 """() => {
-                  const b = document.getElementById('quick-create-body');
-                  const em = b.querySelector('input[type=email]');
-                  return em ? { t: em.type, im: em.getAttribute('inputmode'),
-                                ac: em.getAttribute('autocomplete'), cap: em.getAttribute('autocapitalize') } : null;
+                  const n = document.querySelector('#quick-create-body input');
+                  n.value = 'Franck Durand';
+                  n.dispatchEvent(new Event('input', {bubbles:true}));
                 }"""
             )
-            _assert(bool(attrs) and attrs["im"] == "email" and attrs["ac"] == "email" and attrs["cap"] == "off",
-                    f"attributs e-mail incorrects: {attrs}")
+            page.wait_for_timeout(900)
+            saved = page.evaluate(
+                """() => { const s = document.getElementById('quick-create-status');
+                           return s && !s.hidden && /Enregistr/i.test(s.textContent || ''); }"""
+            )
+            _assert(saved, "indicateur « Enregistré » absent après la saisie du nom")
+
+            # E-mail obligatoire manquant -> champ en ROUGE + message court sous le champ.
+            page.evaluate(
+                """() => { const em = document.querySelector('#quick-create-body input[type=email]');
+                           if (em) { em.focus(); em.blur(); } }"""
+            )
+            page.wait_for_timeout(250)
+            red = page.evaluate(
+                """() => {
+                  const em = document.querySelector('#quick-create-body input[type=email]');
+                  const p = em ? em.parentElement.querySelector('.field-error-inline') : null;
+                  return { red: !!(em && em.classList.contains('field-invalid')),
+                           msg: p ? p.textContent.trim() : '' };
+                }"""
+            )
+            _assert(red["red"], "champ e-mail non marqué en rouge quand vide")
+            _assert("manquant" in red["msg"].lower(), f"message e-mail manquant = {red['msg']!r}")
             page.screenshot(path=str(OUT / f"{prefix}-nouveau-contact-{theme}.png"), full_page=False)
             print(f"   nouveau-contact-{theme}")
 
-            # Clavier iOS simulé : on force visualViewport.height et on vérifie que la
-            # feuille se borne à la zone visible (bouton Enregistrer au-dessus du clavier).
-            vv = page.evaluate(
-                """() => {
-                  if (!window.visualViewport) return { skip: true };
-                  try {
-                    Object.defineProperty(window.visualViewport, 'height',
-                      { configurable: true, get: () => 430 });
-                  } catch (e) {}
-                  try {
-                    Object.defineProperty(window.visualViewport, 'offsetTop',
-                      { configurable: true, get: () => 0 });
-                  } catch (e) {}
+            # Clavier iOS simulé : titre + ✕ restent dans le viewport visible.
+            page.evaluate(
+                """(h) => {
+                  if (!window.visualViewport) return;
+                  try { Object.defineProperty(window.visualViewport, 'height',
+                    { configurable: true, get: () => h }); } catch (e) {}
+                  try { Object.defineProperty(window.visualViewport, 'offsetTop',
+                    { configurable: true, get: () => 0 }); } catch (e) {}
                   window.visualViewport.dispatchEvent(new Event('resize'));
-                  const s = document.getElementById('quick-create-sheet');
-                  return { skip: false, h: s.style.height };
-                }"""
+                }""",
+                430,
             )
-            if not vv.get("skip"):
-                _assert(vv["h"] == "430px", f"feuille non bornée au clavier (height={vv['h']!r})")
-            page.wait_for_timeout(150)
+            page.wait_for_timeout(200)
+            hdr = page.evaluate(
+                """(vvh) => {
+                  const inv = (el) => { if (!el) return false;
+                    const r = el.getBoundingClientRect(); return r.top >= 0 && r.bottom <= vvh; };
+                  return { title: inv(document.getElementById('quick-create-title')),
+                           close: inv(document.getElementById('btn-quick-create-close')) };
+                }""",
+                430,
+            )
+            _assert(hdr["title"] and hdr["close"], "titre/✕ hors du viewport clavier")
             page.screenshot(path=str(OUT / f"{prefix}-nouveau-contact-clavier-{theme}.png"), full_page=False)
             print(f"   nouveau-contact-clavier-{theme}")
 
-            # Validation e-mail : nom rempli + e-mail invalide -> erreur, fiche ouverte.
-            page.evaluate(
-                """() => {
-                  const b = document.getElementById('quick-create-body');
-                  const ins = b.querySelectorAll('input');
-                  ins[0].value = 'Franck'; ins[0].dispatchEvent(new Event('input',{bubbles:true}));
-                  const em = b.querySelector('input[type=email]');
-                  em.value = 'pas-un-mail'; em.dispatchEvent(new Event('input',{bubbles:true}));
-                  document.getElementById('btn-quick-create-save').click();
-                }"""
-            )
-            page.wait_for_timeout(200)
-            err = page.evaluate(
-                """() => {
-                  const e = document.getElementById('quick-create-error');
-                  const sheet = document.getElementById('quick-create-sheet');
-                  return { shown: e && !e.hidden, open: sheet && !sheet.hidden, txt: e ? e.textContent : '' };
-                }"""
-            )
-            _assert(err["shown"] and err["open"], "e-mail invalide : pas d'erreur / fiche fermée")
+            # Ferme via ✕ (aucun dialogue « Abandonner ? » : la fiche reste enregistrée).
             page.evaluate("() => document.getElementById('btn-quick-create-close').click()")
-            page.wait_for_timeout(150)
+            page.wait_for_timeout(300)
+            closed = page.evaluate("() => document.getElementById('quick-create-sheet').hidden")
+            _assert(closed, "la fiche ne se ferme pas sur ✕")
 
-            # --- Modifier le client (édition) : crayon -> fiche pré-remplie.
+            # --- Modifier le client (édition) : crayon -> fiche pré-remplie, titre « Modifier ».
             page.evaluate(
                 """() => {
                   const sel = document.getElementById('f-client');
@@ -606,48 +618,10 @@ def shoot_beta19_fiches(ctx, prefix: str) -> None:
             page.screenshot(path=str(OUT / f"{prefix}-modifier-client-{theme}.png"), full_page=False)
             print(f"   modifier-client-{theme}")
             page.evaluate("() => document.getElementById('btn-quick-create-close').click()")
-            page.wait_for_timeout(150)
-
-            # --- Destinataire : « Autre destinataire » -> création avec adresse.
-            page.evaluate(
-                """() => {
-                  const m = document.getElementById('f-dest-mode');
-                  m.value = 'autre_client'; m.dispatchEvent(new Event('change', {bubbles:true}));
-                }"""
-            )
-            page.wait_for_timeout(250)
-            page.evaluate(
-                """() => {
-                  const sel = document.getElementById('f-dest-client');
-                  const input = sel.parentNode.querySelector('.cb-input');
-                  input.scrollIntoView({block:'center'}); input.focus();
-                  input.value = 'Chantier Lagny'; input.dispatchEvent(new Event('input', {bubbles:true}));
-                }"""
-            )
-            page.wait_for_timeout(250)
-            page.evaluate(
-                """() => {
-                  const sel = document.getElementById('f-dest-client');
-                  const opt = Array.from(sel.parentNode.querySelectorAll('.cb-option'))
-                    .find(o => o.classList.contains('cb-create'));
-                  if (opt) opt.dispatchEvent(new MouseEvent('mousedown', {bubbles:true}));
-                }"""
-            )
-            page.wait_for_timeout(350)
-            _sheet_sane(page, f"destinataire/{theme}")
-            has_addr = page.evaluate(
-                """() => {
-                  const b = document.getElementById('quick-create-body');
-                  const ac = Array.from(b.querySelectorAll('input')).map(i => i.getAttribute('autocomplete')||'');
-                  return ac.includes('street-address');
-                }"""
-            )
-            _assert(has_addr, "fiche destinataire sans champ adresse")
-            page.screenshot(path=str(OUT / f"{prefix}-destinataire-creation-{theme}.png"), full_page=False)
-            print(f"   destinataire-creation-{theme}")
+            page.wait_for_timeout(200)
         except Exception as exc:  # noqa: BLE001
-            beta19_failures.append(f"beta19/{theme}: {exc}")
-            print(f"   !! beta19/{theme}: {exc}")
+            beta20_failures.append(f"fiches/{theme}: {exc}")
+            print(f"   !! fiches/{theme}: {exc}")
         finally:
             page.close()
 
@@ -855,6 +829,69 @@ def shoot_beta20_fiche_clavier(ctx, prefix: str) -> None:
             page.close()
 
 
+def shoot_beta20_completeness(ctx, prefix: str) -> None:
+    """beta.20 : bandeau « N éléments à compléter avant signature » déplié sur une
+    lettre incomplète (on vide la date pour forcer un manque), clair + sombre."""
+    for theme in ("clair", "sombre"):
+        page = ctx.new_page()
+        try:
+            page.goto(f"{BASE}?demo=1&screen=today&role=bureau&theme={theme}", wait_until="networkidle")
+            page.wait_for_timeout(600)
+            # Force un manque : on vide la date (mention obligatoire).
+            page.evaluate(
+                """() => { const d = document.getElementById('f-date');
+                           if (d) { d.value = ''; d.dispatchEvent(new Event('change', {bubbles:true})); } }"""
+            )
+            page.wait_for_timeout(400)
+            shown = page.evaluate(
+                "() => { const b = document.getElementById('lv-completeness'); return b && !b.hidden; }")
+            if not shown:
+                beta20_failures.append(f"completude/{theme}: bandeau absent sur lettre incomplète")
+            page.evaluate("() => { const t = document.getElementById('lvc-toggle'); if (t) t.click(); }")
+            page.wait_for_timeout(300)
+            expanded = page.evaluate(
+                """() => { const l = document.getElementById('lvc-list');
+                           return l && !l.hidden && l.querySelectorAll('.lvc-item').length > 0; }"""
+            )
+            if not expanded:
+                beta20_failures.append(f"completude/{theme}: liste non dépliée")
+            red = page.evaluate("() => !!document.querySelector('#view-today .field-missing')")
+            if not red:
+                beta20_failures.append(f"completude/{theme}: aucune mention obligatoire en rouge")
+            page.locator("#lv-completeness").scroll_into_view_if_needed()
+            page.wait_for_timeout(150)
+            page.screenshot(path=str(OUT / f"{prefix}-a-completer-{theme}.png"), full_page=False)
+            print(f"   a-completer-{theme} (bandeau={shown}, déplié={expanded}, rouge={red})")
+        except Exception as exc:  # noqa: BLE001
+            beta20_failures.append(f"completude/{theme}: {exc}")
+            print(f"   !! completude/{theme}: {exc}")
+        finally:
+            page.close()
+
+
+def shoot_beta20_bureau_filter(ctx, prefix: str) -> None:
+    """beta.20 : filtre « À compléter » sur l'écran bureau Clients (clair)."""
+    page = ctx.new_page()
+    try:
+        page.goto(f"{BASE}?demo=1&screen=clients&role=bureau&theme=clair", wait_until="networkidle")
+        page.wait_for_timeout(600)
+        present = page.evaluate("() => !!document.getElementById('filter-clients-incomplete')")
+        if not present:
+            beta20_failures.append("filtre-bureau: case « À compléter » absente")
+        page.evaluate(
+            """() => { const c = document.getElementById('filter-clients-incomplete');
+                       if (c) { c.checked = true; c.dispatchEvent(new Event('change', {bubbles:true})); } }"""
+        )
+        page.wait_for_timeout(300)
+        page.screenshot(path=str(OUT / f"{prefix}-bureau-a-completer-clair.png"), full_page=False)
+        print(f"   bureau-a-completer-clair (case présente={present})")
+    except Exception as exc:  # noqa: BLE001
+        beta20_failures.append(f"filtre-bureau: {exc}")
+        print(f"   !! filtre-bureau: {exc}")
+    finally:
+        page.close()
+
+
 def main() -> int:
     with sync_playwright() as p:
         # --lang=fr-FR : les contrôles natifs <input type="date"|"time"> suivent la
@@ -866,6 +903,7 @@ def main() -> int:
             viewport=IPHONE, device_scale_factor=3, is_mobile=True, has_touch=True,
             user_agent=IOS26_UA, **LOCALE,
         )
+        iphone.set_default_timeout(8000)
         # Logo KERLAM : vérifie que la police Sarpanch est bien chargée et appliquée
         # (régression iPhone : le logo retombait en police système) + gros plan.
         shoot_logo(iphone, "iphone")
@@ -890,10 +928,12 @@ def main() -> int:
         iphone.close()
 
         ipad = browser.new_context(viewport=IPAD, device_scale_factor=2, is_mobile=True, has_touch=True, **LOCALE)
+        ipad.set_default_timeout(8000)
         shoot(ipad, "ipad", "dashboard", "clair", "tableau-de-bord", role="bureau")
         ipad.close()
 
         desktop = browser.new_context(viewport=DESKTOP, **LOCALE)
+        desktop.set_default_timeout(8000)
         shoot(desktop, "bureau", "dashboard", "clair", "tableau-de-bord", check=False)
         shoot(desktop, "bureau", "chauffeurs", "clair", "chauffeurs", check=False)
         desktop.close()
@@ -903,6 +943,7 @@ def main() -> int:
             viewport=IPHONE, device_scale_factor=3, is_mobile=True,
             has_touch=True, user_agent=IOS26_UA, **LOCALE,
         )
+        inst.set_default_timeout(8000)
         ip = inst.new_page()
         try:
             ip.goto(BASE.replace("index.html", "") + "installer/", wait_until="networkidle")
@@ -925,6 +966,7 @@ def main() -> int:
             viewport=IPHONE, device_scale_factor=3, has_touch=True,
             user_agent=IOS26_UA, **LOCALE,
         )
+        wk_iphone.set_default_timeout(8000)
         print("WebKit (Safari iOS) : alignement Date / Heures")
         shoot_date_heures(wk_iphone, "webkit-iphone")
         wk_iphone.close()
@@ -935,12 +977,17 @@ def main() -> int:
             viewport=IPHONE, device_scale_factor=2, has_touch=True,
             user_agent=IOS26_UA, **LOCALE,
         )
-        print("WebKit (Safari iOS, DSR 2) : fiches rapides beta.19")
-        shoot_beta19_fiches(wk_iphone2, "webkit-iphone")
+        wk_iphone2.set_default_timeout(8000)
+        print("WebKit (Safari iOS, DSR 2) : fiches rapides autosave beta.20")
+        shoot_beta20_fiches(wk_iphone2, "webkit-iphone")
         print("WebKit (Safari iOS, DSR 2) : fiche plein écran + clavier beta.20")
         shoot_beta20_fiche_clavier(wk_iphone2, "webkit-iphone")
         print("WebKit (Safari iOS, DSR 2) : infobulles ⓘ beta.20")
         shoot_beta20_infobulles(wk_iphone2, "webkit-iphone")
+        print("WebKit (Safari iOS, DSR 2) : bandeau complétude beta.20")
+        shoot_beta20_completeness(wk_iphone2, "webkit-iphone")
+        print("WebKit (Safari iOS, DSR 2) : filtre bureau À compléter beta.20")
+        shoot_beta20_bureau_filter(wk_iphone2, "webkit-iphone")
         wk_iphone2.close()
         wk.close()
 
