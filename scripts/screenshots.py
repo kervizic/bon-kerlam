@@ -1247,6 +1247,11 @@ def main() -> int:
         )
         wk_iphone2.set_default_timeout(8000)
         wk_iphone2.set_default_navigation_timeout(20000)
+        # beta.22 : écran lettre complet en WebKit (fidèle iPhone : fr-FR, JJ/MM/AAAA,
+        # heures 24 h), clair + sombre — champs en ligne (E7), « + » de section (E4).
+        print("WebKit (Safari iOS, DSR 2) : écran lettre beta.22 (clair + sombre)")
+        shoot(wk_iphone2, "webkit-iphone-chauffeur", "today", "clair", "aujourdhui", role="chauffeur")
+        shoot(wk_iphone2, "webkit-iphone-chauffeur", "today", "sombre", "aujourdhui", role="chauffeur")
         print("WebKit (Safari iOS, DSR 2) : fiches rapides autosave beta.20")
         shoot_beta20_fiches(wk_iphone2, "webkit-iphone")
         print("WebKit (Safari iOS, DSR 2) : fiche plein écran + clavier beta.20")

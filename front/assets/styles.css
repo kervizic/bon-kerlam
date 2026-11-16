@@ -511,6 +511,15 @@ input[type="date"] {
 input[type="time"] {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%238a8a8a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7v5l3 2'/%3E%3C/svg%3E");
 }
+/* beta.22 : masquer l'indicateur natif (visible sous Chromium malgré appearance:
+   none) pour ne garder QU'UNE icône (la nôtre, décorative). Reste cliquable. */
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator {
+  opacity: 0;
+}
+/* beta.22 (E3) : WebKit rend un champ « secondes » sur les <input type=time> même
+   pour une valeur HH:MM (« 08:00:00 » dans les captures). On le masque : HH:MM. */
+input[type="time"]::-webkit-datetime-edit-second-field { display: none; }
 input:focus-visible, select:focus-visible, textarea:focus-visible {
   outline: 2px solid var(--c-orange);
   outline-offset: 1px;
@@ -528,28 +537,38 @@ input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
 .field-group legend { font-weight: 700; padding: 0 6px; }
 .radio-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; font-size: 16px; }
 
-/* beta.22 (E7) : champs d'en-tête EN LIGNE, façon Réglages iOS — libellé + ⓘ à
-   gauche, valeur à droite, même ligne ; un nom long passe sur 2 lignes plutôt que
-   d'être tronqué. Les blocs Heures/Prestations/Tours gardent leur disposition. */
+/* beta.22 (E7) : champs d'en-tête EN LIGNE, façon Réglages iOS. La colonne des
+   libellés prend la largeur du PLUS LONG libellé (« Destinataire » + ⓘ), pas plus ;
+   le champ commence juste après (petit espace) et prend TOUT le reste de la largeur.
+   Un libellé trop long passe sur 2 lignes (jamais de débordement). Les blocs
+   Heures/Prestations/Tours gardent leur disposition. */
 .lv-header-form .field:not(.field-heures) {
-  flex-direction: row; flex-wrap: wrap; align-items: center;
-  gap: 4px 12px; margin-bottom: 0; min-height: 52px;
+  flex-direction: row; flex-wrap: nowrap; align-items: center;
+  gap: 0 6px; margin-bottom: 0; min-height: 52px;
   padding: 10px 0; border-bottom: 1px solid var(--border);
 }
 .lv-header-form .field:not(.field-heures) > .tt-row,
 .lv-header-form .field:not(.field-heures) > label {
-  flex: 0 1 38%; margin: 0; font-weight: 500;
+  flex: 0 0 120px; width: 120px; margin: 0; font-weight: 500;
+  white-space: normal; line-height: 1.2;
 }
 .lv-header-form .field:not(.field-heures) > .combobox,
 .lv-header-form .field:not(.field-heures) > select,
 .lv-header-form .field:not(.field-heures) > input {
-  flex: 1 1 56%; min-width: 55%; margin-left: auto;
+  flex: 1 1 auto; min-width: 0; width: auto; margin-left: 0;
 }
-/* Nom long tronqué dans la combobox en ligne : fond opaque sous les icônes
-   (crayon / ✕ / chevron) pour éviter toute superposition visible avec le texte. */
+/* Combobox en ligne : AU REPOS seul le chevron (le texte prend toute la place) ;
+   le crayon et le ✕ n'apparaissent qu'au focus / à l'ouverture, avec la place
+   réservée par le padding — jamais de chevauchement avec le texte. */
 .lv-header-form .field:not(.field-heures) .cb-edit,
-.lv-header-form .field:not(.field-heures) .cb-clear,
-.lv-header-form .field:not(.field-heures) .cb-caret { background: var(--surface); }
+.lv-header-form .field:not(.field-heures) .cb-clear { display: none; }
+.lv-header-form .field:not(.field-heures) .cb-input { padding-right: 28px; padding-left: 12px; }
+.lv-header-form .field:not(.field-heures) .combobox:focus-within .cb-edit,
+.lv-header-form .field:not(.field-heures) .combobox.is-open .cb-edit,
+.lv-header-form .field:not(.field-heures) .combobox:focus-within .cb-clear,
+.lv-header-form .field:not(.field-heures) .combobox.is-open .cb-clear { display: inline-flex; }
+.lv-header-form .field:not(.field-heures) .combobox:focus-within .cb-input,
+.lv-header-form .field:not(.field-heures) .combobox.is-open .cb-input { padding-right: 98px; }
 
 /* beta.22 (E4) : titre de section (Heures, Prestations, Tours) + « + » orange à
    droite, même ligne, zone tactile >= 44 px (norme iOS, économise une ligne). */
