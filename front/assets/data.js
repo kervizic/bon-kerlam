@@ -410,7 +410,14 @@ export async function listCamions() {
   return live.listCamions();
 }
 export async function listClients() {
-  if (DEMO) return demoDb.clients.filter((c) => c.actif);
+  if (DEMO) {
+    return demoDb.clients.filter((c) => c.actif).map((c) => ({
+      ...c,
+      nb_adresses: (demoDb.client_adresses || [])
+        .filter((a) => String(a.client_id) === String(c.id) && a.actif !== false).length,
+      aliases: c.alias ? [c.alias] : [],
+    }));
+  }
   return live.listClients();
 }
 export async function listProjets(clientId) {

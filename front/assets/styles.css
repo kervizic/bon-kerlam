@@ -114,6 +114,10 @@ html[data-theme="sombre"] {
 [hidden] { display: none !important; }
 
 html, body { margin: 0; padding: 0; }
+/* Filet de sécurité (le correctif principal est minmax(0,1fr) + min-width:0) :
+   aucun débordement horizontal ne doit sortir du viewport. */
+html { overflow-x: clip; }
+body { overflow-x: clip; max-width: 100%; }
 
 body {
   font-family: var(--font);
@@ -526,7 +530,9 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
 }
 input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
 
-.lv-header-form { display: grid; gap: 0; grid-template-columns: 1fr; margin-bottom: 20px; }
+/* minmax(0,1fr) : sans ça, une cellule « 1fr » ne peut pas descendre sous la
+   largeur min de son contenu -> débordement horizontal sur petit écran (iPhone). */
+.lv-header-form { display: grid; gap: 0; grid-template-columns: minmax(0, 1fr); margin-bottom: 20px; }
 
 .field-group {
   border: 1px solid var(--border);
@@ -543,7 +549,7 @@ input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
    Un libellé trop long passe sur 2 lignes (jamais de débordement). Les blocs
    Heures/Prestations/Tours gardent leur disposition. */
 .lv-header-form .field:not(.field-heures) {
-  flex-direction: row; flex-wrap: nowrap; align-items: center;
+  flex-direction: row; flex-wrap: wrap; align-items: center;
   gap: 0 6px; margin-bottom: 0; min-height: 52px;
   padding: 10px 0; border-bottom: 1px solid var(--border);
 }
@@ -555,7 +561,12 @@ input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
 .lv-header-form .field:not(.field-heures) > .combobox,
 .lv-header-form .field:not(.field-heures) > select,
 .lv-header-form .field:not(.field-heures) > input {
-  flex: 1 1 auto; min-width: 0; width: auto; margin-left: 0;
+  flex: 1 1 auto; min-width: 0; width: auto; margin-left: 0; order: 1;
+}
+/* beta.22.2 : l'infobulle ⓘ s'affiche SOUS le champ (nouvelle ligne pleine
+   largeur), jamais par-dessus — elle ne masque plus le champ (ex. Contact). */
+.lv-header-form .field:not(.field-heures) > .tt-bubble {
+  flex: 1 0 100%; order: 2; margin: 4px 0 0; max-width: 100%;
 }
 /* Combobox en ligne : AU REPOS seul le chevron (le texte prend toute la place) ;
    le crayon et le ✕ n'apparaissent qu'au focus / à l'ouverture, avec la place
@@ -651,7 +662,7 @@ input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
 .creneaux-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
 .creneau-row {
   display: grid;
-  grid-template-columns: 1fr auto 1fr 44px;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) 44px;
   gap: 8px;
   align-items: center;
 }
@@ -993,8 +1004,8 @@ body.pdf-viewer-open { overflow: hidden; }
   .bottom-bar, .nav-drawer { display: none !important; }
   .main-content { padding: 24px 32px; padding-bottom: 24px; }
   .dashboard-cards { grid-template-columns: repeat(3, 1fr); }
-  .lv-header-form { grid-template-columns: repeat(2, 1fr); gap: 0 20px; }
-  .field-grid { grid-template-columns: repeat(2, 1fr); }
+  .lv-header-form { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 20px; }
+  .field-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 899px) {

@@ -781,6 +781,23 @@ function findSiteById(id) {
   return state.refs.sites.find((s) => String(s.id) === String(id)) || null;
 }
 
+// beta.22.2 : nom AFFICHÉ d'un client. Une société fusionnée (plusieurs adresses)
+// affiche son nom de GROUPE (alias, ex. « Veolia »), pas le nom d'un de ses
+// établissements (« Veolia Eau Épinay »). La raison sociale légale reste en base
+// et sur le PDF (inchangée). Un client ordinaire garde sa raison sociale.
+function clientDisplayName(c) {
+  if (!c) return "";
+  if ((c.nb_adresses || 0) > 1 && c.alias && String(c.alias).trim()) return String(c.alias).trim();
+  return c.raison_sociale || "";
+}
+// Texte de recherche : garde la raison sociale et tous les alias trouvables même
+// quand l'affichage est le nom de groupe.
+function clientSearchText(c) {
+  const parts = [c.raison_sociale, c.alias];
+  if (Array.isArray(c.aliases)) parts.push(...c.aliases);
+  return parts.filter(Boolean).join(" ");
+}
+
 async function getSiteOptionsList() {
   const clientId = document.getElementById("f-client").value;
   if (state.chauffeur && clientId) {
@@ -812,8 +829,8 @@ async function loadRefs() {
   state.refs = { camions, clients, projets, contacts, articles, sites, chauffeurs, prestations, materiels, siteSocietes };
   state.reglages = Object.fromEntries(reglages.map((r) => [r.cle, r.valeur]));
   populateSelect(document.getElementById("f-camion"), camions, (c) => c.id, (c) => c.immatriculation);
-  populateSelect(document.getElementById("f-client"), clients, (c) => c.id, (c) => c.raison_sociale, "Choisir ou taper…", (c) => c.alias);
-  populateSelect(document.getElementById("f-dest-client"), clients, (c) => c.id, (c) => c.raison_sociale, "Choisir ou taper…", (c) => c.alias);
+  populateSelect(document.getElementById("f-client"), clients, (c) => c.id, clientDisplayName, "Choisir ou taper…", clientSearchText);
+  populateSelect(document.getElementById("f-dest-client"), clients, (c) => c.id, clientDisplayName, "Choisir ou taper…", clientSearchText);
   refreshProjetContactOptions();
   enhanceHeaderComboboxes();
 }
@@ -2341,7 +2358,7 @@ function lvClientName(lv) {
   const projet = (state.refs.projets || []).find((p) => p.id === lv.projet_id);
   if (projet) {
     const client = (state.refs.clients || []).find((c) => c.id === projet.client_id);
-    if (client && client.raison_sociale) return client.raison_sociale;
+    if (client && client.raison_sociale) return clientDisplayName(client);
   }
   return lv.expediteur || "";
 }
@@ -2971,7 +2988,7 @@ async function loadProjetsScreen() {
           return (
             (p.nom || "").toLowerCase().includes(query) ||
             (p.ref_contrat || "").toLowerCase().includes(query) ||
-            (client && client.raison_sociale.toLowerCase().includes(query))
+            (client && clientSearchText(client).toLowerCase().includes(query))
           );
         });
     if (incompleteChecked("filter-projets-incomplete")) {
@@ -3007,7 +3024,7 @@ function renderProjetCard(p, startOpen = false) {
   const client = state.refs.clients.find((c) => c.id === p.client_id);
   return createAccordionCard({
     title: p.nom || p.ref_contrat || `Projet #${p.id}`,
-    subtitle: client ? client.raison_sociale : "—",
+    subtitle: client ? clientDisplayName(client) : "—",
     metaHtml: incompletePill("projets", p) + `<span class="badge badge-${escapeHtml(p.statut || "actif")}">${escapeHtml(p.statut || "actif")}</span>`,
     startOpen,
     bodyBuilder: (body) => {
@@ -3271,7 +3288,7 @@ async function loadClientsScreen() {
     reportIfVersionMismatch(e);
   }
   const render = (query) => {
-    let filtered = !query ? rows : rows.filter((c) => c.raison_sociale.toLowerCase().includes(query));
+    let filtered = !query ? rows : rows.filter((c) => clientSearchText(c).toLowerCase().includes(query));
     if (incompleteChecked("filter-clients-incomplete")) {
       filtered = filtered.filter((c) => entityMissingFields("clients", c).length > 0);
     }
@@ -3301,7 +3318,7 @@ async function loadClientsScreen() {
 
 function renderClientCard(c, startOpen = false) {
   return createAccordionCard({
-    title: c.raison_sociale,
+    title: clientDisplayName(c),
     subtitle: c.siren || "",
     metaHtml: incompletePill("clients", c) + (c.actif ? "" : '<span class="status-pill status-expired">Inactif</span>'),
     startOpen,

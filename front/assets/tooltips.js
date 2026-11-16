@@ -25,6 +25,7 @@ export const TOOLTIPS = {
   projet: "Facultatif : chantier ou affaire du client.",
   contact: "Signe les lettres de voiture.",
   destinataire: "Qui reçoit la marchandise. Son adresse figure obligatoirement sur la lettre.",
+  adresse_etablissement: "Établissement du client pour cette lettre.",
   heures: "Heures de travail du chauffeur sur ce transport.",
   prestations: "Ce qui est facturé (régie, heures supplémentaires, astreinte). N'apparaît sur la lettre que si c'est rempli.",
 

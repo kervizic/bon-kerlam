@@ -435,6 +435,7 @@ beta19_failures: list[str] = []
 beta20_failures: list[str] = []
 beta21_failures: list[str] = []
 beta221_failures: list[str] = []
+beta222_failures: list[str] = []
 
 
 def _assert(cond: bool, msg: str) -> None:
@@ -1230,6 +1231,64 @@ def shoot_sites_groupes(ctx, prefix: str) -> None:
             page.close()
 
 
+def shoot_overflow_veolia(ctx, prefix: str) -> None:
+    """beta.22.2 : AUCUN débordement horizontal sur l'écran lettre rempli avec des
+    noms longs (client « Veolia » + adresse « Épinay · 2 rue Pasteur, 93800
+    Épinay-sur-Seine »), à 320/360/375/390/393/430 px. Mesure scrollWidth <=
+    innerWidth et qu'aucun élément ne dépasse à droite. Capture 393 px clair+sombre."""
+    SET_VEOLIA = """() => {
+        const fc = document.getElementById('f-client');
+        if (fc) {
+            fc.value = '6'; fc.dispatchEvent(new Event('change', {bubbles:true}));
+            const cbi = fc.parentNode.querySelector('.cb-input'); if (cbi) cbi.value = 'Veolia';
+        }
+    }"""
+    SET_ADR = """() => {
+        const adr = document.getElementById('f-client-adresse');
+        if (adr && adr.options.length > 1) {
+            adr.value = adr.options[1].value;
+            adr.dispatchEvent(new Event('change', {bubbles:true}));
+        }
+        return !!(adr && !document.getElementById('field-client-adresse-wrap').hidden);
+    }"""
+    MEASURE = """() => {
+        const over = [];
+        document.querySelectorAll('#view-today *').forEach((el) => {
+            const r = el.getBoundingClientRect();
+            if (r.width > 0 && r.right > window.innerWidth + 1) {
+                over.push((el.className || el.tagName || '').toString().slice(0, 40));
+            }
+        });
+        return { sw: document.documentElement.scrollWidth, iw: window.innerWidth,
+                 over: over.slice(0, 5), n: over.length };
+    }"""
+    for theme in ("clair", "sombre"):
+        page = ctx.new_page()
+        try:
+            for w in (320, 360, 375, 390, 393, 430):
+                page.set_viewport_size({"width": w, "height": 820})
+                page.goto(f"{BASE}?demo=1&screen=today&role=chauffeur&theme={theme}", wait_until="load")
+                page.wait_for_timeout(500)
+                page.evaluate(SET_VEOLIA)
+                page.wait_for_timeout(400)
+                page.evaluate(SET_ADR)
+                page.wait_for_timeout(250)
+                m = page.evaluate(MEASURE)
+                if m["sw"] > m["iw"] + 1:
+                    beta222_failures.append(f"overflow/{theme}@{w}: scrollWidth {m['sw']} > innerWidth {m['iw']}")
+                if m["n"]:
+                    beta222_failures.append(
+                        f"overflow/{theme}@{w}: {m['n']} élément(s) dépassent à droite")
+                if w == 393:
+                    page.screenshot(path=str(OUT / f"{prefix}-overflow-veolia-{theme}.png"), full_page=False)
+            print(f"   overflow-veolia-{theme} (393 capturé)")
+        except Exception as exc:  # noqa: BLE001
+            beta222_failures.append(f"overflow/{theme}: exception {exc}")
+            print(f"   !! overflow/{theme}: {exc}")
+        finally:
+            page.close()
+
+
 def main() -> int:
     with sync_playwright() as p:
         # --lang=fr-FR : les contrôles natifs <input type="date"|"time"> suivent la
@@ -1329,6 +1388,8 @@ def main() -> int:
         shoot(wk_iphone2, "webkit-iphone-chauffeur", "today", "sombre", "aujourdhui", role="chauffeur")
         print("WebKit (Safari iOS, DSR 2) : sélecteur de site groupé beta.22.1")
         shoot_sites_groupes(wk_iphone2, "webkit-iphone")
+        print("WebKit (Safari iOS) : pas de débordement + Veolia beta.22.2")
+        shoot_overflow_veolia(wk_iphone2, "webkit-iphone")
         print("WebKit (Safari iOS, DSR 2) : fiches rapides autosave beta.20")
         shoot_beta20_fiches(wk_iphone2, "webkit-iphone")
         print("WebKit (Safari iOS, DSR 2) : fiche plein écran + clavier beta.20")
@@ -1411,6 +1472,13 @@ def main() -> int:
         rc = 1
     else:
         print("OK : beta.22.1 (sélecteur de site groupé sociétés -> adresses).")
+    if beta222_failures:
+        print("beta.22.2 KO (débordement horizontal) :")
+        for f in beta222_failures:
+            print("  -", f)
+        rc = 1
+    else:
+        print("OK : beta.22.2 (aucun débordement horizontal à 320-430 px).")
     return rc
 
 

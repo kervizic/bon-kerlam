@@ -46,10 +46,13 @@ export const CHAUFFEURS = [
 ];
 
 /* ------------------------------------------------------------- Clients / contacts */
-const nextClientId = makeCounter(3);
+const nextClientId = makeCounter(6);
 export const CLIENTS = [
   { id: 1, raison_sociale: "Travaux Publics Chantereine", adresse: "12 avenue des Peupliers, 77400 Lagny-Démo", siren: "123 456 789", alias: null, actif: true },
   { id: 2, raison_sociale: "Groupe Valoris Environnement", adresse: "4 rue des Tanneries, 93160 Noisy-Démo", siren: "234 567 890", alias: "Valoris", actif: true },
+  // beta.22.2 : société fusionnée affichée « Veolia » (alias de groupe), raison
+  // sociale légale « Veolia Eau Épinay » conservée sur la fiche et le PDF.
+  { id: 6, raison_sociale: "Veolia Eau Épinay", adresse: "2 rue Pasteur, 93800 Épinay-sur-Seine", siren: "524 334 943", alias: "Veolia", actif: true },
   { id: 3, raison_sociale: "SARL Bétons de l'Est", adresse: "27 rue du Port, 93460 Gournay-Démo", siren: "345 678 901", alias: null, actif: true },
   // Alias de recherche (beta.17) : « jean » -> EJL, « svtp » -> Société Voirie…
   { id: 4, raison_sociale: "EJL (Jean Lefebvre)", adresse: "9 rue des Chantiers, 93160 Noisy-Démo", siren: "456 789 012", alias: "Jean Lefebvre", actif: true },
@@ -100,6 +103,8 @@ export const SITE_SOCIETES = [
 export const CLIENT_ADRESSES = [
   { id: 1, client_id: 2, libelle: "Siège", adresse: "4 rue des Tanneries, 93160 Noisy-Démo", lat: 48.846, lon: 2.554, is_principale: true, actif: true },
   { id: 2, client_id: 2, libelle: "Agence Est", adresse: "18 avenue de l'Industrie, 77100 Meaux-Démo", lat: 48.96, lon: 2.88, is_principale: false, actif: true },
+  { id: 3, client_id: 6, libelle: "Épinay", adresse: "2 rue Pasteur, 93800 Épinay-sur-Seine", lat: 48.955, lon: 2.313, is_principale: true, actif: true },
+  { id: 4, client_id: 6, libelle: "Noisy", adresse: "6 rue de la Plaine, TSA 40001, 93160 Noisy-le-Grand", lat: 48.851, lon: 2.533, is_principale: false, actif: true },
 ];
 
 /* -------------------------------------------------------------------- Articles */

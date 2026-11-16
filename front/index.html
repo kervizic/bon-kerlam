@@ -10,8 +10,8 @@
   <!-- Empreinte de version du shell (cf. assets/app-version.js). Bumper `app-rev`
        à chaque déploiement backend devant forcer un refresh (sinon le bump d'un
        `?v=` d'asset suffit). -->
-  <meta name="app-version" content="0.1.0-beta.22.1">
-  <meta name="app-rev" content="221">
+  <meta name="app-version" content="0.1.0-beta.22.2">
+  <meta name="app-rev" content="222">
 
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
@@ -31,7 +31,7 @@
        en police système). crossorigin obligatoire : les polices sont toujours
        récupérées en mode CORS, l'attribut évite un double téléchargement. -->
   <link rel="preload" href="/assets/fonts/sarpanch-900.woff2?v=14" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/assets/styles.css?v=221">
+  <link rel="stylesheet" href="/assets/styles.css?v=222">
   <script src="/assets/app-version.js?v=21" defer></script>
 </head>
 <body>
@@ -238,7 +238,7 @@
             <!-- beta.22 : adresse de la société choisie (visible si la société a
                  plusieurs adresses ; sinon l'unique adresse est prise d'office). -->
             <div class="field" id="field-client-adresse-wrap" hidden>
-              <label for="f-client-adresse">Adresse</label>
+              <label for="f-client-adresse" data-tt="adresse_etablissement">Adresse</label>
               <select id="f-client-adresse" name="client_adresse_id"><option value="">Choisir…</option></select>
             </div>
             <div class="field">
@@ -261,7 +261,7 @@
               <select id="f-dest-client"><option value="">Choisir ou taper…</option></select>
             </div>
             <div class="field" id="field-dest-adresse-wrap" hidden>
-              <label for="f-dest-adresse">Adresse</label>
+              <label for="f-dest-adresse" data-tt="adresse_etablissement">Adresse</label>
               <select id="f-dest-adresse" name="dest_adresse_id"><option value="">Choisir…</option></select>
             </div>
             <!-- Lettres antérieures : destinataire en saisie libre (nom seul, sans
@@ -806,6 +806,6 @@
   <!-- ================================================================== Scripts -->
   <script src="/assets/config.js?v=21"></script>
   <script src="/assets/vendor/supabase/supabase.js"></script>
-  <script type="module" src="/assets/app.js?v=221"></script>
+  <script type="module" src="/assets/app.js?v=222"></script>
 </body>
 </html>

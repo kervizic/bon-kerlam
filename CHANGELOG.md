@@ -4,6 +4,32 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.22.2] — 2026-11-16
+
+Correctifs front (aucune migration) signalés sur un vrai iPhone en PWA installée.
+
+### Corrigé
+- **Nom de groupe Veolia** : une société fusionnée (plusieurs adresses) s'affiche
+  avec son **nom de groupe** (alias, « Veolia ») au lieu du nom d'un établissement
+  (« Veolia Eau Épinay »), côté chauffeur ET Bureau. La **raison sociale légale**
+  reste en base, sur la fiche et sur le PDF (inchangée) ; les anciens noms restent
+  des alias cherchables. Pas de champ « nom affiché » distinct en base : le nom de
+  groupe est l'alias, affiché quand le client a plus d'une adresse (`nb_adresses`).
+- **Débordement horizontal (iPhone)** : corrigé à la racine — `minmax(0, 1fr)` sur
+  les grilles (`lv-header-form`, créneaux), `min-width: 0` sur les enfants,
+  troncature à l'ellipse dans le cadre. Filet de sécurité `overflow-x: clip` sur
+  html/body. Vérifié sans aucun débordement à 320/360/375/390/393/430 px (test e2e).
+- **Infobulle ⓘ** : s'affiche désormais **sous le champ** (nouvelle ligne pleine
+  largeur) et ne le masque plus (ex. Contact).
+- **ⓘ « Adresse »** ajouté : « Établissement du client pour cette lettre. »
+
+### À signaler
+- **Syneos** présentait le même schéma (garde « Syneos Gournay », alias de groupe
+  « Syneos »). Le correctif étant à la racine (toute société à plusieurs adresses
+  affiche son nom de groupe), Syneos s'affiche désormais aussi « Syneos » — ce qui
+  correspond au regroupement décidé en beta.22. À confirmer avec Manu s'il veut un
+  comportement différent pour Syneos.
+
 ## [0.1.0-beta.22.1] — 2026-11-16
 
 Correctif (front uniquement, aucune migration) : le sélecteur de site de tour
