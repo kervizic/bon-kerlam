@@ -109,7 +109,9 @@ def shoot_lv_modif(ctx, prefix: str) -> None:
             "#view-today input[type='time'], #view-today input[type='text'], "
             "#view-today input[type='number']"
         ).first
-        field.scroll_into_view_if_needed()
+        # Centrer le champ (sinon la topbar fixe / le bandeau peuvent intercepter le clic).
+        field.evaluate("el => el.scrollIntoView({block: 'center'})")
+        page.wait_for_timeout(150)
         field.click()
         field.fill("08:30")
         page.locator("h1").first.click()  # blur -> empile l'annulation
@@ -651,7 +653,10 @@ def shoot_beta20_infobulles(ctx, prefix: str) -> None:
             page.screenshot(path=str(OUT / f"{prefix}-infobulles-formulaire-{theme}.png"), full_page=False)
 
             # --- Bulle Date : ouvre, vérifie le texte + le non-chevauchement du champ.
+            # On centre l'icône avant de cliquer (sinon la topbar fixe intercepte le clic).
             date_btn = page.locator('.tt-row:has(label[data-tt="date"]) .tt-btn')
+            date_btn.evaluate("el => el.scrollIntoView({block: 'center'})")
+            page.wait_for_timeout(150)
             date_btn.click()
             page.wait_for_timeout(200)
             bubble = page.locator('.tt-bubble:not([hidden])').first
@@ -679,15 +684,16 @@ def shoot_beta20_infobulles(ctx, prefix: str) -> None:
                     beta20_failures.append(f"infobulles/{theme}: la bulle Date recouvre le champ Date")
             page.screenshot(path=str(OUT / f"{prefix}-infobulle-date-{theme}.png"), full_page=False)
 
-            # --- Toucher ailleurs = fermeture.
-            page.locator("h1").first.click()
+            # --- Toucher ailleurs = fermeture (clic programmatique hors ⓘ/bulle).
+            page.evaluate("() => { const h = document.querySelector('#view-today h1'); if (h) h.click(); }")
             page.wait_for_timeout(150)
             if page.locator('.tt-bubble:not([hidden])').count() != 0:
                 beta20_failures.append(f"infobulles/{theme}: la bulle reste ouverte après un toucher ailleurs")
 
             # --- Bulle Destinataire.
             dest_btn = page.locator('.tt-row:has(label[data-tt="destinataire"]) .tt-btn')
-            dest_btn.scroll_into_view_if_needed()
+            dest_btn.evaluate("el => el.scrollIntoView({block: 'center'})")
+            page.wait_for_timeout(150)
             dest_btn.click()
             page.wait_for_timeout(200)
             if page.locator('.tt-bubble:not([hidden])').count() == 0:
@@ -799,7 +805,7 @@ def shoot_beta20_fiche_clavier(ctx, prefix: str) -> None:
                         return r.top >= 0 && r.bottom <= vvh && r.width > 0 && r.height > 0;
                     };
                     const title = document.getElementById('quick-create-title');
-                    const saveTop = document.getElementById('btn-quick-create-save-top');
+                    const close = document.getElementById('btn-quick-create-close');
                     // Points répartis dans le viewport visible : tous doivent tomber DANS la fiche.
                     const pts = [[196, 60], [196, 200], [196, 320], [196, vvh - 12], [30, 150], [360, 260]];
                     let leaks = 0;
@@ -807,21 +813,21 @@ def shoot_beta20_fiche_clavier(ctx, prefix: str) -> None:
                         const el = document.elementFromPoint(x, y);
                         if (!el || !el.closest('#quick-create-sheet')) leaks++;
                     }
-                    return { title: inView(title), save: inView(saveTop), leaks };
+                    return { title: inView(title), close: inView(close), leaks };
                 }""",
                 VVH,
             )
             if not checks["title"]:
                 beta20_failures.append(f"fiche-clavier/{theme}: titre hors du viewport visible")
-            if not checks["save"]:
-                beta20_failures.append(f"fiche-clavier/{theme}: bouton Enregistrer hors du viewport visible")
+            if not checks["close"]:
+                beta20_failures.append(f"fiche-clavier/{theme}: bouton ✕ hors du viewport visible")
             if checks["leaks"]:
                 beta20_failures.append(
                     f"fiche-clavier/{theme}: {checks['leaks']} point(s) laissent voir la lettre derrière la fiche"
                 )
             page.screenshot(path=str(OUT / f"{prefix}-fiche-contact-clavier-{theme}.png"), full_page=False)
             print(f"   fiche-contact-clavier-{theme} "
-                  f"(titre={checks['title']}, save={checks['save']}, leaks={checks['leaks']})")
+                  f"(titre={checks['title']}, fermer={checks['close']}, leaks={checks['leaks']})")
         except Exception as exc:  # noqa: BLE001
             beta20_failures.append(f"fiche-clavier/{theme}: {exc}")
             print(f"   !! fiche-clavier/{theme}: {exc}")
