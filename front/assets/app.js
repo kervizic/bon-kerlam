@@ -4399,12 +4399,46 @@ function renderUtilisateurCard(u, startOpen = false) {
 }
 
 /* =============================================================== Choix de site == */
+// beta.22 (D) : distance à vol d'oiseau (mètres).
+function haversineM(lat1, lon1, lat2, lon2) {
+  const R = 6371000, toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1), dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+function formatDistance(m) {
+  return m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`;
+}
+
 function openSitePicker(targetSelect) {
   state.sitePickerTarget = targetSelect;
   const sheet = document.getElementById("site-picker-sheet");
   sheet.hidden = false;
   document.getElementById("site-picker-search").value = "";
+  const nearBtn = document.getElementById("btn-site-picker-near");
+  if (nearBtn) {
+    nearBtn.setAttribute("aria-pressed", state.nearPos ? "true" : "false");
+    nearBtn.onclick = toggleNearMe;
+  }
   renderSitePickerList("");
+}
+// « Près de moi » : tri par distance via la géolocalisation, seulement avec
+// permission. Sans permission, l'appli fonctionne normalement.
+async function toggleNearMe() {
+  const btn = document.getElementById("btn-site-picker-near");
+  if (state.nearPos) { state.nearPos = null; btn.setAttribute("aria-pressed", "false"); renderSitePickerList(document.getElementById("site-picker-search").value.toLowerCase()); return; }
+  if (!navigator.geolocation) { showToast("Géolocalisation indisponible sur cet appareil."); return; }
+  btn.disabled = true;
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      state.nearPos = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+      btn.disabled = false; btn.setAttribute("aria-pressed", "true");
+      renderSitePickerList(document.getElementById("site-picker-search").value.toLowerCase());
+    },
+    () => { btn.disabled = false; showToast("Position non autorisée. Tri par distance indisponible."); },
+    { enableHighAccuracy: true, timeout: 10000 },
+  );
 }
 function closeSitePicker() {
   document.getElementById("site-picker-sheet").hidden = true;
@@ -4423,6 +4457,14 @@ async function renderSitePickerList(query) {
   const all = state.refs.sites.filter((s) => !needle || (s.nom + " " + (s.adresse || "")).toLowerCase().includes(needle));
 
   const sections = [];
+  if (state.nearPos) {
+    const near = all
+      .filter((s) => s.lat != null && s.lon != null)
+      .map((s) => ({ ...s, _dist: haversineM(state.nearPos.lat, state.nearPos.lon, s.lat, s.lon) }))
+      .sort((a, b) => a._dist - b._dist)
+      .slice(0, 10);
+    sections.push({ title: "Près de moi", items: near });
+  }
   if (ranked.length) {
     sections.push({
       title: "5 derniers / suggérés",
@@ -4447,7 +4489,8 @@ async function renderSitePickerList(query) {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "sheet-item";
-      btn.innerHTML = `${escapeHtml(site.nom)}<span>${escapeHtml(site.adresse || "")}</span>`;
+      const distHtml = site._dist != null ? ` · ${escapeHtml(formatDistance(site._dist))}` : "";
+      btn.innerHTML = `${escapeHtml(site.nom)}<span>${escapeHtml(site.adresse || "")}${distHtml}</span>`;
       btn.addEventListener("click", () => {
         if (state.sitePickerTarget) {
           state.sitePickerTarget.value = String(site.id);
