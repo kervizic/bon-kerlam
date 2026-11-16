@@ -961,7 +961,7 @@ def shoot_beta21_swipe(ctx, prefix: str) -> None:
             page.wait_for_timeout(150)
             # 2) Ouverture déterministe du swipe de la 1re ligne (décalage = largeur
             #    réelle du panneau d'actions).
-            info = page.evaluate(
+            opened = page.evaluate(
                 """() => {
                   const c = document.querySelector('.lv-swipe');
                   if (!c) return { ok: false };
@@ -975,6 +975,8 @@ def shoot_beta21_swipe(ctx, prefix: str) -> None:
                   return { ok: true };
                 }"""
             )
+            if not opened.get("ok"):
+                beta21_failures.append(f"swipe/{theme}: aucune ligne .lv-swipe à ouvrir")
             page.wait_for_timeout(200)
             # 3) Vérifications de l'image produite.
             checks = page.evaluate(
@@ -1098,7 +1100,7 @@ def shoot_beta21_keyboard(ctx, prefix: str) -> None:
             " return b ? getComputedStyle(b).display : 'none'; }"
         )
         if sel_after != "none":
-            beta21_failures.append(f"clavier/selection: barre de sélection encore visible au clavier (display={sel_after})")
+            beta21_failures.append(f"clavier/selection: barre de sélection visible au clavier (display={sel_after})")
         print(f"   clavier-selection (avant={sel_before}, après={sel_after})")
     except Exception as exc:  # noqa: BLE001
         beta21_failures.append(f"clavier/selection: {exc}")
