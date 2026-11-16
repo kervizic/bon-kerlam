@@ -923,6 +923,12 @@ body.pdf-viewer-open { overflow: hidden; }
   .topbar { padding-left: 12px; padding-right: 12px; }
   /* En-tête mobile = logo seul : le sélecteur de vue passe dans le menu « Plus ». */
   .mode-switch-header { display: none !important; }
+  /* Clavier logiciel ouvert (beta.21.1) : la barre d'onglets du bas ET la barre de
+     sélection « Signer (N) » se masquent (norme iOS/Android) pour ne pas chevaucher
+     le champ actif / la barre d'accessoires, puis réapparaissent à la fermeture.
+     position:fixed -> aucun décalage du contenu (pas de saut de mise en page). */
+  body.keyboard-open .bottom-bar,
+  body.keyboard-open .selection-bar { display: none !important; }
 }
 @media (min-width: 900px) {
   /* Sur ordinateur, le sélecteur vit dans l'en-tête, jamais dans le tiroir. */

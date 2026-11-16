@@ -21,12 +21,24 @@ test("lettre complète : aucun manque", () => {
   assert.deepEqual(lvCompleteness(FULL_LV, FULL_TOURS, REFS), []);
 });
 
-test("lettre vide : liste tous les manques principaux", () => {
+test("tours facultatifs : lettre complète SANS aucun tour -> 0 manque, signature autorisée", () => {
+  // beta.21.1 : les tours ne bloquent jamais l'envoi en signature.
+  assert.deepEqual(lvCompleteness(FULL_LV, [], REFS), []);
+});
+
+test("tours facultatifs : aucune règle liée au nombre/contenu des tours", () => {
+  // Tours vides, sans chargement/déchargement/marchandise : aucun manque de type tour.
+  const codes = lvCompleteness(FULL_LV, [{ lignes: [] }, {}], REFS).map((m) => m.code);
+  assert.ok(codes.every((c) => !c.startsWith("tour")), `aucun code tour attendu, reçu : ${codes.join(", ")}`);
+  assert.deepEqual(lvCompleteness(FULL_LV, [{ lignes: [] }, {}], REFS), []);
+});
+
+test("lettre vide : liste les manques principaux (sans règle de tour)", () => {
   const codes = lvCompleteness({}, [], REFS).map((m) => m.code);
   assert.ok(codes.includes("client"));
   assert.ok(codes.includes("date"));
   assert.ok(codes.includes("contact"));
-  assert.ok(codes.includes("tours"));
+  assert.ok(!codes.includes("tours"), "la règle « Aucun tour » doit avoir disparu");
 });
 
 test("contact sans e-mail -> contact_email", () => {
@@ -44,17 +56,6 @@ test("destinataire identique mais client sans adresse -> adresse du client", () 
   const lv = { client_id: 2, date_etablissement: "2026-11-15", contact_id: 10, dest_identique: true };
   const codes = lvCompleteness(lv, FULL_TOURS, REFS).map((m) => m.code);
   assert.ok(codes.includes("destinataire_adresse"));
-});
-
-test("tour incomplet : déchargement + marchandise manquants, avec anchor et n°", () => {
-  const tours = [{ site_chargement_id: 5, site_dechargement_id: null, lignes: [] }];
-  const miss = lvCompleteness(FULL_LV, tours, REFS);
-  const codes = miss.map((m) => m.code);
-  assert.ok(codes.includes("tour_1_dechargement"));
-  assert.ok(codes.includes("tour_1_marchandise"));
-  const dech = miss.find((m) => m.code === "tour_1_dechargement");
-  assert.match(dech.label, /Tour 1 : site de déchargement manquant/);
-  assert.match(dech.anchor, /f-site-dechargement/);
 });
 
 test("chaque manque porte un anchor non vide", () => {

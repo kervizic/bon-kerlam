@@ -3,9 +3,9 @@
  * UNE fonction unique, pure et testable (réutilisable plus tard par l'envoi en
  * signature) : elle liste CE QUI MANQUE sur une lettre pour pouvoir la signer, avec
  * pour chaque manque un libellé court et un `anchor` (sélecteur CSS du champ à
- * corriger). Les mentions obligatoires viennent de l'arrêté du 9/11/1999 (client,
- * destinataire + adresse, date, au moins un tour chargement/déchargement + marchandise,
- * contact signataire avec e-mail).
+ * corriger). Les mentions obligatoires retenues : client, destinataire + adresse,
+ * date, contact signataire avec e-mail. Les tours (chargement/déchargement/
+ * marchandise) sont FACULTATIFS (beta.21.1) : ils ne bloquent jamais la signature.
  *
  * Aucune dépendance DOM : prend l'état (lv, tours) et des annuaires (clients,
  * contacts) et renvoie un tableau d'objets { code, label, anchor }.
@@ -73,25 +73,11 @@ export function lvCompleteness(lv, tours, refs) {
     }
   }
 
-  // Au moins un tour complet : chargement, déchargement ET marchandise.
-  if (tours.length === 0) {
-    out.push({ code: "tours", label: "Aucun tour : ajoutez chargement, déchargement et marchandise", anchor: "#tours-list" });
-  } else {
-    tours.forEach((t, i) => {
-      const n = i + 1;
-      const sel = `#tours-list .tour-card:nth-of-type(${n})`;
-      if (!t || t.site_chargement_id == null) {
-        out.push({ code: `tour_${n}_chargement`, label: `Tour ${n} : site de chargement manquant`, anchor: `${sel} .f-site-chargement` });
-      }
-      if (!t || t.site_dechargement_id == null) {
-        out.push({ code: `tour_${n}_dechargement`, label: `Tour ${n} : site de déchargement manquant`, anchor: `${sel} .f-site-dechargement` });
-      }
-      const hasGoods = t && Array.isArray(t.lignes) && t.lignes.some((l) => l && l.article_id != null);
-      if (!hasGoods) {
-        out.push({ code: `tour_${n}_marchandise`, label: `Tour ${n} : marchandise manquante`, anchor: `${sel} .f-ligne-article` });
-      }
-    });
-  }
+  // Les tours (chargement/déchargement/marchandise) sont FACULTATIFS (beta.21.1) :
+  // ils ne doivent JAMAIS bloquer l'envoi en signature. Aucune règle de complétude
+  // n'est attachée au nombre de tours ni à leur contenu — `tours` est ignoré ici
+  // (gardé dans la signature pour la compatibilité des appelants).
+  void tours;
 
   return out;
 }

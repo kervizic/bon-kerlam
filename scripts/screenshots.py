@@ -426,6 +426,7 @@ def shoot_combobox(ctx, prefix: str) -> None:
 
 beta19_failures: list[str] = []
 beta20_failures: list[str] = []
+beta21_failures: list[str] = []
 
 
 def _assert(cond: bool, msg: str) -> None:
@@ -925,38 +926,185 @@ def shoot_beta21_selection(ctx, prefix: str) -> None:
 
 def shoot_beta21_swipe(ctx, prefix: str) -> None:
     """beta.21 : ligne glissée vers la gauche -> actions à droite (Signer / PDF /
-    Corbeille rouge). Glissement simulé, repli JS déterministe pour la capture."""
+    Corbeille rouge, en dernier).
+
+    Correctif beta.21.1 : la capture précédente montrait en réalité la VISIONNEUSE
+    PDF restée ouverte (le geste souris partait pile sur le bouton PDF de la ligne,
+    dont le pointerdown/up déclenchait un clic -> ouverture du PDF). On ne simule
+    plus de geste souris fragile : on RÉINITIALISE d'abord l'état (ferme la
+    visionneuse PDF, referme tout swipe, remonte en haut) PUIS on ouvre le swipe de
+    façon déterministe (comme le fait le repli JS en prod) et on VÉRIFIE l'image :
+    visionneuse bien fermée, ligne décalée, panneau Signer / PDF / Corbeille visible
+    (corbeille en rouge et en dernier)."""
     for theme in ("clair", "sombre"):
         page = ctx.new_page()
         try:
             page.goto(f"{BASE}?demo=1&screen=mes-lv&role=chauffeur&theme={theme}", wait_until="load")
             page.wait_for_timeout(600)
-            content = page.locator(".lv-swipe .lv-swipe-content").first
-            box = content.bounding_box()
-            if box:
-                cy = box["y"] + box["height"] / 2
-                page.mouse.move(box["x"] + box["width"] - 20, cy)
-                page.mouse.down()
-                for dx in (40, 90, 140, 180):
-                    page.mouse.move(box["x"] + box["width"] - 20 - dx, cy, steps=4)
-                page.mouse.up()
-                page.wait_for_timeout(250)
-            # Repli déterministe : force l'ouverture si le geste n'a pas « pris ».
-            opened = page.evaluate(
-                """() => { const c = document.querySelector('.lv-swipe'); if (!c) return false;
-                   const sc = c.querySelector('.lv-swipe-content');
-                   const w = parseInt(getComputedStyle(c).getPropertyValue('--actions-w')) || 168;
-                   if (!c.classList.contains('is-swiped')) { c.classList.add('is-swiped');
-                     sc.style.transition='none'; sc.style.transform='translateX(-'+w+'px)'; }
-                   return true; }"""
+            # 1) Réinitialise l'état : ferme la visionneuse PDF si ouverte, referme
+            #    tout swipe, remet la liste en haut.
+            page.evaluate(
+                """() => {
+                  const ov = document.getElementById('pdf-viewer');
+                  if (ov) ov.hidden = true;
+                  const pages = document.getElementById('pdf-viewer-pages');
+                  if (pages) pages.innerHTML = '';
+                  document.body.classList.remove('pdf-viewer-open');
+                  document.querySelectorAll('.lv-swipe.is-swiped').forEach((c) => {
+                    c.classList.remove('is-swiped');
+                    const sc = c.querySelector('.lv-swipe-content');
+                    if (sc) { sc.style.transition = 'none'; sc.style.transform = ''; }
+                  });
+                  window.scrollTo(0, 0);
+                }"""
             )
             page.wait_for_timeout(150)
+            # 2) Ouverture déterministe du swipe de la 1re ligne (décalage = largeur
+            #    réelle du panneau d'actions).
+            info = page.evaluate(
+                """() => {
+                  const c = document.querySelector('.lv-swipe');
+                  if (!c) return { ok: false };
+                  const sc = c.querySelector('.lv-swipe-content');
+                  const panel = c.querySelector('.lv-row-actions');
+                  const w = (panel && panel.offsetWidth)
+                    || parseInt(getComputedStyle(c).getPropertyValue('--actions-w')) || 168;
+                  c.classList.add('is-swiped');
+                  sc.style.transition = 'none';
+                  sc.style.transform = 'translateX(-' + w + 'px)';
+                  return { ok: true };
+                }"""
+            )
+            page.wait_for_timeout(200)
+            # 3) Vérifications de l'image produite.
+            checks = page.evaluate(
+                """() => {
+                  const pdfOpen = document.body.classList.contains('pdf-viewer-open')
+                    || !(document.getElementById('pdf-viewer') || { hidden: true }).hidden;
+                  const c = document.querySelector('.lv-swipe.is-swiped');
+                  const sc = c && c.querySelector('.lv-swipe-content');
+                  const tf = sc ? getComputedStyle(sc).transform : 'none';
+                  // translateX négatif => matrix(...) avec e (tx) < 0.
+                  let shifted = false;
+                  const m = tf && tf.match(/matrix\\(([^)]+)\\)/);
+                  if (m) { const parts = m[1].split(',').map((s) => parseFloat(s)); shifted = parts[4] < -10; }
+                  const btns = c ? Array.from(c.querySelectorAll('.lv-row-action')) : [];
+                  const labels = btns.map((b) => (b.getAttribute('aria-label') || '').trim());
+                  const last = btns[btns.length - 1];
+                  const lastIsTrash = !!(last && last.classList.contains('lv-row-action-corbeille')
+                    && last.classList.contains('is-danger'));
+                  return { pdfOpen, shifted, labels, lastIsTrash };
+                }"""
+            )
+            if checks["pdfOpen"]:
+                beta21_failures.append(f"swipe/{theme}: la visionneuse PDF est ouverte sur la capture")
+            if not checks["shifted"]:
+                beta21_failures.append(f"swipe/{theme}: la ligne n'est pas décalée (pas de swipe visible)")
+            for want in ("Signer", "PDF", "Corbeille"):
+                if want not in checks["labels"]:
+                    beta21_failures.append(f"swipe/{theme}: action « {want} » absente du panneau ({checks['labels']})")
+            if not checks["lastIsTrash"]:
+                beta21_failures.append(f"swipe/{theme}: la Corbeille (rouge) n'est pas la dernière action")
             page.screenshot(path=str(OUT / f"{prefix}-swipe-actions-{theme}.png"), full_page=False)
-            print(f"   swipe-actions-{theme} (panneau visible={opened})")
+            print(f"   swipe-actions-{theme} (PDF ouvert={checks['pdfOpen']}, décalée={checks['shifted']}, "
+                  f"actions={checks['labels']}, corbeille-en-dernier={checks['lastIsTrash']})")
         except Exception as exc:  # noqa: BLE001
+            beta21_failures.append(f"swipe/{theme}: {exc}")
             print(f"   !! swipe/{theme}: {exc}")
         finally:
             page.close()
+
+
+def shoot_beta21_keyboard(ctx, prefix: str) -> None:
+    """beta.21.1 (WebKit, Safari iOS) : clavier logiciel ouvert -> la barre d'onglets
+    du bas (et la barre de sélection « Signer (N) ») se masquent (norme iOS/Android),
+    sans saut de mise en page. Signal principal = focusin sur un champ éditable
+    (fiable en PWA standalone, où visualViewport est bogué — WebKit #218983) ;
+    visualViewport réduit en complément. Captures clair + sombre : champ en focus,
+    barre d'onglets masquée."""
+    for theme in ("clair", "sombre"):
+        page = ctx.new_page()
+        try:
+            page.goto(f"{BASE}?demo=1&screen=today&role=chauffeur&theme={theme}", wait_until="load")
+            page.wait_for_timeout(600)
+            # Barre d'onglets BIEN visible avant focus.
+            before = page.evaluate(
+                "() => { const b = document.querySelector('.bottom-bar');"
+                " return b ? getComputedStyle(b).display : 'none'; }"
+            )
+            if before == "none":
+                beta21_failures.append(f"clavier/{theme}: barre d'onglets déjà masquée avant focus")
+            # Focus d'un champ éditable (combobox Client) -> focusin (signal principal).
+            page.evaluate(
+                """() => {
+                  const sel = document.getElementById('f-client');
+                  const input = sel && sel.parentNode.querySelector('.cb-input');
+                  if (input) { input.scrollIntoView({ block: 'center' }); input.focus(); }
+                }"""
+            )
+            # Complément : visualViewport réduit (clavier matériel / edge cases).
+            page.evaluate(
+                """(h) => {
+                  if (!window.visualViewport) return;
+                  try { Object.defineProperty(window.visualViewport, 'height',
+                    { configurable: true, get: () => h }); } catch (e) {}
+                  window.visualViewport.dispatchEvent(new Event('resize'));
+                }""",
+                430,
+            )
+            page.wait_for_timeout(300)
+            res = page.evaluate(
+                """() => {
+                  const b = document.querySelector('.bottom-bar');
+                  return { open: document.body.classList.contains('keyboard-open'),
+                           display: b ? getComputedStyle(b).display : 'none' };
+                }"""
+            )
+            if not res["open"]:
+                beta21_failures.append(f"clavier/{theme}: body.keyboard-open absent au focus d'un champ")
+            if res["display"] != "none":
+                beta21_failures.append(
+                    f"clavier/{theme}: barre d'onglets encore visible au clavier (display={res['display']})"
+                )
+            page.screenshot(path=str(OUT / f"{prefix}-clavier-barre-masquee-{theme}.png"), full_page=False)
+            print(f"   clavier-barre-masquee-{theme} (keyboard-open={res['open']}, bottom-bar={res['display']})")
+        except Exception as exc:  # noqa: BLE001
+            beta21_failures.append(f"clavier/{theme}: {exc}")
+            print(f"   !! clavier/{theme}: {exc}")
+        finally:
+            page.close()
+
+    # Même logique pour la barre de SÉLECTION « Signer (N) » : visible quand une
+    # lettre est cochée, masquée au clavier (body.keyboard-open). La vue « Mes
+    # lettres » ne contient aucun champ texte à focaliser ; on valide donc la règle
+    # CSS directement : avec has-selection la barre est visible, et l'ajout de
+    # keyboard-open (ce qu'applique wireKeyboardAwareBars au focusin) la masque.
+    page = ctx.new_page()
+    try:
+        page.goto(f"{BASE}?demo=1&screen=mes-lv&role=chauffeur&theme=clair", wait_until="load")
+        page.wait_for_timeout(600)
+        page.locator("#mes-lv-list .lv-row-check input").first.check()
+        page.wait_for_timeout(250)
+        sel_before = page.evaluate(
+            "() => { const b = document.getElementById('selection-bar');"
+            " return b ? getComputedStyle(b).display : 'none'; }"
+        )
+        if sel_before == "none":
+            beta21_failures.append("clavier/selection: barre de sélection absente alors qu'une lettre est cochée")
+        page.evaluate("() => document.body.classList.add('keyboard-open')")
+        page.wait_for_timeout(150)
+        sel_after = page.evaluate(
+            "() => { const b = document.getElementById('selection-bar');"
+            " return b ? getComputedStyle(b).display : 'none'; }"
+        )
+        if sel_after != "none":
+            beta21_failures.append(f"clavier/selection: barre de sélection encore visible au clavier (display={sel_after})")
+        print(f"   clavier-selection (avant={sel_before}, après={sel_after})")
+    except Exception as exc:  # noqa: BLE001
+        beta21_failures.append(f"clavier/selection: {exc}")
+        print(f"   !! clavier/selection: {exc}")
+    finally:
+        page.close()
 
 
 def shoot_beta21_pdf_viewer(ctx, prefix: str) -> None:
@@ -1113,6 +1261,8 @@ def main() -> int:
         shoot_beta21_pdf_viewer(wk_iphone2, "webkit-iphone")
         print("WebKit (Safari iOS, DSR 2) : onglet Chauffeur anthracite beta.21")
         shoot_beta21_contraste_onglet(wk_iphone2, "webkit-iphone")
+        print("WebKit (Safari iOS, DSR 2) : barre d'onglets masquée au clavier beta.21.1")
+        shoot_beta21_keyboard(wk_iphone2, "webkit-iphone")
         wk_iphone2.close()
         wk.close()
 
@@ -1161,6 +1311,13 @@ def main() -> int:
         rc = 1
     else:
         print("OK : infobulles beta.20 (icône ⓘ, bulle Date « Jour du transport. », pas de chevauchement).")
+    if beta21_failures:
+        print("beta.21.1 KO (swipe réel / barre d'onglets au clavier) :")
+        for f in beta21_failures:
+            print("  -", f)
+        rc = 1
+    else:
+        print("OK : beta.21.1 (swipe visible sans visionneuse PDF ; barre d'onglets masquée au clavier).")
     return rc
 
 

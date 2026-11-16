@@ -145,7 +145,7 @@ import { swipeActionsFor, attachSwipe, closeOpenSwipe } from "./swipe-actions.js
 // pdf-viewer.js (et pdf.js) chargés en import DYNAMIQUE à la 1re ouverture (g).
 import { enhanceSelect, refreshCombobox, ensureOption } from "./combobox.js?v=17";
 import { initTooltips } from "./tooltips.js?v=20";
-import { lvCompleteness, entityMissingFields } from "./completeness.js?v=20";
+import { lvCompleteness, entityMissingFields } from "./completeness.js?v=211";
 
 /* ============================================================== IndexedDB == */
 /* Deux object stores :
@@ -1724,6 +1724,61 @@ function wireLvCompleteness() {
   const toursList = document.getElementById("tours-list");
   if (toursList && typeof MutationObserver !== "undefined") {
     new MutationObserver(scheduleLvCompleteness).observe(toursList, { childList: true, subtree: true });
+  }
+}
+
+/* ===================================== Barre d'onglets du bas & clavier (beta.21.1)
+ * Norme iOS/Android : la barre d'onglets du bas (et la barre de sélection
+ * « Signer (N) ») se masque dès que le clavier logiciel s'ouvre — sinon elle
+ * chevauche le champ actif et la barre d'accessoires — puis réapparaît à la
+ * fermeture. Le masquage est purement CSS (body.keyboard-open) ; les barres
+ * étant en position:fixed, les masquer ne décale pas le contenu (aucun saut de
+ * mise en page).
+ *
+ * Signal PRINCIPAL : focusin/focusout sur un champ éditable. C'est le signal
+ * fiable en PWA standalone sur iOS, où visualViewport est bogué (WebKit #218983 :
+ * la hauteur ne suit pas toujours le clavier). visualViewport sert de COMPLÉMENT
+ * (clavier matériel, cas où focusout n'arrive pas). */
+function isKeyboardField(el) {
+  if (!el) return false;
+  if (el.isContentEditable) return true;
+  const tag = el.tagName;
+  if (tag === "TEXTAREA" || tag === "SELECT") return true;
+  if (tag === "INPUT") {
+    const t = (el.type || "text").toLowerCase();
+    // Les types sans clavier logiciel (boutons, cases, curseurs…) n'y comptent pas.
+    return !["button", "submit", "reset", "checkbox", "radio", "range", "color", "file", "image"].includes(t);
+  }
+  return false;
+}
+
+function wireKeyboardAwareBars() {
+  const body = document.body;
+  const setOpen = (open) => body.classList.toggle("keyboard-open", !!open);
+  const fieldFocused = () => isKeyboardField(document.activeElement);
+
+  const vv = window.visualViewport;
+  const vvShrunk = () => {
+    if (!vv) return false;
+    // Clavier présumé ouvert si la fenêtre visuelle perd plus de 25 % de hauteur.
+    return window.innerHeight - vv.height > window.innerHeight * 0.25;
+  };
+
+  document.addEventListener("focusin", (e) => {
+    if (isKeyboardField(e.target)) setOpen(true);
+  });
+  document.addEventListener("focusout", () => {
+    // On laisse le focus se déplacer (champ -> champ) avant de décider de réafficher.
+    setTimeout(() => { if (!fieldFocused() && !vvShrunk()) setOpen(false); }, 60);
+  });
+
+  if (vv) {
+    const onVv = () => {
+      if (vvShrunk()) setOpen(true);
+      else if (!fieldFocused()) setOpen(false);
+    };
+    vv.addEventListener("resize", onVv);
+    vv.addEventListener("scroll", onVv);
   }
 }
 
@@ -4662,6 +4717,7 @@ async function boot() {
   // rendues dynamiquement (tours, fiches rapides) rappellent initTooltips().
   initTooltips(document);
   wireLvCompleteness();
+  wireKeyboardAwareBars();
   // Mode démo (captures CI) : exposer l'ouverture de fiche rapide pour scénariser
   // la capture « fiche contact avec ⓘ ». Jamais exposé hors démo.
   if (isDemoMode()) window.openQuickCreate = openQuickCreate;

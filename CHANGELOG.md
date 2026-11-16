@@ -4,6 +4,31 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.21.1] — 2026-11-16
+
+Correctifs ciblés sur la saisie mobile : tours facultatifs, barre d'onglets qui
+s'efface au clavier, et capture CI du swipe corrigée.
+
+### Correctifs
+- **Tours facultatifs** : les tours (chargement / déchargement / marchandise) ne
+  **bloquent plus jamais** l'envoi en signature. La règle « Aucun tour » et toute
+  vérification liée au nombre ou au contenu des tours sont retirées du contrôle de
+  complétude (`lvCompleteness`) et donc du bandeau « N éléments à compléter avant
+  signature ». Le serveur n'imposait déjà aucune condition sur les tours. Une
+  lettre complète **sans aucun tour** affiche désormais **0 élément manquant**.
+- **Barre d'onglets du bas & clavier** (norme iOS/Android) : la barre d'onglets
+  (et la barre de sélection « Signer (N) ») se **masque quand le clavier logiciel
+  s'ouvre** — focus sur un champ éditable (input/textarea/select) ou `visualViewport`
+  réduit — et **réapparaît à la fermeture**, sans saut de mise en page. Signal
+  **principal** : `focusin`/`focusout` (fiable en PWA standalone, où `visualViewport`
+  est bogué, cf. WebKit #218983) ; `visualViewport` en complément.
+- **Capture CI du swipe** : l'image `webkit-iphone-swipe-actions-*` montrait en
+  réalité la **visionneuse PDF restée ouverte** (le geste souris partait sur le
+  bouton PDF de la ligne). Le script **réinitialise l'état** (ferme la visionneuse,
+  referme tout swipe) **avant** la capture, ouvre le swipe de façon déterministe et
+  **vérifie l'image** (ligne décalée laissant voir Signer / PDF / Corbeille, rouge
+  en dernier). Nouvelle capture « barre d'onglets masquée au clavier ».
+
 ## [0.1.0-beta.21] — 2026-11-16
 
 Liste « Mes lettres de voiture » : actions à la iOS, visionneuse PDF intégrée,
