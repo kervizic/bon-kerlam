@@ -326,6 +326,14 @@ export async function listDoublonsSites() {
   if (error) throw error;
   return data || [];
 }
+export async function listFusions({ type, gardeId } = {}) {
+  let q = requireClient().from("fusions").select("*").is("annulee_at", null).order("id", { ascending: false });
+  if (type) q = q.eq("type", type);
+  if (gardeId) q = q.eq("garde_id", gardeId);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data || [];
+}
 
 const crudCamions = makeCrud("camions");
 export const createCamion = crudCamions.create;

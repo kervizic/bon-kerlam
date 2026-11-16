@@ -86,6 +86,7 @@ function demoCrudLocal(table) {
 // Fusion démo : marque les fiches fusionnées, journalise, réversible en mémoire.
 function demoFusionner(kind, gardeId, fusionnesIds) {
   const table = kind === "clients" ? "clients" : kind === "sites" ? "sites" : "site_societes";
+  const type = kind === "clients" ? "client" : kind === "sites" ? "site" : "site_societe";
   let done = 0;
   for (const fid of fusionnesIds || []) {
     if (String(fid) === String(gardeId)) continue;
@@ -94,15 +95,15 @@ function demoFusionner(kind, gardeId, fusionnesIds) {
     const snapshot = { ...row };
     row.merged_into_id = gardeId;
     if (table === "sites") row.statut = "termine"; else row.actif = false;
-    demoDb.fusions.push({ id: Date.now() + demoDb.fusions.length, type: kind, garde_id: gardeId, fusionne_id: fid, snapshot });
+    demoDb.fusions.push({ id: Date.now() + demoDb.fusions.length, type, garde_id: gardeId, fusionne_id: fid, snapshot });
     done += 1;
   }
-  return { type: kind, garde: gardeId, fusionnes: done };
+  return { type, garde: gardeId, fusionnes: done };
 }
 function demoFusionAnnuler(fusionId) {
   const fu = byId(demoDb.fusions, fusionId);
   if (!fu || fu.annulee_at) return { deja_annulee: !!fu };
-  const table = fu.type === "clients" ? "clients" : fu.type === "sites" ? "sites" : "site_societes";
+  const table = fu.type === "client" ? "clients" : fu.type === "site" ? "sites" : "site_societes";
   const row = byId(demoDb[table], fu.fusionne_id);
   if (row) { row.merged_into_id = null; if (table === "sites") row.statut = "actif"; else row.actif = true; }
   fu.annulee_at = new Date().toISOString();
@@ -520,6 +521,15 @@ export async function listDoublonsClients() {
 export async function listDoublonsSites() {
   if (DEMO) return demoDb.doublons_sites || [];
   return live.listDoublonsSites();
+}
+export async function listFusions(opts) {
+  if (DEMO) {
+    return (demoDb.fusions || []).filter((f) => !f.annulee_at
+      && (!opts || !opts.type || f.type === opts.type)
+      && (!opts || !opts.gardeId || String(f.garde_id) === String(opts.gardeId)))
+      .sort((a, b) => b.id - a.id);
+  }
+  return live.listFusions(opts);
 }
 
 export async function createArticle(fields) { return DEMO ? dArticles.create(fields) : live.createArticle(fields); }

@@ -1369,3 +1369,29 @@ body.qc-lock { position: fixed; left: 0; right: 0; width: 100%; overflow: hidden
 /* Flash bref quand on saute à un champ depuis le bandeau. */
 @keyframes lvc-flash { 0%, 100% { background: transparent; } 30% { background: rgba(21, 101, 192, 0.18); } }
 .lvc-flash { animation: lvc-flash 1s ease; border-radius: 6px; }
+
+/* ===================== beta.22 (C) : fusion de fiches, bandeau doublons, toast */
+.toast {
+  position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom));
+  transform: translateX(-50%); z-index: 120;
+  display: flex; align-items: center; gap: 14px;
+  max-width: 92vw; padding: 12px 16px; border-radius: 10px;
+  background: var(--c-anthracite); color: #fff; font-size: 14px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, .25);
+}
+.toast[hidden] { display: none; }
+.toast-action { background: none; border: none; color: var(--c-orange); font-weight: 700; cursor: pointer; padding: 4px 6px; }
+.toast-action[hidden] { display: none; }
+
+.fusion-item { display: flex; align-items: center; gap: 12px; padding: 10px 6px; border-bottom: 1px solid var(--border); cursor: pointer; }
+.fusion-item-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.fusion-item-main b { overflow: hidden; text-overflow: ellipsis; }
+.fusion-item-main small { color: var(--text-muted); font-size: 12px; }
+.fusion-keep { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+.fusion-keep input:disabled { opacity: .3; }
+
+.doublons-banner { border: 1px solid var(--c-orange); background: var(--bg); border-radius: var(--radius); padding: 12px; margin-bottom: 12px; }
+.doublons-banner h3 { margin: 0 0 8px; font-size: 14px; }
+.doublons-pair { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; font-size: 14px; border-top: 1px solid var(--border); }
+.doublons-pair:first-of-type { border-top: none; }
+.entity-toolbar-actions { display: inline-flex; gap: 8px; align-items: center; }

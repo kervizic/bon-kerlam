@@ -141,7 +141,7 @@ import {
   listClientAdresses, createClientAdresse, updateClientAdresse, deleteClientAdresse,
   listSiteSocietes, createSiteSociete, updateSiteSociete,
   rpcFusionnerClients, rpcFusionnerSites, rpcFusionnerSiteSocietes, rpcFusionAnnuler,
-  listDoublonsClients, listDoublonsSites,
+  listDoublonsClients, listDoublonsSites, listFusions,
 } from "./data.js";
 
 import { initInstall } from "./install.js?v=13";
@@ -3072,6 +3072,201 @@ function renderProjetCard(p, startOpen = false) {
 }
 
 /* ===================================================================== Clients == */
+/* ===================================================================== *
+ * beta.22 (C) : fusion de fiches (Bureau) + bandeau doublons + toast.    *
+ * Sélection de 2+ fiches -> choix de la gardée -> fusion réversible.     *
+ * ===================================================================== */
+let toastTimer = null;
+function showToast(message, actionLabel, actionFn) {
+  const el = document.getElementById("toast");
+  const msg = document.getElementById("toast-msg");
+  const act = document.getElementById("toast-action");
+  if (!el) return;
+  msg.textContent = message;
+  if (actionLabel && actionFn) {
+    act.hidden = false;
+    act.textContent = actionLabel;
+    act.onclick = () => { hideToast(); actionFn(); };
+  } else {
+    act.hidden = true;
+    act.onclick = null;
+  }
+  el.hidden = false;
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(hideToast, actionLabel ? 8000 : 4000);
+}
+function hideToast() {
+  const el = document.getElementById("toast");
+  if (el) el.hidden = true;
+  if (toastTimer) { clearTimeout(toastTimer); toastTimer = null; }
+}
+
+const FUSION_SPECS = {
+  clients: {
+    titre: "Fusionner des clients", type: "client",
+    listId: "list-clients", newBtnId: "btn-new-client",
+    list: listClients, rpc: rpcFusionnerClients, doublons: listDoublonsClients,
+    reload: loadClientsScreen,
+    label: (r) => r.raison_sociale || `Client #${r.id}`,
+    sub: (r) => r.adresse || (Array.isArray(r.aliases) ? r.aliases.join(", ") : (r.alias || "")),
+  },
+  sites: {
+    titre: "Fusionner des sites", type: "site",
+    listId: "list-sites", newBtnId: "btn-new-site",
+    list: listSites, rpc: rpcFusionnerSites, doublons: listDoublonsSites,
+    reload: loadSitesScreen,
+    label: (r) => r.nom || `Site #${r.id}`,
+    sub: (r) => r.adresse || "",
+  },
+};
+
+let fusionState = null;
+
+async function openFusionSheet(kind, preselectIds = []) {
+  const spec = FUSION_SPECS[kind];
+  if (!spec) return;
+  const pre = preselectIds.map(String);
+  fusionState = { spec, rows: [], checked: new Set(pre), garde: pre[0] || null };
+  document.getElementById("fusion-title").textContent = spec.titre;
+  const sheet = document.getElementById("fusion-sheet");
+  const search = document.getElementById("fusion-search");
+  search.value = "";
+  let rows = [];
+  try { rows = await spec.list(); } catch (err) { rows = []; }
+  fusionState.rows = rows.filter((r) => !r.merged_into_id);
+  renderFusionList("");
+  search.oninput = () => renderFusionList(search.value.toLowerCase());
+  document.getElementById("btn-fusion-close").onclick = closeFusionSheet;
+  document.getElementById("btn-fusion-confirm").onclick = onFusionConfirm;
+  sheet.onclick = (e) => { if (e.target === sheet) closeFusionSheet(); };
+  sheet.hidden = false;
+}
+function closeFusionSheet() {
+  const sheet = document.getElementById("fusion-sheet");
+  if (sheet) sheet.hidden = true;
+  fusionState = null;
+}
+function renderFusionList(query) {
+  if (!fusionState) return;
+  const { spec, rows, checked, garde } = fusionState;
+  const listEl = document.getElementById("fusion-list");
+  listEl.innerHTML = "";
+  const filtered = !query ? rows : rows.filter((r) =>
+    `${spec.label(r)} ${spec.sub(r)}`.toLowerCase().includes(query));
+  for (const r of filtered) {
+    const id = String(r.id);
+    const item = document.createElement("label");
+    item.className = "fusion-item";
+    const check = document.createElement("input");
+    check.type = "checkbox"; check.className = "fusion-check"; check.value = id;
+    check.checked = checked.has(id);
+    const main = document.createElement("span");
+    main.className = "fusion-item-main";
+    const b = document.createElement("b"); b.textContent = spec.label(r);
+    const s = document.createElement("small"); s.textContent = spec.sub(r);
+    main.append(b, s);
+    const keepWrap = document.createElement("span");
+    keepWrap.className = "fusion-keep";
+    const radio = document.createElement("input");
+    radio.type = "radio"; radio.name = "fusion-garde"; radio.value = id;
+    radio.checked = garde === id; radio.disabled = !checked.has(id);
+    radio.title = "Garder cette fiche";
+    const kl = document.createElement("span"); kl.textContent = "Garder";
+    keepWrap.append(kl, radio);
+    check.addEventListener("change", () => {
+      if (check.checked) { checked.add(id); if (!fusionState.garde) fusionState.garde = id; }
+      else { checked.delete(id); if (fusionState.garde === id) fusionState.garde = [...checked][0] || null; }
+      renderFusionList(query);
+    });
+    radio.addEventListener("change", () => { fusionState.garde = id; updateFusionConfirm(); });
+    // le clic sur la ligne (hors radio) bascule la case
+    item.addEventListener("click", (e) => {
+      if (e.target === radio || e.target === check) return;
+      check.checked = !check.checked;
+      check.dispatchEvent(new Event("change"));
+      e.preventDefault();
+    });
+    item.append(check, main, keepWrap);
+    listEl.appendChild(item);
+  }
+  updateFusionConfirm();
+}
+function updateFusionConfirm() {
+  if (!fusionState) return;
+  const btn = document.getElementById("btn-fusion-confirm");
+  const { checked, garde } = fusionState;
+  const ok = checked.size >= 2 && garde && checked.has(garde);
+  btn.disabled = !ok;
+  btn.textContent = ok ? `Fusionner ${checked.size} fiches dans la gardée` : "Fusionner";
+}
+async function onFusionConfirm() {
+  if (!fusionState) return;
+  const { spec, checked, garde } = fusionState;
+  if (checked.size < 2 || !garde) return;
+  const others = [...checked].filter((id) => id !== garde).map((id) => Number(id));
+  await performFusion(spec, Number(garde), others);
+}
+async function performFusion(spec, gardeId, otherIds) {
+  try {
+    await spec.rpc(gardeId, otherIds);
+    let undoIds = [];
+    try {
+      const fusions = await listFusions({ type: spec.type, gardeId });
+      undoIds = fusions.slice(0, otherIds.length).map((f) => f.id);
+    } catch (err) { /* ignore */ }
+    closeFusionSheet();
+    await spec.reload();
+    showToast(`Fusion effectuée (${otherIds.length + 1} fiches).`, "Annuler", async () => {
+      for (const id of undoIds) { try { await rpcFusionAnnuler(id); } catch (err) { /* ignore */ } }
+      await spec.reload();
+      showToast("Fusion annulée.");
+    });
+  } catch (err) {
+    alert("Fusion impossible : " + (err.message || err));
+  }
+}
+function buildDoublonsBanner(kind, pairs) {
+  const banner = document.createElement("div");
+  banner.className = "doublons-banner";
+  banner.id = `doublons-${kind}`;
+  const h = document.createElement("h3");
+  h.textContent = `Doublons possibles (${pairs.length})`;
+  banner.appendChild(h);
+  for (const p of pairs.slice(0, 8)) {
+    const row = document.createElement("div");
+    row.className = "doublons-pair";
+    const txt = document.createElement("span");
+    txt.textContent = `${p.nom_a} · ${p.nom_b}`;
+    const btn = document.createElement("button");
+    btn.type = "button"; btn.className = "btn btn-secondary btn-sm";
+    btn.textContent = "Fusionner";
+    btn.addEventListener("click", () => openFusionSheet(kind, [p.id_a, p.id_b]));
+    row.append(txt, btn);
+    banner.appendChild(row);
+  }
+  return banner;
+}
+async function initFusionUI(kind) {
+  const spec = FUSION_SPECS[kind];
+  const listEl = document.getElementById(spec.listId);
+  const newBtn = document.getElementById(spec.newBtnId);
+  if (newBtn && !document.getElementById(`btn-fusionner-${kind}`)) {
+    const b = document.createElement("button");
+    b.type = "button"; b.id = `btn-fusionner-${kind}`;
+    b.className = "btn btn-secondary btn-fusionner-toolbar";
+    b.textContent = "Fusionner";
+    b.addEventListener("click", () => openFusionSheet(kind, []));
+    newBtn.insertAdjacentElement("afterend", b);
+  }
+  const old = document.getElementById(`doublons-${kind}`);
+  if (old) old.remove();
+  let pairs = [];
+  try { pairs = await spec.doublons(); } catch (err) { pairs = []; }
+  if (pairs.length && listEl && listEl.parentNode) {
+    listEl.parentNode.insertBefore(buildDoublonsBanner(kind, pairs), listEl);
+  }
+}
+
 async function loadClientsScreen() {
   const listEl = document.getElementById("list-clients");
   listEl.innerHTML = '<p class="muted">Chargement…</p>';
@@ -3107,6 +3302,7 @@ async function loadClientsScreen() {
       alert("Création impossible : " + (e.message || e));
     }
   };
+  initFusionUI("clients");
 }
 
 function renderClientCard(c, startOpen = false) {
@@ -3298,6 +3494,7 @@ async function loadSitesScreen() {
       alert("Création impossible : " + (e.message || e));
     }
   };
+  initFusionUI("sites");
 }
 
 function renderSiteCard(s, startOpen = false) {
