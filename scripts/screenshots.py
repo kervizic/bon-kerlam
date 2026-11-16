@@ -105,10 +105,8 @@ def shoot_lv_modif(ctx, prefix: str) -> None:
         undo_before = page.locator("#btn-undo").is_hidden()
         page.screenshot(path=str(OUT / f"{prefix}-lv-avant-modif-clair.png"), full_page=False)
         print("   lv-avant-modif (undo masqué:", undo_before, ")")
-        field = page.locator(
-            "#view-today input[type='time'], #view-today input[type='text'], "
-            "#view-today input[type='number']"
-        ).first
+        # Premier créneau horaire VISIBLE (éviter #f-dest-legacy, caché).
+        field = page.locator("#creneaux-list input[type='time']").first
         # Centrer le champ (sinon la topbar fixe / le bandeau peuvent intercepter le clic).
         field.evaluate("el => el.scrollIntoView({block: 'center'})")
         page.wait_for_timeout(150)
@@ -462,7 +460,8 @@ def _open_create_sheet(page, select_id: str) -> None:
 
 def _sheet_sane(page, who: str) -> None:
     """Fiche rapide : visible, champs = simples <input> (pas de combobox imbriqué),
-    libellés visibles, bouton Enregistrer présent."""
+    libellés visibles, bouton ✕ (fermer) présent. beta.20 : plus de bouton
+    « Enregistrer » (enregistrement en temps réel)."""
     info = page.evaluate(
         """() => {
           const sheet = document.getElementById('quick-create-sheet');
@@ -470,17 +469,19 @@ def _sheet_sane(page, who: str) -> None:
           const inputs = body ? body.querySelectorAll('input') : [];
           const nestedCb = body ? body.querySelectorAll('.cb-input, .combobox').length : -1;
           const labels = body ? body.querySelectorAll('.field label').length : 0;
-          const save = document.getElementById('btn-quick-create-save');
+          const close = document.getElementById('btn-quick-create-close');
+          const noSave = !document.getElementById('btn-quick-create-save');
           const title = (document.getElementById('quick-create-title')||{}).textContent || '';
           return { open: sheet && !sheet.hidden, n: inputs.length, nestedCb, labels,
-                   save: !!save, title: title.trim() };
+                   close: !!close, noSave, title: title.trim() };
         }"""
     )
     _assert(info["open"], f"{who}: la fiche rapide ne s'ouvre pas")
     _assert(info["nestedCb"] == 0, f"{who}: combobox imbriqué dans la fiche ({info['nestedCb']})")
     _assert(info["n"] >= 1, f"{who}: aucun champ texte dans la fiche")
     _assert(info["labels"] >= info["n"], f"{who}: libellés manquants ({info['labels']}/{info['n']})")
-    _assert(info["save"], f"{who}: bouton Enregistrer absent")
+    _assert(info["close"], f"{who}: bouton ✕ (fermer) absent")
+    _assert(info["noSave"], f"{who}: un bouton « Enregistrer » subsiste")
 
 
 def shoot_beta20_fiches(ctx, prefix: str) -> None:
@@ -1035,12 +1036,12 @@ def main() -> int:
     else:
         print("OK : champs Date / Heures alignés comme les selects (WebKit).")
     if beta19_failures:
-        print("FICHES RAPIDES beta.19 KO (champs / clavier / e-mail / libellé) :")
+        print("FICHES RAPIDES beta.20 KO (champs / libellés / ✕ / sans Enregistrer) :")
         for f in beta19_failures:
             print("  -", f)
         rc = 1
     else:
-        print("OK : fiches rapides beta.19 (champs texte, clavier, e-mail, Contact signataire).")
+        print("OK : fiches rapides beta.20 (champs, libellés, ✕, enregistrement temps réel).")
     if beta20_failures:
         print("INFOBULLES beta.20 KO (icône / ouverture / texte Date / chevauchement) :")
         for f in beta20_failures:
