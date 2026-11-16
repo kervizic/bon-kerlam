@@ -10,7 +10,6 @@ Règles (cf. 0021) :
 
 from conftest import as_postgres, as_user
 
-
 # Compteur de jour pour garantir des date_etablissement distinctes (contrainte
 # UNIQUE lv_projet_jour_uidx : une lettre par projet et par jour).
 _JOUR = [0]
