@@ -1172,11 +1172,13 @@ def shoot_sites_groupes(ctx, prefix: str) -> None:
             page.wait_for_timeout(400)
             info = page.evaluate(
                 """() => {
-                    const items=[...document.querySelectorAll('#site-picker-list .sheet-item')]
-                      .map(b=>({t:b.textContent.replace(/\\s+/g,' ').trim(), g:b.classList.contains('sheet-item-group')}));
+                    const its = [...document.querySelectorAll('#site-picker-list .sheet-item')];
+                    const grp = (b) => b.classList.contains('sheet-item-group');
+                    const txt = (b) => b.textContent.replace(/\\s+/g, ' ').trim();
                     return {
-                      cemexGroup: items.some(i=>i.g && /Cemex/.test(i.t) && /adresses/.test(i.t)),
-                      cemexFlat: items.some(i=>!i.g && /^Cemex /.test(i.t)),
+                      cemexGroup: its.some((b) => grp(b)
+                        && /Cemex/.test(txt(b)) && /adresses/.test(txt(b))),
+                      cemexFlat: its.some((b) => !grp(b) && /^Cemex /.test(txt(b))),
                     };
                 }"""
             )
@@ -1206,7 +1208,10 @@ def shoot_sites_groupes(ctx, prefix: str) -> None:
             if not adr["hasStripped"]:
                 beta221_failures.append(f"sites-groupes/{theme}: adresse Cemex non affichée sans préfixe")
             page.screenshot(path=str(OUT / f"{prefix}-sites-groupes-cemex-{theme}.png"), full_page=False)
-            page.evaluate("() => { const b=document.querySelector('#site-picker-list .sheet-back'); if (b) b.click(); }")
+            page.evaluate(
+                "() => { const b = document.querySelector('#site-picker-list .sheet-back');"
+                " if (b) b.click(); }"
+            )
             page.wait_for_timeout(150)
             page.fill("#site-picker-search", "ivry")
             page.wait_for_timeout(300)
@@ -1215,7 +1220,7 @@ def shoot_sites_groupes(ctx, prefix: str) -> None:
                 ".some(b=>/Cemex · Ivry béton/.test(b.textContent.replace(/\\s+/g,' ')))"
             )
             if not found:
-                beta221_failures.append(f"sites-groupes/{theme}: recherche « ivry » ne donne pas « Cemex · Ivry béton »")
+                beta221_failures.append(f"sites-groupes/{theme}: « ivry » ne donne pas « Cemex · Ivry béton »")
             page.screenshot(path=str(OUT / f"{prefix}-sites-groupes-recherche-{theme}.png"), full_page=False)
             print(f"   sites-groupes-{theme} (société={info['cemexGroup']}, à-plat={info['cemexFlat']})")
         except Exception as exc:  # noqa: BLE001
