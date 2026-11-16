@@ -75,7 +75,7 @@ export const PROJETS = [
 ];
 
 /* ----------------------------------------------------------------------- Sites */
-const nextSiteId = makeCounter(12);
+const nextSiteId = makeCounter(14);
 export const SITES = [
   { id: 1, nom: "Dépôt Démo Claye", adresse: "15 rue des Démonstrations, 77410 Claye-Démo", lat: 48.9465, lon: 2.7765, type: "depot", portee: "commun", client_id: null, societe_id: null, statut: "actif", derniere_utilisation: addDays(-1) },
   { id: 2, nom: "Plateforme recyclage Démo", adresse: "6 rue Fictive, 77400 Lagny-Démo", lat: 48.8773, lon: 2.7050, type: "recyclage", portee: "commun", client_id: null, societe_id: null, statut: "actif", derniere_utilisation: addDays(-2) },
@@ -90,6 +90,9 @@ export const SITES = [
   { id: 10, nom: "RFM Bondy", adresse: "Chemin de Halage, 93140 Bondy-Démo", lat: 48.8895, lon: 2.4961, type: "plateforme", portee: "commun", client_id: null, societe_id: 2, statut: "actif", derniere_utilisation: addDays(-7) },
   { id: 11, nom: "RFM Livry-Gargan", adresse: "60 allée de l'Est, 93190 Livry-Démo", lat: 48.9324, lon: 2.5597, type: "plateforme", portee: "commun", client_id: null, societe_id: 2, statut: "actif", derniere_utilisation: addDays(-9) },
   { id: 12, nom: "Asten Gennevilliers", adresse: "1 route du Môle Central, 92230 Gennevilliers-Démo", lat: 48.9401, lon: 2.2863, type: "enrobés", portee: "commun", client_id: null, societe_id: 3, statut: "actif", derniere_utilisation: addDays(-15) },
+  // beta.22.5 : noms avec tiret demi-cadratin -> libellé court « Noisy » / « Usine des Terres ».
+  { id: 13, nom: "Veolia – Noisy", adresse: "6 rue de la Plaine, 93160 Noisy-le-Grand-Démo", lat: 48.851, lon: 2.533, type: "dépôt", portee: "commun", client_id: null, societe_id: 4, statut: "actif", derniere_utilisation: addDays(-4) },
+  { id: 14, nom: "Veolia – Usine des Terres", adresse: "2 rue de la Plaine, 93160 Noisy-le-Grand-Démo", lat: 48.852, lon: 2.534, type: "dépôt", portee: "commun", client_id: null, societe_id: 4, statut: "actif", derniere_utilisation: addDays(-6) },
 ];
 
 /* Sociétés de sites (beta.22) : Cemex a 4 adresses, RFM 2, Asten 1 (choix direct). */
@@ -97,6 +100,7 @@ export const SITE_SOCIETES = [
   { id: 1, nom: "Cemex", siren: null, actif: true },
   { id: 2, nom: "RFM", siren: "478603228", actif: true },
   { id: 3, nom: "Asten", siren: "542057336", actif: true },
+  { id: 4, nom: "Veolia", siren: "524334943", actif: true },
 ];
 
 /* Adresses de clients (beta.22) : Groupe Valoris a 2 adresses (test société->adresse). */

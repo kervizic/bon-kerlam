@@ -153,6 +153,7 @@ import { swipeActionsFor, attachSwipe, closeOpenSwipe } from "./swipe-actions.js
 // pdf-viewer.js (et pdf.js) chargés en import DYNAMIQUE à la 1re ouverture (g).
 import { enhanceSelect, refreshCombobox, ensureOption } from "./combobox.js?v=17";
 import { initTooltips } from "./tooltips.js?v=22";
+import { stripSocietePrefix } from "./site-label.js?v=225";
 import { lvCompleteness, entityMissingFields } from "./completeness.js?v=211";
 
 /* ============================================================== IndexedDB == */
@@ -4461,9 +4462,7 @@ function siteSocieteOf(site) {
 }
 function siteAdrLabel(site) {
   const soc = siteSocieteOf(site);
-  const nom = site.nom || "";
-  if (soc && nom.toLowerCase().startsWith((soc.nom + " ").toLowerCase())) return nom.slice(soc.nom.length + 1);
-  return nom;
+  return stripSocietePrefix(site.nom, soc ? soc.nom : null);
 }
 function siteGroupedLabel(site) {
   if (!site) return "";

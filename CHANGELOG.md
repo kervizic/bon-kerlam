@@ -4,6 +4,19 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.22.5] — 2026-11-16
+
+Correctif d'affichage (front uniquement), signalé sur un vrai iPhone en PWA.
+
+### Corrigé
+- **Libellé court d'une adresse de site** : après avoir retiré le préfixe du nom
+  de société, on retire aussi le **séparateur restant** (`– — - · : , /`) et les
+  espaces autour. « Veolia – Noisy » s'affiche désormais « Noisy » (au lieu de
+  « – Noisy »), « Veolia – Usine des Terres » devient « Usine des Terres ».
+  La recherche et le champ une fois l'adresse choisie lisent « Veolia · Noisy »
+  (plus jamais « Veolia · – Noisy »). Fonction pure `stripSocietePrefix`
+  couverte par des tests unitaires.
+
 ## [0.1.0-beta.22.4] — 2026-11-16
 
 Correctifs d'affichage (front uniquement), signalés sur un vrai iPhone en PWA.

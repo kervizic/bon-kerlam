@@ -12,6 +12,7 @@ Sort en échec (exit 1) si un écran mobile déborde horizontalement.
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -436,6 +437,7 @@ beta20_failures: list[str] = []
 beta21_failures: list[str] = []
 beta221_failures: list[str] = []
 beta222_failures: list[str] = []
+beta225_failures: list[str] = []
 
 
 def _assert(cond: bool, msg: str) -> None:
@@ -1231,6 +1233,75 @@ def shoot_sites_groupes(ctx, prefix: str) -> None:
             page.close()
 
 
+def shoot_sites_veolia_sep(ctx, prefix: str) -> None:
+    """beta.22.5 : au niveau Veolia, le libellé court d'adresse retire le préfixe
+    société ET le séparateur restant (– — - · : , /). On doit lire « Noisy » et
+    « Usine des Terres » (jamais « – Noisy »), et la recherche « Veolia · Noisy »
+    (jamais « Veolia · – Noisy »). Capture clair + sombre."""
+    sep_re = r"^[\s–—·:,/-]"
+    for theme in ("clair", "sombre"):
+        page = ctx.new_page()
+        try:
+            page.goto(f"{BASE}?demo=1&screen=today&role=chauffeur&theme={theme}", wait_until="load")
+            page.wait_for_timeout(700)
+            disp = page.locator("#tours-list .site-display").first
+            disp.scroll_into_view_if_needed()
+            disp.click()
+            page.wait_for_timeout(400)
+            page.evaluate(
+                """() => {
+                    const b=[...document.querySelectorAll('#site-picker-list .sheet-item')]
+                      .find(x=>x.classList.contains('sheet-item-group') && /Veolia/.test(x.textContent));
+                    if (b) b.click();
+                }"""
+            )
+            page.wait_for_timeout(300)
+            adr = page.evaluate(
+                """() => {
+                    const items=[...document.querySelectorAll('#site-picker-list .sheet-item:not(.sheet-back)')]
+                      .map(b=>b.textContent.replace(/\\s+/g,' ').trim());
+                    return { items };
+                }"""
+            )
+            items = adr["items"]
+            if not any(re.match(r"^Noisy", t) for t in items):
+                beta225_failures.append(f"veolia-sep/{theme}: « Noisy » absent (items={items})")
+            if not any(re.match(r"^Usine des Terres", t) for t in items):
+                beta225_failures.append(f"veolia-sep/{theme}: « Usine des Terres » absent (items={items})")
+            lead = [t for t in items if re.match(sep_re, t)]
+            if lead:
+                beta225_failures.append(f"veolia-sep/{theme}: séparateur en tête restant {lead}")
+            page.screenshot(path=str(OUT / f"{prefix}-veolia-sep-adresses-{theme}.png"), full_page=False)
+            page.evaluate(
+                "() => { const b = document.querySelector('#site-picker-list .sheet-back');"
+                " if (b) b.click(); }"
+            )
+            page.wait_for_timeout(150)
+            page.fill("#site-picker-search", "noisy")
+            page.wait_for_timeout(300)
+            srch = page.evaluate(
+                """() => {
+                    const ts=[...document.querySelectorAll('#site-picker-list .sheet-item')]
+                      .map(b=>b.textContent.replace(/\\s+/g,' ').trim());
+                    return {
+                      good: ts.some(t=>/Veolia · Noisy/.test(t)),
+                      bad: ts.some(t=>/Veolia · [\\u2013\\u2014\\u00b7:,/-]/.test(t)),
+                    };
+                }"""
+            )
+            if not srch["good"]:
+                beta225_failures.append(f"veolia-sep/{theme}: « noisy » ne donne pas « Veolia · Noisy »")
+            if srch["bad"]:
+                beta225_failures.append(f"veolia-sep/{theme}: recherche affiche « Veolia · <séparateur> »")
+            page.screenshot(path=str(OUT / f"{prefix}-veolia-sep-recherche-{theme}.png"), full_page=False)
+            print(f"   veolia-sep-{theme} (items={items})")
+        except Exception as exc:  # noqa: BLE001
+            beta225_failures.append(f"veolia-sep/{theme}: exception {exc}")
+            print(f"   !! veolia-sep/{theme}: {exc}")
+        finally:
+            page.close()
+
+
 def shoot_overflow_veolia(ctx, prefix: str) -> None:
     """beta.22.2 : AUCUN débordement horizontal sur l'écran lettre rempli avec des
     noms longs (client « Veolia » + adresse « Épinay · 2 rue Pasteur, 93800
@@ -1438,6 +1509,8 @@ def main() -> int:
         shoot(wk_iphone2, "webkit-iphone-chauffeur", "today", "sombre", "aujourdhui", role="chauffeur")
         print("WebKit (Safari iOS, DSR 2) : sélecteur de site groupé beta.22.1")
         shoot_sites_groupes(wk_iphone2, "webkit-iphone")
+        print("WebKit (Safari iOS, DSR 2) : libellé Veolia sans séparateur beta.22.5")
+        shoot_sites_veolia_sep(wk_iphone2, "webkit-iphone")
         print("WebKit (Safari iOS) : pas de débordement + Veolia beta.22.2")
         shoot_overflow_veolia(wk_iphone2, "webkit-iphone")
         print("WebKit (Safari iOS, DSR 2) : fiches rapides autosave beta.20")
@@ -1529,6 +1602,13 @@ def main() -> int:
         rc = 1
     else:
         print("OK : beta.22.2/.3 (pas de débordement, disposition uniforme, tours).")
+    if beta225_failures:
+        print("beta.22.5 KO (libellé Veolia : séparateur non retiré) :")
+        for f in beta225_failures:
+            print("  -", f)
+        rc = 1
+    else:
+        print("OK : beta.22.5 (libellé court Veolia sans séparateur : « Noisy », « Usine des Terres »).")
     return rc
 
 
