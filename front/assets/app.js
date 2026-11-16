@@ -1286,6 +1286,12 @@ async function refreshAdressePicker({ selectId, wrapId, clientId, saveField, sel
     val = p ? String(p.id) : "";
   }
   sel.value = val;
+  // beta.22.4 : l'Adresse est un sélecteur comme les autres (flèche + fondu + même
+  // hauteur). On l'enrichit en combobox (sans création) et on resynchronise.
+  if (!sel.classList.contains("cb-native")) {
+    enhanceSelect(sel, { entity: "adresse", placeholder: "Choisir…", canEdit: () => false });
+  }
+  refreshCombobox(sel);
   wrap.hidden = false;
 }
 

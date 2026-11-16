@@ -1236,20 +1236,27 @@ def shoot_overflow_veolia(ctx, prefix: str) -> None:
     noms longs (client « Veolia » + adresse « Épinay · 2 rue Pasteur, 93800
     Épinay-sur-Seine »), à 320/360/375/390/393/430 px. Mesure scrollWidth <=
     innerWidth et qu'aucun élément ne dépasse à droite. Capture 393 px clair+sombre."""
+    # Client à nom LONG (« Groupe Valoris Environnement ») + 2 adresses, pour montrer
+    # le fondu sur Client et Adresse.
     SET_VEOLIA = """() => {
         const fc = document.getElementById('f-client');
         if (fc) {
-            fc.value = '6'; fc.dispatchEvent(new Event('change', {bubbles:true}));
-            const cbi = fc.parentNode.querySelector('.cb-input'); if (cbi) cbi.value = 'Veolia';
+            fc.value = '2'; fc.dispatchEvent(new Event('change', {bubbles:true}));
+            const cbi = fc.parentNode.querySelector('.cb-input');
+            if (cbi) cbi.value = 'Groupe Valoris Environnement';
         }
     }"""
     SET_ADR = """() => {
         const adr = document.getElementById('f-client-adresse');
+        const wrap = document.getElementById('field-client-adresse-wrap');
         if (adr && adr.options.length > 1) {
-            adr.value = adr.options[1].value;
+            const last = adr.options[adr.options.length - 1];
+            adr.value = last.value;
             adr.dispatchEvent(new Event('change', {bubbles:true}));
+            const cbi = adr.parentNode.querySelector('.cb-input');
+            if (cbi) cbi.value = last.textContent;
         }
-        return !!(adr && !document.getElementById('field-client-adresse-wrap').hidden);
+        return !!(adr && wrap && !wrap.hidden);
     }"""
     MEASURE = """() => {
         const over = [];
@@ -1275,13 +1282,17 @@ def shoot_overflow_veolia(ctx, prefix: str) -> None:
         return { uniform: dirs.size <= 1, delta: Math.abs(ch - coh) };
     }"""
     # beta.22.3 : 3 tours dont 1 replié (le plus récent, en haut).
+    # 3 tours ; on replie le DERNIER (rempli) et on laisse le tour VIDE (en haut) OUVERT.
     TOURS = """async () => {
         const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         const b = document.getElementById('btn-add-tour');
         b.click(); await sleep(700); b.click(); await sleep(700);
-        const c = document.querySelector('#tours-list .tour-card .tour-collapse');
-        if (c) c.click();
-        return document.querySelectorAll('#tours-list .tour-card').length;
+        const cards = [...document.querySelectorAll('#tours-list .tour-card')];
+        const last = cards[cards.length - 1];
+        if (last) last.querySelector('.tour-collapse').click();
+        const top = cards[0];
+        return { n: cards.length,
+                 topOpen: top ? !top.classList.contains('is-collapsed') : false };
     }"""
     for theme in ("clair", "sombre"):
         page = ctx.new_page()
@@ -1313,10 +1324,12 @@ def shoot_overflow_veolia(ctx, prefix: str) -> None:
                 page.wait_for_timeout(400)
                 page.evaluate(SET_ADR)
                 page.wait_for_timeout(250)
-                n = page.evaluate(TOURS)
+                t = page.evaluate(TOURS)
                 page.wait_for_timeout(300)
-                if n < 3:
-                    beta222_failures.append(f"tours/{theme}@{cw}: {n} tours (3 attendus)")
+                if t["n"] < 3:
+                    beta222_failures.append(f"tours/{theme}@{cw}: {t['n']} tours (3 attendus)")
+                if not t["topOpen"]:
+                    beta222_failures.append(f"tours/{theme}@{cw}: le tour vide (en haut) n'est pas OUVERT par défaut")
                 page.screenshot(path=str(OUT / f"{prefix}-veolia-tours-{cw}-{theme}.png"), full_page=True)
             print(f"   overflow-veolia-{theme} (393 + 375 capturés)")
         except Exception as exc:  # noqa: BLE001

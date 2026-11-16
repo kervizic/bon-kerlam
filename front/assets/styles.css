@@ -364,7 +364,9 @@ body.has-selection .bottom-bar { display: none !important; } /* la sélection pr
 .main-content {
   flex: 1; min-width: 0;
   padding: 16px;
-  padding-bottom: 88px; /* place pour la bottom-bar mobile */
+  /* beta.22.4 : place pour la bottom-bar (hauteur) + safe-area, pour que la barre
+     ne recouvre jamais le contenu en fin de page. */
+  padding-bottom: calc(80px + env(safe-area-inset-bottom));
   overflow-y: auto;
 }
 
@@ -588,7 +590,9 @@ input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
    réservée par le padding — jamais de chevauchement avec le texte. */
 .lv-header-form .field:not(.field-heures) .cb-edit,
 .lv-header-form .field:not(.field-heures) .cb-clear { display: none; }
-.lv-header-form .field:not(.field-heures) .cb-input { padding-right: 28px; padding-left: 12px; }
+/* beta.22.4 : au repos, le texte s'étend jusqu'au fondu (petit padding) ; le fondu
+   (.cb-field::after) + la flèche gèrent le bord droit. */
+.lv-header-form .field:not(.field-heures) .cb-input { padding-right: 10px; padding-left: 12px; }
 .lv-header-form .field:not(.field-heures) .combobox:focus-within .cb-edit,
 .lv-header-form .field:not(.field-heures) .combobox.is-open .cb-edit,
 .lv-header-form .field:not(.field-heures) .combobox:focus-within .cb-clear,
@@ -1006,7 +1010,13 @@ body.pdf-viewer-open { overflow: hidden; }
   border: 1px solid var(--border); border-radius: var(--radius);
   background: var(--surface); color: var(--text); font: inherit;
   display: flex; align-items: center;
-  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  overflow: hidden; white-space: nowrap; position: relative;
+}
+/* beta.22.4 : fondu (plus d'ellipse) sur le libellé de site. */
+.site-display::after {
+  content: ""; position: absolute; top: 0; right: 0; bottom: 0; width: 28px;
+  background: linear-gradient(to right, transparent, var(--surface) 75%);
+  pointer-events: none;
 }
 .site-display.is-placeholder { color: var(--text-muted); }
 .site-row select.is-picker-hidden { display: none; }
@@ -1039,7 +1049,9 @@ body.pdf-viewer-open { overflow: hidden; }
 @media (max-width: 899px) {
   .side-nav { display: none; }
   .bottom-bar { display: flex; }
-  .main-content { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+  /* beta.22.4 : marge basse = hauteur de la bottom-bar + safe-area, généreuse,
+     pour que la barre ne recouvre jamais le dernier contenu. */
+  .main-content { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
   .dashboard-cards { grid-template-columns: repeat(2, 1fr); }
   .dash-grid { grid-template-columns: repeat(2, 1fr); }
   .view-header h1 { font-size: 23px; line-height: 1.2; }
@@ -1237,11 +1249,21 @@ body.can-switch-mode .bb-more { display: flex; }
   display: inline-flex; align-items: center; justify-content: center;
   color: var(--text-muted); background: transparent; border: 0;
   width: 28px; height: 28px; padding: 0; cursor: pointer;
+  z-index: 2; /* beta.22.4 : flèche/icônes NETTES au-dessus du fondu */
 }
 .cb-caret { right: 8px; pointer-events: none; }
 .combobox.is-open .cb-caret { transform: translateY(-50%) rotate(180deg); }
 .cb-clear { right: 40px; }
 .cb-edit  { right: 70px; color: var(--c-orange); }
+/* beta.22.4 : un texte trop long se FOND vers le fond du champ juste avant la
+   flèche (plus d'ellipse ; le texte ne touche jamais la flèche). Clair et sombre
+   via var(--surface). La flèche (z-index 2) reste nette au-dessus. */
+.cb-field::after {
+  content: ""; position: absolute; top: 1px; right: 1px; bottom: 1px; width: 52px;
+  border-radius: 0 var(--radius) var(--radius) 0;
+  background: linear-gradient(to right, transparent, var(--surface) 60%);
+  pointer-events: none; z-index: 1;
+}
 
 /* Liste déroulante JUSTE sous le champ. */
 .cb-list {

@@ -49,7 +49,7 @@ export const CHAUFFEURS = [
 const nextClientId = makeCounter(6);
 export const CLIENTS = [
   { id: 1, raison_sociale: "Travaux Publics Chantereine", adresse: "12 avenue des Peupliers, 77400 Lagny-Démo", siren: "123 456 789", alias: null, actif: true },
-  { id: 2, raison_sociale: "Groupe Valoris Environnement", adresse: "4 rue des Tanneries, 93160 Noisy-Démo", siren: "234 567 890", alias: "Valoris", actif: true },
+  { id: 2, raison_sociale: "Groupe Valoris Environnement", adresse: "4 rue des Tanneries, 93160 Noisy-Démo", siren: "234 567 890", alias: null, actif: true },
   // beta.22.2 : société fusionnée affichée « Veolia » (alias de groupe), raison
   // sociale légale « Veolia Eau Épinay » conservée sur la fiche et le PDF.
   { id: 6, raison_sociale: "Veolia Eau Épinay", adresse: "2 rue Pasteur, 93800 Épinay-sur-Seine", siren: "524 334 943", alias: "Veolia", actif: true },

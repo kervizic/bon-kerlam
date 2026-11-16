@@ -4,6 +4,24 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.22.4] — 2026-11-16
+
+Correctifs d'affichage (front uniquement), signalés sur un vrai iPhone en PWA.
+
+### Corrigé
+- **Texte long fondu sous la flèche** : un texte trop long se **fond** vers la
+  couleur de fond du champ juste avant la flèche (plus d'ellipse), en clair comme
+  en sombre ; la flèche reste nette au-dessus et le texte ne la touche jamais.
+  S'applique aux comboboxes (Client, Camion, Projet, Contact, Destinataire,
+  articles), à leurs placeholders, et aux sites de chargement/déchargement des tours.
+- **Adresse** : même format que les autres champs — c'est un **sélecteur**
+  (combobox) avec flèche, fondu, ⓘ et même hauteur, en ligne.
+- **Tour vide ouvert** : le tour vide affiché à l'ouverture est **ouvert** (prêt à
+  remplir) ; le repli reste manuel, et le résumé n'apparaît que si l'utilisateur a
+  replié le tour lui-même.
+- **Barre d'onglets** : le contenu en fin de page a un `padding-bottom` =
+  hauteur de la barre + `safe-area`, pour que la barre ne le recouvre jamais.
+
 ## [0.1.0-beta.22.3] — 2026-11-16
 
 Front + migration de données (noms de groupe). Correctifs signalés sur un vrai
