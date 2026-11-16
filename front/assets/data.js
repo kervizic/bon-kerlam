@@ -215,6 +215,33 @@ export async function rpcLvRestaurer(lvId) {
   return live.rpcLvRestaurer(lvId);
 }
 
+// Suppression GROUPÉE d'une sélection (beta.21) : brouillon -> corbeille,
+// numérotée non signée -> annulée, signée -> ignorée. Renvoie le récap
+// { corbeille, annulee, ignore_signee, ignore_autre }.
+export async function rpcLvSupprimerLot(lvIds, categorie, motif) {
+  if (DEMO) {
+    let corbeille = 0, annulee = 0, ignore_signee = 0, ignore_autre = 0;
+    for (const id of lvIds || []) {
+      const lv = byId(demoDb.lettres_voiture, id);
+      if (!lv) { ignore_autre += 1; continue; }
+      if (lv.statut === "signee") { ignore_signee += 1; continue; }
+      if (lv.deleted_at || lv.statut === "annulee") { ignore_autre += 1; continue; }
+      if (!lv.numero) {
+        lv.deleted_at = new Date().toISOString();
+        corbeille += 1;
+      } else {
+        lv.statut = "annulee";
+        lv.annulation_categorie = categorie || null;
+        lv.annulation_motif = motif || null;
+        lv.annulee_at = new Date().toISOString();
+        annulee += 1;
+      }
+    }
+    return { corbeille, annulee, ignore_signee, ignore_autre };
+  }
+  return live.rpcLvSupprimerLot(lvIds, categorie, motif);
+}
+
 // Mémoire des créneaux : créneaux de la dernière lettre du chauffeur qui en a.
 export async function rpcDernieresHeures(chauffeurId) {
   if (DEMO) {

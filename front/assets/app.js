@@ -4255,7 +4255,7 @@ function wireStaticUI() {
 
   // Barre de sélection (beta.21) : corbeille groupée + PDF (si 1 cochée).
   const btnSelDelete = document.getElementById("btn-selection-delete");
-  if (btnSelDelete) btnSelDelete.addEventListener("click", openDeleteSelectionSheet);
+  if (btnSelDelete) btnSelDelete.addEventListener("click", () => openDeleteSelectionSheet());
   const btnSelPdf = document.getElementById("btn-selection-pdf");
   if (btnSelPdf) btnSelPdf.addEventListener("click", exportSelectedPdf);
   const btnSelDelClose = document.getElementById("btn-delete-selection-close");

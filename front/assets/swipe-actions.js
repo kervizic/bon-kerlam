@@ -87,8 +87,11 @@ export function attachSwipe(clip, content, panel, { panelWidth, pointerCoarse })
       if (Math.abs(dx) < AXIS_LOCK && Math.abs(dy) < AXIS_LOCK) return;
       decided = true;
       horizontal = Math.abs(dx) > Math.abs(dy);
-      if (horizontal && content.setPointerCapture) {
-        try { content.setPointerCapture(e.pointerId); } catch (_) {}
+      if (horizontal) {
+        clip.classList.add("is-swiping"); // révèle le panneau d'actions pendant le geste
+        if (content.setPointerCapture) {
+          try { content.setPointerCapture(e.pointerId); } catch (_) {}
+        }
       }
     }
     if (!horizontal) return; // défilement vertical : on laisse filer
@@ -102,6 +105,7 @@ export function attachSwipe(clip, content, panel, { panelWidth, pointerCoarse })
   function onUp() {
     if (!dragging) return;
     dragging = false;
+    clip.classList.remove("is-swiping");
     if (!horizontal) return;
     const current = baseX + 0; // position finale calculée depuis transform
     const matrix = content.style.transform.match(/-?\d+(\.\d+)?/);

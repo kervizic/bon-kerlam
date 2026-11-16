@@ -663,7 +663,10 @@ input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
 .lv-row-actions {
   position: absolute; top: 0; right: 0; bottom: 0; z-index: 1;
   display: flex; align-items: stretch;
+  visibility: hidden; /* révélé seulement pendant/après le swipe (ou au survol desktop) */
 }
+.lv-swipe.is-swiping .lv-row-actions,
+.lv-swipe.is-swiped .lv-row-actions { visibility: visible; }
 .lv-row-action {
   width: 84px; border: none; cursor: pointer;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
@@ -676,6 +679,7 @@ input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
 /* Ordinateur (survol fin) : pas de JS tactile — on révèle au survol. */
 @media (hover: hover) and (pointer: fine) {
   .lv-swipe:hover .lv-swipe-content { transform: translateX(calc(-1 * var(--actions-w, 0px))); transition: transform .2s ease; }
+  .lv-swipe:hover .lv-row-actions { visibility: visible; }
 }
 
 /* Visionneuse PDF intégrée plein écran (beta.21). */
