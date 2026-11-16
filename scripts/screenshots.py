@@ -899,6 +899,110 @@ def shoot_beta20_bureau_filter(ctx, prefix: str) -> None:
         page.close()
 
 
+def shoot_beta21_selection(ctx, prefix: str) -> None:
+    """beta.21 : 1 lettre cochée -> barre de SÉLECTION en bas (Signer(1) + petite
+    corbeille + petite icône PDF) qui REMPLACE la barre d'onglets."""
+    for theme in ("clair", "sombre"):
+        page = ctx.new_page()
+        try:
+            page.goto(f"{BASE}?demo=1&screen=mes-lv&role=chauffeur&theme={theme}", wait_until="load")
+            page.wait_for_timeout(600)
+            page.locator("#mes-lv-list .lv-row-check input").first.check()
+            page.wait_for_timeout(250)
+            has_sel = page.evaluate("() => document.body.classList.contains('has-selection')")
+            bar_bottom = page.evaluate(
+                "() => { const b=document.getElementById('selection-bar'); if(!b) return -1;"
+                " const r=b.getBoundingClientRect(); return Math.round(window.innerHeight - r.bottom); }"
+            )
+            page.screenshot(path=str(OUT / f"{prefix}-selection-bas-{theme}.png"), full_page=False)
+            check_no_hscroll(page, f"{prefix}-selection-bas-{theme}")
+            print(f"   selection-bas-{theme} (has-selection={has_sel}, gap-bas={bar_bottom}px)")
+        except Exception as exc:  # noqa: BLE001
+            print(f"   !! selection/{theme}: {exc}")
+        finally:
+            page.close()
+
+
+def shoot_beta21_swipe(ctx, prefix: str) -> None:
+    """beta.21 : ligne glissée vers la gauche -> actions à droite (Signer / PDF /
+    Corbeille rouge). Glissement simulé, repli JS déterministe pour la capture."""
+    for theme in ("clair", "sombre"):
+        page = ctx.new_page()
+        try:
+            page.goto(f"{BASE}?demo=1&screen=mes-lv&role=chauffeur&theme={theme}", wait_until="load")
+            page.wait_for_timeout(600)
+            content = page.locator(".lv-swipe .lv-swipe-content").first
+            box = content.bounding_box()
+            if box:
+                cy = box["y"] + box["height"] / 2
+                page.mouse.move(box["x"] + box["width"] - 20, cy)
+                page.mouse.down()
+                for dx in (40, 90, 140, 180):
+                    page.mouse.move(box["x"] + box["width"] - 20 - dx, cy, steps=4)
+                page.mouse.up()
+                page.wait_for_timeout(250)
+            # Repli déterministe : force l'ouverture si le geste n'a pas « pris ».
+            opened = page.evaluate(
+                """() => { const c = document.querySelector('.lv-swipe'); if (!c) return false;
+                   const sc = c.querySelector('.lv-swipe-content');
+                   const w = parseInt(getComputedStyle(c).getPropertyValue('--actions-w')) || 168;
+                   if (!c.classList.contains('is-swiped')) { c.classList.add('is-swiped');
+                     sc.style.transition='none'; sc.style.transform='translateX(-'+w+'px)'; }
+                   return true; }"""
+            )
+            page.wait_for_timeout(150)
+            page.screenshot(path=str(OUT / f"{prefix}-swipe-actions-{theme}.png"), full_page=False)
+            print(f"   swipe-actions-{theme} (panneau visible={opened})")
+        except Exception as exc:  # noqa: BLE001
+            print(f"   !! swipe/{theme}: {exc}")
+        finally:
+            page.close()
+
+
+def shoot_beta21_pdf_viewer(ctx, prefix: str) -> None:
+    """beta.21 : visionneuse PDF intégrée plein écran (pdf.js local) + bouton
+    « Télécharger ». Ouverte via l'icône PDF de la lettre du jour."""
+    for theme in ("clair", "sombre"):
+        page = ctx.new_page()
+        try:
+            page.goto(f"{BASE}?demo=1&screen=today&role=chauffeur&theme={theme}", wait_until="load")
+            page.wait_for_timeout(600)
+            page.click("#btn-pdf-today", timeout=5000)
+            # Attend le rendu d'au moins une page (canvas pdf.js).
+            page.wait_for_selector("#pdf-viewer-pages .pdf-viewer-page", timeout=8000)
+            page.wait_for_timeout(400)
+            dl = page.locator("#btn-pdf-viewer-download").is_visible()
+            page.screenshot(path=str(OUT / f"{prefix}-pdf-viewer-{theme}.png"), full_page=False)
+            print(f"   pdf-viewer-{theme} (bouton Télécharger={dl})")
+        except Exception as exc:  # noqa: BLE001
+            print(f"   !! pdf-viewer/{theme}: {exc}")
+        finally:
+            page.close()
+
+
+def shoot_beta21_contraste_onglet(ctx, prefix: str) -> None:
+    """beta.21 : onglet « Chauffeur » actif = texte ANTHRACITE sur orange (jamais
+    blanc). Capture du sélecteur Chauffeur/Bureau dans le tiroir « Plus »."""
+    for theme in ("clair", "sombre"):
+        page = ctx.new_page()
+        try:
+            page.goto(f"{BASE}?demo=1&screen=today&role=bureau&theme={theme}", wait_until="load")
+            page.wait_for_timeout(500)
+            page.click("#btn-nav-more", timeout=4000)
+            page.wait_for_timeout(300)
+            # Vérifie que l'onglet actif n'est pas en texte blanc.
+            col = page.evaluate(
+                """() => { const el = document.querySelector('.mode-switch-drawer .mode-seg[aria-pressed="true"]');
+                   return el ? getComputedStyle(el).color : null; }"""
+            )
+            page.screenshot(path=str(OUT / f"{prefix}-onglet-contraste-{theme}.png"), full_page=False)
+            print(f"   onglet-contraste-{theme} (color={col})")
+        except Exception as exc:  # noqa: BLE001
+            print(f"   !! contraste/{theme}: {exc}")
+        finally:
+            page.close()
+
+
 def main() -> int:
     with sync_playwright() as p:
         # --lang=fr-FR : les contrôles natifs <input type="date"|"time"> suivent la
@@ -1001,6 +1105,14 @@ def main() -> int:
         shoot_beta20_completeness(wk_iphone2, "webkit-iphone")
         print("WebKit (Safari iOS, DSR 2) : filtre bureau À compléter beta.20")
         shoot_beta20_bureau_filter(wk_iphone2, "webkit-iphone")
+        print("WebKit (Safari iOS, DSR 2) : barre de sélection en bas beta.21")
+        shoot_beta21_selection(wk_iphone2, "webkit-iphone")
+        print("WebKit (Safari iOS, DSR 2) : swipe actions beta.21")
+        shoot_beta21_swipe(wk_iphone2, "webkit-iphone")
+        print("WebKit (Safari iOS, DSR 2) : visionneuse PDF beta.21")
+        shoot_beta21_pdf_viewer(wk_iphone2, "webkit-iphone")
+        print("WebKit (Safari iOS, DSR 2) : onglet Chauffeur anthracite beta.21")
+        shoot_beta21_contraste_onglet(wk_iphone2, "webkit-iphone")
         wk_iphone2.close()
         wk.close()
 

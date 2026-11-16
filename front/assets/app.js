@@ -141,6 +141,8 @@ import { UndoStack } from "./undo-stack.js?v=13";
 import { PdfCache, shouldCachePdf, formatGeneratedAt } from "./pdf-cache.js?v=13";
 import { statutLabel, lvBadge } from "./status-labels.js?v=21";
 import { canGroupForSignature } from "./signature-group.js?v=13";
+import { swipeActionsFor, attachSwipe, closeOpenSwipe } from "./swipe-actions.js?v=21";
+// pdf-viewer.js (et pdf.js) chargés en import DYNAMIQUE à la 1re ouverture (g).
 import { enhanceSelect, refreshCombobox, ensureOption } from "./combobox.js?v=17";
 import { initTooltips } from "./tooltips.js?v=20";
 import { lvCompleteness, entityMissingFields } from "./completeness.js?v=20";
@@ -2217,31 +2219,72 @@ async function sharePdf(blob, filename, generatedNote) {
   if (generatedNote) alert(`PDF ${generatedNote}.`);
 }
 
+// Récupère le PDF (worker ou cache hors-ligne) puis l'ouvre dans la visionneuse
+// INTÉGRÉE (beta.21) — jamais de nouvel onglet/téléchargement bridé par iOS.
 async function exportLvPdf(lv) {
   if (!lv || lv.id == null) {
     alert("Enregistrez d'abord la lettre de voiture (aucun numéro).");
     return;
   }
   const filename = `lettre-de-voiture-${lv.numero || lv.id}.pdf`;
+  let blob = null;
+  let note = null;
   if (navigator.onLine) {
     try {
-      const blob = await workerLvPdf(lv.id);
+      blob = await workerLvPdf(lv.id);
       if (shouldCachePdf(lv, connectedChauffeurId())) {
         await pdfCache.put(lv.id, blob, Date.now()).catch(() => {});
       }
-      await sharePdf(blob, filename, null);
-      return;
     } catch (err) {
-      // Échec réseau/serveur : on tente le cache local ci-dessous.
-      reportIfVersionMismatch(err);
+      reportIfVersionMismatch(err); // on tentera le cache local
     }
   }
-  const cached = await pdfCache.get(lv.id).catch(() => null);
-  if (cached && cached.blob) {
-    await sharePdf(cached.blob, filename, formatGeneratedAt(cached.generatedAt));
+  if (!blob) {
+    const cached = await pdfCache.get(lv.id).catch(() => null);
+    if (cached && cached.blob) {
+      blob = cached.blob;
+      note = formatGeneratedAt(cached.generatedAt);
+    }
+  }
+  if (!blob) {
+    alert("PDF indisponible hors ligne (aucune version en cache pour cette lettre).");
     return;
   }
-  alert("PDF indisponible hors ligne (aucune version en cache pour cette lettre).");
+  openPdfViewer(blob, filename, note);
+}
+
+/* ---- Visionneuse PDF intégrée (beta.21) ------------------------------------ */
+let pdfViewerCurrent = null; // { blob, filename, note }
+
+function openPdfViewer(blob, filename, note) {
+  pdfViewerCurrent = { blob, filename, note };
+  const overlay = document.getElementById("pdf-viewer");
+  const pages = document.getElementById("pdf-viewer-pages");
+  const title = document.getElementById("pdf-viewer-title");
+  if (!overlay || !pages) { sharePdf(blob, filename, note); return; } // repli sûr
+  if (title) title.textContent = filename.replace(/\.pdf$/i, "");
+  overlay.hidden = false;
+  document.body.classList.add("pdf-viewer-open");
+  pages.innerHTML = '<p class="pdf-viewer-loading">Chargement du PDF…</p>';
+  // Import DYNAMIQUE : pdf.js (~400 Ko) n'est chargé qu'à la 1re ouverture.
+  import("./pdf-viewer.js?v=21")
+    .then((m) => m.renderPdfInto(blob, pages))
+    .catch(() => { pages.innerHTML = '<p class="pdf-viewer-error">Aperçu indisponible. Utilisez « Télécharger ».</p>'; });
+}
+
+function closePdfViewer() {
+  const overlay = document.getElementById("pdf-viewer");
+  const pages = document.getElementById("pdf-viewer-pages");
+  if (overlay) overlay.hidden = true;
+  if (pages) pages.innerHTML = "";
+  document.body.classList.remove("pdf-viewer-open");
+  pdfViewerCurrent = null;
+}
+
+async function downloadFromPdfViewer() {
+  if (!pdfViewerCurrent) return;
+  const { blob, filename, note } = pdfViewerCurrent;
+  await sharePdf(blob, filename, note);
 }
 
 // Régénération debounce du PDF hors-ligne après chaque modification de la lettre
@@ -2364,26 +2407,77 @@ async function loadCorbeille(listEl) {
   }
 }
 
-// Ligne de l'accueil chauffeur : case à cocher (si signable) + ligne lettre.
-function buildSignableRow(lv, isSigned) {
-  const row = buildLvRow(lv);
-  if (isSigned || !isSignable(lv)) return row;
-  const check = document.createElement("label");
-  check.className = "lv-row-check";
-  const input = document.createElement("input");
-  input.type = "checkbox";
-  input.setAttribute("aria-label", `Sélectionner ${lv.numero || "la lettre"}`);
-  input.checked = signSelection.has(lv.id);
-  input.addEventListener("change", () => {
-    if (input.checked) signSelection.set(lv.id, lv);
-    else signSelection.delete(lv.id);
-    row.classList.toggle("is-selected", input.checked);
+// Icônes des actions de swipe (Lucide, jamais d'emoji — cf. check-no-emoji).
+const SWIPE_ICON = {
+  signer: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
+  pdf: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M12 18v-6"/><path d="m9 15 3 3 3-3"/></svg>',
+  corbeille: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>',
+};
+
+// Déclenche l'action choisie dans le panneau de swipe pour UNE lettre.
+function onSwipeAction(key, lv) {
+  if (key === "pdf") { exportLvPdf(lv); return; }
+  if (key === "signer") {
+    signSelection.clear();
+    signSelection.set(lv.id, lv);
     refreshSelectionBar();
     syncSelectAllCheckbox();
+    openSignerChoice();
+    return;
+  }
+  if (key === "corbeille") { openDeleteSelectionSheet([lv]); return; }
+}
+
+// Ligne de l'accueil chauffeur : case à cocher (si signable) + ligne lettre,
+// le tout enveloppé pour le geste de swipe (actions révélées à droite).
+function buildSignableRow(lv, isSigned) {
+  const row = buildLvRow(lv);
+  const signable = !isSigned && isSignable(lv);
+  if (signable) {
+    const check = document.createElement("label");
+    check.className = "lv-row-check";
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.setAttribute("aria-label", `Sélectionner ${lv.numero || "la lettre"}`);
+    input.checked = signSelection.has(lv.id);
+    input.addEventListener("change", () => {
+      if (input.checked) signSelection.set(lv.id, lv);
+      else signSelection.delete(lv.id);
+      row.classList.toggle("is-selected", input.checked);
+      refreshSelectionBar();
+      syncSelectAllCheckbox();
+    });
+    check.appendChild(input);
+    row.insertBefore(check, row.firstChild);
+  }
+  return wrapRowForSwipe(row, lv, signable);
+}
+
+// Enveloppe une .lv-row dans un conteneur de swipe + panneau d'actions à droite.
+function wrapRowForSwipe(row, lv, signable) {
+  const actions = swipeActionsFor(lv, { signable });
+  const clip = document.createElement("div");
+  clip.className = "lv-swipe";
+  row.classList.add("lv-swipe-content");
+  const panel = document.createElement("div");
+  panel.className = "lv-row-actions";
+  for (const act of actions) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "lv-row-action lv-row-action-" + act.key + (act.danger ? " is-danger" : "");
+    btn.setAttribute("aria-label", act.label);
+    btn.innerHTML = (SWIPE_ICON[act.key] || "") + `<span>${escapeHtml(act.label)}</span>`;
+    btn.addEventListener("click", (e) => { e.stopPropagation(); closeOpenSwipe(); onSwipeAction(act.key, lv); });
+    panel.appendChild(btn);
+  }
+  clip.append(row, panel);
+  clip.style.setProperty("--actions-w", actions.length * 84 + "px");
+  const coarse = (window.matchMedia && window.matchMedia("(hover: none)").matches) || ("ontouchstart" in window);
+  attachSwipe(clip, row, panel, {
+    panelWidth: () => panel.offsetWidth || actions.length * 84,
+    pointerCoarse: !!coarse,
   });
-  check.appendChild(input);
-  row.insertBefore(check, row.firstChild);
-  return row;
+  return clip;
 }
 
 function syncSelectAllCheckbox() {
@@ -2468,10 +2562,14 @@ function describeSelectionDeletion(lvs) {
   return { corbeille, annulee, signee, text, needsMotif: annulee.length > 0, actionable: corbeille.length + annulee.length > 0 };
 }
 
-function openDeleteSelectionSheet() {
-  const lvs = [...signSelection.values()];
-  if (!lvs.length) return;
-  const plan = describeSelectionDeletion(lvs);
+// Lettres ciblées par la feuille de suppression groupée (sélection, ou une seule
+// lettre via le swipe « Corbeille »).
+let deletionLvs = [];
+
+function openDeleteSelectionSheet(lvs) {
+  deletionLvs = lvs || [...signSelection.values()];
+  if (!deletionLvs.length) return;
+  const plan = describeSelectionDeletion(deletionLvs);
   document.getElementById("delete-selection-summary").textContent = plan.text;
   const motifBlock = document.getElementById("delete-selection-motif");
   if (motifBlock) motifBlock.hidden = !plan.needsMotif;
@@ -2487,7 +2585,7 @@ function closeDeleteSelectionSheet() {
 }
 
 async function confirmDeleteSelection() {
-  const lvs = [...signSelection.values()];
+  const lvs = deletionLvs;
   const plan = describeSelectionDeletion(lvs);
   if (!plan.actionable) { closeDeleteSelectionSheet(); return; }
   const ids = lvs.map((lv) => lv.id);
@@ -4166,6 +4264,12 @@ function wireStaticUI() {
   if (selDelSheet) selDelSheet.addEventListener("click", (e) => { if (e.target.id === "delete-selection-sheet") closeDeleteSelectionSheet(); });
   const btnSelDelConfirm = document.getElementById("btn-delete-selection-confirm");
   if (btnSelDelConfirm) btnSelDelConfirm.addEventListener("click", confirmDeleteSelection);
+
+  // Visionneuse PDF intégrée (beta.21).
+  const btnPdfClose = document.getElementById("btn-pdf-viewer-close");
+  if (btnPdfClose) btnPdfClose.addEventListener("click", closePdfViewer);
+  const btnPdfDownload = document.getElementById("btn-pdf-viewer-download");
+  if (btnPdfDownload) btnPdfDownload.addEventListener("click", downloadFromPdfViewer);
 
   // Suppression / annulation de la lettre ouverte (beta.15).
   const btnDeleteLv = document.getElementById("btn-delete-lv");

@@ -251,6 +251,12 @@ export const DEMO_PROFILE = {
 
 export const DEMO_CHAUFFEUR = CHAUFFEURS[0]; // Marc Dubreuil, aligné sur la LV n°1 de démo
 
+// PDF 1 page VALIDE (xref correct) pour la démo/captures de la visionneuse
+// intégrée (beta.21) : pas de worker en mode démo, mais pdf.js doit pouvoir le
+// rendre. Décodé en Blob par data.js (workerLvPdf).
+export const DEMO_PDF_B64 =
+  "JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCA1OTUgODQyXSAvUmVzb3VyY2VzIDw8IC9Gb250IDw8IC9GMSA1IDAgUiA+PiA+PiAvQ29udGVudHMgNCAwIFIgPj4KZW5kb2JqCjQgMCBvYmoKPDwgL0xlbmd0aCAxMTQgPj4Kc3RyZWFtCkJUIC9GMSAyNCBUZiA2MCA3NjAgVGQgKExldHRyZSBkZSB2b2l0dXJlIC0gREVNTykgVGogMCAtNDAgVGQgL0YxIDE0IFRmIChBcGVyY3UgUERGIGludGVncmUgLSBib24ua2VybGFtLmZyKSBUaiBFVAplbmRzdHJlYW0KZW5kb2JqCjUgMCBvYmoKPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNhID4+CmVuZG9iagp4cmVmCjAgNgowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMDkgMDAwMDAgbiAKMDAwMDAwMDA1OCAwMDAwMCBuIAowMDAwMDAwMTE1IDAwMDAwIG4gCjAwMDAwMDAyNDEgMDAwMDAgbiAKMDAwMDAwMDQwNiAwMDAwMCBuIAp0cmFpbGVyCjw8IC9TaXplIDYgL1Jvb3QgMSAwIFIgPj4Kc3RhcnR4cmVmCjQ3NgolJUVPRg==";
+
 export const DEMO_ADDRESS_SUGGESTIONS = [
   { label: "12 avenue des Peupliers, 77400 Lagny-Démo", lat: 48.879, lon: 2.711 },
   { label: "4 rue des Tanneries, 93160 Noisy-Démo", lat: 48.846, lon: 2.554 },

@@ -659,9 +659,12 @@ export async function workerSignatureParMail(lvIds) {
 }
 export async function workerLvPdf(lvId) {
   if (DEMO) {
-    // En démo (captures), pas de worker : on fabrique un PDF minimal valide.
-    const stub = "%PDF-1.4\n% démo bon.kerlam.fr — lettre de voiture\n";
-    return new Blob([stub], { type: "application/pdf" });
+    // En démo (captures), pas de worker : PDF 1 page VALIDE que la visionneuse
+    // intégrée (pdf.js) sait rendre.
+    const bin = atob(seed.DEMO_PDF_B64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], { type: "application/pdf" });
   }
   return live.workerLvPdf(lvId);
 }

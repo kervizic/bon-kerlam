@@ -8,7 +8,6 @@ Règles (cf. 0021) :
   JAMAIS une lettre numérotée ni signée, idempotente.
 """
 
-import psycopg
 from conftest import as_postgres, as_user
 
 

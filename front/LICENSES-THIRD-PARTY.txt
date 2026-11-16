@@ -41,3 +41,21 @@ FAQ : http://scripts.sil.org/OFL
 « This Font Software is licensed under the SIL Open Font License, Version 1.1.
 The OFL allows the licensed fonts to be used, studied, modified and
 redistributed freely as long as they are not sold by themselves. »
+
+
+3. PDF.js (visionneuse PDF intégrée)
+------------------------------------
+Bibliothèque de rendu PDF embarquée localement (assets/vendor/pdfjs/pdf.mjs
+et pdf.worker.mjs, pdfjs-dist 4.8.69, build « legacy »), utilisée par la
+visionneuse PDF plein écran (beta.21).
+
+Projet : https://github.com/mozilla/pdf.js
+Licence : Apache License, Version 2.0
+Copyright (c) Mozilla Foundation and pdf.js contributors
+
+« Licensed under the Apache License, Version 2.0 (the "License"); you may not
+use this file except in compliance with the License. You may obtain a copy of
+the License at http://www.apache.org/licenses/LICENSE-2.0 . Unless required by
+applicable law or agreed to in writing, software distributed under the License
+is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+KIND, either express or implied. »

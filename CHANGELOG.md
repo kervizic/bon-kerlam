@@ -4,6 +4,46 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.21] — 2026-11-16
+
+Liste « Mes lettres de voiture » : actions à la iOS, visionneuse PDF intégrée,
+correction du badge « Clôturée », purge automatique de la corbeille.
+
+### Liste — sélection & actions
+- **Barre de sélection tout en bas** (modèle iOS Photos/Mail) : dès qu'une lettre
+  est cochée, une barre **remplace la barre d'onglets** (plus de bouton flottant
+  au-dessus d'un vide), **safe-area du bas** respectée. Elle contient un grand
+  **« Signer (N) »**, une **petite corbeille**, et une **petite icône PDF** quand
+  une seule lettre est cochée. Plus rien de coché → la barre d'onglets revient.
+- **Corbeille groupée** : applique à chaque lettre cochée la règle existante
+  (brouillon sans numéro → corbeille 30 j ; numérotée non signée → « Annulée »
+  avec un motif commun ; **signée → ignorée**) via le RPC `lv_supprimer_lot`, avec
+  un **récapitulatif** avant confirmation.
+- **Swipe vers la gauche** sur une ligne (geste tactile) : révèle à droite
+  **« Signer » / « PDF » / « Corbeille »** (corbeille en rouge, en dernier ;
+  Signer absent si déjà signée/non signable ; Corbeille absente si signée). Pas
+  d'action automatique en fin de course, retour élastique, une seule ligne ouverte
+  à la fois, sans gêner le défilement ni la case à cocher. Sur ordinateur : mêmes
+  actions révélées **au survol**.
+
+### Visionneuse PDF intégrée
+- Le PDF s'ouvre **dans l'app**, en plein écran (pdf.js embarqué **localement**),
+  avec **« Télécharger »** en bas et une croix pour fermer — pour éviter les
+  blocages iOS (nouvel onglet, téléchargement). Utilisée par l'icône PDF de la
+  liste, le swipe et l'icône PDF de la lettre.
+
+### Correctifs
+- **Badge « Clôturée » erroné** : cause = la clôture automatique de minuit du
+  worker passait en `cloturee` **les brouillons ET les lettres numérotées** de la
+  veille. L'auto-clôture est **neutralisée** (plus aucune lettre ne devient
+  « Clôturée » toute seule ; rien n'en dépendait), et le badge d'un brouillon (sans
+  numéro) affiche désormais **« Brouillon »**.
+- **Purge de la corbeille** : suppression **physique** automatique des brouillons
+  supprimés depuis plus de **30 jours** (tâche worker quotidienne idempotente et
+  journalisée ; jamais une lettre numérotée ou signée).
+- **Contraste** : onglets **Chauffeur / Bureau** actifs en **anthracite sur
+  orange** (plus de texte blanc), vérifié par un test.
+
 ## [0.1.0-beta.17] — 2026-11-12
 
 Saisie rendue utilisable : champs de recherche (combobox façon Odoo) et création
