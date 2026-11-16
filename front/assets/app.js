@@ -152,7 +152,7 @@ import { canGroupForSignature } from "./signature-group.js?v=13";
 import { swipeActionsFor, attachSwipe, closeOpenSwipe } from "./swipe-actions.js?v=21";
 // pdf-viewer.js (et pdf.js) chargés en import DYNAMIQUE à la 1re ouverture (g).
 import { enhanceSelect, refreshCombobox, ensureOption } from "./combobox.js?v=17";
-import { initTooltips } from "./tooltips.js?v=20";
+import { initTooltips } from "./tooltips.js?v=22";
 import { lvCompleteness, entityMissingFields } from "./completeness.js?v=211";
 
 /* ============================================================== IndexedDB == */

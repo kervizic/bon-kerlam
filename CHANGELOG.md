@@ -4,6 +4,59 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.22] — 2026-11-16
+
+Modèle « société → adresses » pour les clients et les sites de chargement, fusion
+réversible des doublons, insertion des 32 sites, et correctifs d'interface de
+l'écran lettre.
+
+### Ajouté
+- **Société → adresses (clients)** : une société (raison sociale + SIREN) porte 1
+  à N adresses (`bon.client_adresses`). Le chauffeur choisit la société puis
+  l'adresse ; s'il n'y a qu'une adresse, elle est prise d'office. La raison sociale
+  exacte reste imprimée sur la lettre ; le PDF utilise l'adresse choisie.
+- **Société → adresses (sites)** : `bon.site_societes` + `bon.sites.societe_id`.
+  8 sociétés de sites (YPREMA, KERLAM, Veolia, Cemex, RFM, Asten, SPME, Sofrat).
+- **32 nouveaux sites de chargement** (Cemex ×20, RFM ×7, Asten, SPME ×2, Sofrat
+  ×2) avec coordonnées GPS ; 2 sites Veolia nommés exactement (« Veolia - Usine des
+  Terres », « Veolia - Noisy »).
+- **Fusion de doublons réversible** depuis le Bureau (Clients et Sites) :
+  sélection de 2+ fiches, choix de la gardée ; les autres deviennent des alias
+  cherchables, lettres et tours réaffectés. Journalisée et annulable (toast
+  « Annuler »). **Bandeau « Doublons possibles »** (même SIREN / nom proche / GPS
+  proche) ; jamais de fusion automatique.
+- **Regroupements** : clients Veolia (Épinay + Noisy) et Syneos (Gournay +
+  Neuilly) ; site Yterres Émerainville fusionné dans YPREMA Émerainville (alias).
+- **« Près de moi »** : tri des sites par distance via la géolocalisation, avec
+  permission ; sans permission, l'appli fonctionne normalement.
+
+### Correctifs d'interface (écran lettre)
+- **Signer** : la barre de sélection affiche « Signer » sans compteur.
+- **Survol desktop** : la ligne ne glisse plus au survol (pointeur fin) ; la case
+  reste visible et trois petites icônes (Signer, PDF, Corbeille en rouge)
+  apparaissent à droite. Le glissement reste réservé au tactile.
+- **Heures** affichées en HH:MM partout (plus de secondes).
+- **« + » de section** : Heures, Prestations et Tours ont un « + » orange (zone
+  tactile ≥ 44 px) dans leur titre, à la place des boutons « + Ajouter … ».
+- **Tour vide** affiché dès l'ouverture d'une nouvelle lettre, non enregistré tant
+  qu'il est vide, absent du PDF, sans blocage ni rappel.
+- **Champs en ligne** (Date, Camion, Client, Projet, Contact, Destinataire) façon
+  Réglages iOS : libellé + ⓘ à gauche, valeur à droite.
+- **« Contact »** (au lieu de « Contact signataire »), infobulle « Signe les
+  lettres de voiture. » ; e-mail toujours obligatoire.
+
+### Retiré
+- **Quantité estimée de la journée** : retirée de l'interface et du PDF. La colonne
+  en base est **conservée** (aucune migration destructive).
+
+### Base de données
+- Migrations **0022** (schéma : tables `client_adresses`, `site_societes`,
+  `aliases`, `fusions` ; colonnes `merged_into_id`, `societe_id`,
+  `client_adresse_id`, `dest_adresse_id` ; fonctions de fusion/annulation ; vues
+  `api.doublons_*`) et **0023** (données : sociétés, 32 sites, regroupements,
+  suppression de la fiche vide « Nouveau site » si non référencée). Additives,
+  idempotentes, réversibles (`supabase/down/0022_down.sql`, `0023_down.sql`).
+
 ## [0.1.0-beta.21.1] — 2026-11-16
 
 Correctifs ciblés sur la saisie mobile : tours facultatifs, barre d'onglets qui
