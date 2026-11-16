@@ -11,13 +11,21 @@ Règles (cf. 0021) :
 from conftest import as_postgres, as_user
 
 
+# Compteur de jour pour garantir des date_etablissement distinctes (contrainte
+# UNIQUE lv_projet_jour_uidx : une lettre par projet et par jour).
+_JOUR = [0]
+
+
 def _insert_lv(conn, actors, *, numero=None, statut="en_cours", owner=None, deleted_days=None):
     as_postgres(conn)
+    _JOUR[0] += 1
     with conn.cursor() as cur:
         cur.execute(
-            "INSERT INTO bon.lettres_voiture (projet_id, owner_email, numero, statut, chauffeur_id) "
-            "VALUES (%s,%s,%s,%s,%s) RETURNING id",
-            (actors["projet_id"], owner or actors["chauffeur"], numero, statut, actors["chauffeur_id"]),
+            "INSERT INTO bon.lettres_voiture "
+            "(projet_id, owner_email, numero, statut, chauffeur_id, date_etablissement) "
+            "VALUES (%s,%s,%s,%s,%s, CURRENT_DATE - %s) RETURNING id",
+            (actors["projet_id"], owner or actors["chauffeur"], numero, statut,
+             actors["chauffeur_id"], _JOUR[0]),
         )
         lv_id = cur.fetchone()[0]
         if deleted_days is not None:
