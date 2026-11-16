@@ -4,6 +4,36 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.22.3] — 2026-11-16
+
+Front + migration de données (noms de groupe). Correctifs signalés sur un vrai
+iPhone en PWA.
+
+### Corrigé
+- **Régression de disposition (beta.22.2)** : TOUS les champs d'en-tête (Date,
+  Camion, Client, Adresse, Projet, Contact, Destinataire) sont de nouveau EN LIGNE
+  avec une colonne de libellés commune ; la valeur prend tout le reste et se tronque
+  à l'ellipse (chevron visible), sans jamais repasser en pile. L'infobulle est
+  flottante (ne décale rien). Sous 340 px seulement, TOUS les champs passent en pile
+  ensemble. Vérifié uniforme à 320/360/375/390/393/430 px (test e2e).
+- **Contact** : même hauteur et même taille de texte que les autres champs (testé).
+- **Heures** : les deux cases (début/fin) ont la même largeur et tiennent avec le
+  ✕, sans débordement.
+
+### Ajouté / modifié — Tours
+- Affichés du plus RÉCENT en haut (Tour n°3, n°2, n°1). Le « + » crée le tour en
+  haut et donne le focus à son premier champ.
+- **Repli manuel** par un chevron dans le titre ; tous ouverts par défaut, aucun
+  repli automatique. Un tour replié montre une ligne de résumé (sites + quantité).
+- La numérotation reste chronologique (n°1 = premier créé) ; le PDF ordonne 1 → N.
+
+### Base de données (migration de données)
+- **0024** : la raison sociale des clients **Veolia** (524334943) et **Syneos**
+  (708202833 / 340730787) devient « Veolia » / « Syneos » ; anciens noms et alias
+  supprimés (base de test). SIREN et adresses conservés ; aucune lettre touchée. Le
+  PDF affiche « Veolia » / « Syneos ». Idempotente, sauvegarde (bon.beta223_noms_backup)
+  et down (`supabase/down/0024_down.sql`).
+
 ## [0.1.0-beta.22.2] — 2026-11-16
 
 Correctifs front (aucune migration) signalés sur un vrai iPhone en PWA installée.

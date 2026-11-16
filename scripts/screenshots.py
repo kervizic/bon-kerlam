@@ -1262,6 +1262,27 @@ def shoot_overflow_veolia(ctx, prefix: str) -> None:
         return { sw: document.documentElement.scrollWidth, iw: window.innerWidth,
                  over: over.slice(0, 5), n: over.length };
     }"""
+    # beta.22.3 : disposition UNIFORME (tous les champs en ligne) + hauteur Contact
+    # identique aux autres.
+    LAYOUT = """() => {
+        const fs = [...document.querySelectorAll('.lv-header-form .field:not(.field-heures)')]
+          .filter((f) => f.offsetParent !== null);
+        const dirs = new Set(fs.map((f) => getComputedStyle(f).flexDirection));
+        const client = document.querySelector('label[for=\"f-client\"]');
+        const contact = document.querySelector('label[for=\"f-contact\"]');
+        const ch = client ? client.closest('.field').getBoundingClientRect().height : 0;
+        const coh = contact ? contact.closest('.field').getBoundingClientRect().height : 0;
+        return { uniform: dirs.size <= 1, delta: Math.abs(ch - coh) };
+    }"""
+    # beta.22.3 : 3 tours dont 1 replié (le plus récent, en haut).
+    TOURS = """async () => {
+        const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+        const b = document.getElementById('btn-add-tour');
+        b.click(); await sleep(700); b.click(); await sleep(700);
+        const c = document.querySelector('#tours-list .tour-card .tour-collapse');
+        if (c) c.click();
+        return document.querySelectorAll('#tours-list .tour-card').length;
+    }"""
     for theme in ("clair", "sombre"):
         page = ctx.new_page()
         try:
@@ -1277,11 +1298,27 @@ def shoot_overflow_veolia(ctx, prefix: str) -> None:
                 if m["sw"] > m["iw"] + 1:
                     beta222_failures.append(f"overflow/{theme}@{w}: scrollWidth {m['sw']} > innerWidth {m['iw']}")
                 if m["n"]:
-                    beta222_failures.append(
-                        f"overflow/{theme}@{w}: {m['n']} élément(s) dépassent à droite")
-                if w == 393:
-                    page.screenshot(path=str(OUT / f"{prefix}-overflow-veolia-{theme}.png"), full_page=False)
-            print(f"   overflow-veolia-{theme} (393 capturé)")
+                    beta222_failures.append(f"overflow/{theme}@{w}: {m['n']} élément(s) dépassent à droite")
+                lay = page.evaluate(LAYOUT)
+                if not lay["uniform"]:
+                    beta222_failures.append(f"layout/{theme}@{w}: disposition NON uniforme (pile + ligne mélangés)")
+                if lay["delta"] >= 2 and w >= 340:
+                    beta222_failures.append(f"contact/{theme}@{w}: hauteur Contact != autres champs")
+            # Captures Veolia + adresse longue + 3 tours dont 1 replié, à 393 et 375.
+            for cw in (393, 375):
+                page.set_viewport_size({"width": cw, "height": 1500})
+                page.goto(f"{BASE}?demo=1&screen=today&role=chauffeur&theme={theme}", wait_until="load")
+                page.wait_for_timeout(500)
+                page.evaluate(SET_VEOLIA)
+                page.wait_for_timeout(400)
+                page.evaluate(SET_ADR)
+                page.wait_for_timeout(250)
+                n = page.evaluate(TOURS)
+                page.wait_for_timeout(300)
+                if n < 3:
+                    beta222_failures.append(f"tours/{theme}@{cw}: {n} tours (3 attendus)")
+                page.screenshot(path=str(OUT / f"{prefix}-veolia-tours-{cw}-{theme}.png"), full_page=True)
+            print(f"   overflow-veolia-{theme} (393 + 375 capturés)")
         except Exception as exc:  # noqa: BLE001
             beta222_failures.append(f"overflow/{theme}: exception {exc}")
             print(f"   !! overflow/{theme}: {exc}")
@@ -1473,12 +1510,12 @@ def main() -> int:
     else:
         print("OK : beta.22.1 (sélecteur de site groupé sociétés -> adresses).")
     if beta222_failures:
-        print("beta.22.2 KO (débordement horizontal) :")
+        print("beta.22.2/.3 KO (débordement / disposition / Contact / tours) :")
         for f in beta222_failures:
             print("  -", f)
         rc = 1
     else:
-        print("OK : beta.22.2 (aucun débordement horizontal à 320-430 px).")
+        print("OK : beta.22.2/.3 (pas de débordement, disposition uniforme, tours).")
     return rc
 
 

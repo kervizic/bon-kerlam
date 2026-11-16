@@ -548,25 +548,40 @@ input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
    le champ commence juste après (petit espace) et prend TOUT le reste de la largeur.
    Un libellé trop long passe sur 2 lignes (jamais de débordement). Les blocs
    Heures/Prestations/Tours gardent leur disposition. */
+/* beta.22.3 : TOUS les champs EN LIGNE (nowrap), colonne de libellés commune ; la
+   valeur prend tout le reste (flex-basis 0) et se tronque à l'ellipse sans jamais
+   repasser en pile. L'infobulle est FLOTTANTE (absolute) sous le champ : elle ne
+   décale rien et ne le masque pas. Sous 340 px seulement, tout passe en pile. */
 .lv-header-form .field:not(.field-heures) {
-  flex-direction: row; flex-wrap: wrap; align-items: center;
-  gap: 0 6px; margin-bottom: 0; min-height: 52px;
+  flex-direction: row; flex-wrap: nowrap; align-items: center;
+  gap: 0 8px; margin-bottom: 0; min-height: 56px;
   padding: 10px 0; border-bottom: 1px solid var(--border);
+  position: relative;
 }
 .lv-header-form .field:not(.field-heures) > .tt-row,
 .lv-header-form .field:not(.field-heures) > label {
-  flex: 0 0 120px; width: 120px; margin: 0; font-weight: 500;
+  flex: 0 0 118px; width: 118px; max-width: 118px; margin: 0; font-weight: 500;
   white-space: normal; line-height: 1.2;
 }
 .lv-header-form .field:not(.field-heures) > .combobox,
 .lv-header-form .field:not(.field-heures) > select,
 .lv-header-form .field:not(.field-heures) > input {
-  flex: 1 1 auto; min-width: 0; width: auto; margin-left: 0; order: 1;
+  flex: 1 1 0; min-width: 0; width: auto; margin-left: 0;
 }
-/* beta.22.2 : l'infobulle ⓘ s'affiche SOUS le champ (nouvelle ligne pleine
-   largeur), jamais par-dessus — elle ne masque plus le champ (ex. Contact). */
 .lv-header-form .field:not(.field-heures) > .tt-bubble {
-  flex: 1 0 100%; order: 2; margin: 4px 0 0; max-width: 100%;
+  position: absolute; top: calc(100% - 4px); left: 0; right: 0; z-index: 6;
+  width: auto; max-width: 100%; margin: 0;
+}
+@media (max-width: 339px) {
+  .lv-header-form .field:not(.field-heures) {
+    flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 4px; min-height: 0;
+  }
+  .lv-header-form .field:not(.field-heures) > .tt-row,
+  .lv-header-form .field:not(.field-heures) > label { flex: none; width: auto; max-width: none; }
+  .lv-header-form .field:not(.field-heures) > .combobox,
+  .lv-header-form .field:not(.field-heures) > select,
+  .lv-header-form .field:not(.field-heures) > input { flex: none; width: 100%; }
+  .lv-header-form .field:not(.field-heures) > .tt-bubble { position: static; margin: 4px 0 0; }
 }
 /* Combobox en ligne : AU REPOS seul le chevron (le texte prend toute la place) ;
    le crayon et le ✕ n'apparaissent qu'au focus / à l'ouverture, avec la place
@@ -609,7 +624,20 @@ input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
   border-radius: var(--radius);
   padding: 16px;
 }
-.tour-card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.tour-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+/* beta.22.3 : repli manuel d'un tour (chevron dans le titre). Tous ouverts par
+   défaut ; un tour replié masque son corps et montre une ligne de résumé. */
+.tour-collapse {
+  display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;
+  background: none; border: none; cursor: pointer; text-align: left;
+  font: inherit; color: inherit; padding: 0; min-height: 44px;
+}
+.tour-collapse .tour-card-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tour-chevron { flex: 0 0 auto; transition: transform .15s ease; }
+.tour-card.is-collapsed .tour-chevron { transform: rotate(-90deg); }
+.tour-card.is-collapsed .tour-card-body { display: none; }
+.tour-summary { color: var(--text-muted); font-size: 14px; padding: 0 0 6px; overflow: hidden; text-overflow: ellipsis; }
+.tour-summary[hidden] { display: none; }
 .site-row { display: flex; gap: 6px; align-items: center; }
 .site-row input { flex: 1; }
 .nav-link { text-decoration: none; }

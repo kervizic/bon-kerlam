@@ -1979,10 +1979,30 @@ async function renderTourCard(entry) {
   node.querySelector(".btn-delete-tour").addEventListener("click", () => handleDeleteTour(entry, node));
   node.querySelector(".btn-add-ligne").addEventListener("click", () => handleAddLigne(entry, node));
 
+  // beta.22.3 : repli MANUEL (tous ouverts par défaut) + ligne de résumé quand replié.
+  const collapseBtn = node.querySelector(".tour-collapse");
+  const summaryEl = node.querySelector(".tour-summary");
+  const buildSummary = () => {
+    const chg = findSiteById(chargementSel.value);
+    const dch = findSiteById(dechargementSel.value);
+    const trajet = [chg ? siteGroupedLabel(chg) : null, dch ? siteGroupedLabel(dch) : null]
+      .filter(Boolean).join(" → ") || "Tour vide";
+    const q = (entry.lignes || []).reduce((s, l) => s + (parseFloat(String(l.quantite).replace(",", ".")) || 0), 0);
+    const unite = (entry.lignes && entry.lignes[0] && entry.lignes[0].unite) || "t";
+    summaryEl.textContent = q > 0 ? `${trajet} · ${frQty(q)} ${unite}` : trajet;
+  };
+  collapseBtn.addEventListener("click", () => {
+    const collapsed = node.classList.toggle("is-collapsed");
+    collapseBtn.setAttribute("aria-expanded", String(!collapsed));
+    if (collapsed) { buildSummary(); summaryEl.hidden = false; } else { summaryEl.hidden = true; }
+  });
+
   const lignesList = node.querySelector(".lignes-list");
   for (const ligne of lignes) renderLigneRow(lignesList, entry, ligne);
 
-  document.getElementById("tours-list").appendChild(node);
+  // Affichage du plus RÉCENT en haut : on insère en tête (la numérotation `ordre`
+  // reste chronologique ; le PDF ordonne 1 -> N).
+  document.getElementById("tours-list").prepend(node);
   initTooltips(node);
   return node;
 }
@@ -2091,7 +2111,10 @@ async function addTour() {
   try {
     removeDraftTour(); // le « + » remplace l'éventuel tour vide d'ouverture
     const entry = await createTourEntry();
-    await renderTourCard(entry);
+    const node = await renderTourCard(entry);
+    // beta.22.3 : nouveau tour EN HAUT (déjà via prepend) ; focus sur son 1er champ.
+    const first = node && node.querySelector(".site-display");
+    if (first) { try { first.scrollIntoView({ block: "nearest" }); first.focus(); } catch (e) { /* ignore */ } }
     await refreshWeightGauge();
   } catch (err) {
     console.error(err);
@@ -2154,8 +2177,11 @@ async function renderDraftTour() {
   node.querySelector(".btn-delete-tour").addEventListener("click", () => node.remove());
   node.querySelector(".btn-add-ligne").addEventListener("click", () =>
     materialize(async (entry, realNode) => handleAddLigne(entry, realNode)));
+  // le brouillon n'a pas de repli (toujours ouvert) : on neutralise le chevron.
+  const col = node.querySelector(".tour-collapse");
+  if (col) col.addEventListener("click", (e) => e.preventDefault());
 
-  document.getElementById("tours-list").appendChild(node);
+  document.getElementById("tours-list").prepend(node);
   initTooltips(node);
 }
 

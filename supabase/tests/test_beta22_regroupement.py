@@ -290,3 +290,39 @@ def test_down_scripts_executables(conn):
         )
         assert cur.fetchone()[0] == 0
     conn.rollback()
+
+
+# --------------------------------------------------------------------------- #
+# 7) beta.22.3 : noms de groupe Veolia / Syneos (migration 0024 + down)        #
+# --------------------------------------------------------------------------- #
+def test_0024_noms_groupes_et_down(conn):
+    sql = (ROOT / "supabase" / "migrations" / "0024_noms_groupes_veolia_syneos.sql").read_text(encoding="utf-8")
+    down = (DOWN / "0024_down.sql").read_text(encoding="utf-8")
+    as_postgres(conn)
+    with conn.cursor() as cur:
+        cur.execute("INSERT INTO bon.clients (raison_sociale, siren) VALUES "
+                    "('Veolia Eau Épinay','524334943') RETURNING id")
+        veolia = cur.fetchone()[0]
+        cur.execute("INSERT INTO bon.clients (raison_sociale, siren) VALUES "
+                    "('Syneos Gournay','708202833') RETURNING id")
+        syneos = cur.fetchone()[0]
+        cur.execute("INSERT INTO bon.aliases (cible_type,cible_id,alias,origine) VALUES "
+                    "('client',%s,'Veolia Eau Noisy','fusion'),('client',%s,'Syneos Neuilly','fusion')",
+                    (veolia, syneos))
+        # Application de 0024.
+        cur.execute(sql)
+        cur.execute("SELECT raison_sociale, alias FROM bon.clients WHERE id=%s", (veolia,))
+        assert cur.fetchone() == ("Veolia", None)
+        cur.execute("SELECT raison_sociale, alias FROM bon.clients WHERE id=%s", (syneos,))
+        assert cur.fetchone() == ("Syneos", None)
+        cur.execute("SELECT count(*) FROM bon.aliases WHERE cible_type='client' AND cible_id IN (%s,%s)",
+                    (veolia, syneos))
+        assert cur.fetchone()[0] == 0
+        # Retour arrière.
+        cur.execute(down)
+        cur.execute("SELECT raison_sociale FROM bon.clients WHERE id=%s", (veolia,))
+        assert cur.fetchone()[0] == "Veolia Eau Épinay"
+        cur.execute("SELECT count(*) FROM bon.aliases WHERE cible_type='client' AND cible_id=%s "
+                    "AND alias='Veolia Eau Noisy'", (veolia,))
+        assert cur.fetchone()[0] == 1
+    conn.rollback()
