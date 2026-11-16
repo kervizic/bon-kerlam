@@ -726,7 +726,7 @@ def shoot_beta20_infobulles(ctx, prefix: str) -> None:
             }"""
         )
         page.wait_for_timeout(200)
-        page.evaluate("() => window.openQuickCreate && window.openQuickCreate('contact', 'Jean Dupont')")
+        page.evaluate("() => { if (window.openQuickCreate) window.openQuickCreate('contact', 'Jean Dupont'); }")
         page.wait_for_timeout(400)
         opened = page.evaluate(
             "() => { const s = document.getElementById('quick-create-sheet'); return s && !s.hidden; }"
@@ -770,7 +770,7 @@ def shoot_beta20_fiche_clavier(ctx, prefix: str) -> None:
                 }"""
             )
             page.wait_for_timeout(200)
-            page.evaluate("() => window.openQuickCreate && window.openQuickCreate('contact', 'Jean Dupont')")
+            page.evaluate("() => { if (window.openQuickCreate) window.openQuickCreate('contact', 'Jean Dupont'); }")
             page.wait_for_timeout(400)
             # Clavier iOS simulé : visualViewport réduit + tentative de scroll de la page.
             page.evaluate(
