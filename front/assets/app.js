@@ -1340,11 +1340,18 @@ function fillHeaderForm(data) {
  * astreinte (passage au lendemain) acceptée sans message. Les créneaux sont
  * stockés en jsonb sur la lettre (colonne heures, cf. migration 0017). Une
  * nouvelle lettre reprend les créneaux de la dernière lettre du chauffeur. */
+// beta.22 (E3) : <input type="time"> n'accepte que HH:MM. Postgres peut renvoyer
+// « 08:00:00 » (type time avec secondes) : on tronque pour un affichage HH:MM.
+function hhmm(v) {
+  const s = String(v == null ? "" : v).trim();
+  return s ? s.slice(0, 5) : "";
+}
+
 function makeCreneauRow(cr) {
   const tpl = document.getElementById("tpl-creneau");
   const node = tpl.content.firstElementChild.cloneNode(true);
-  node.querySelector(".f-creneau-debut").value = (cr && cr.debut) || "";
-  node.querySelector(".f-creneau-fin").value = (cr && cr.fin) || "";
+  node.querySelector(".f-creneau-debut").value = hhmm(cr && cr.debut);
+  node.querySelector(".f-creneau-fin").value = hhmm(cr && cr.fin);
   node.querySelectorAll("input").forEach((inp) => {
     inp.addEventListener("change", saveCreneaux);
   });
@@ -1588,12 +1595,8 @@ function wireHeaderAutosave() {
   document.getElementById("f-dest-mode").addEventListener("change", saveDestinataire);
   document.getElementById("f-dest-client").addEventListener("change", saveDestinataire);
 
-  // Quantité estimée de la journée (beta.20) : nombre + unité (facultatifs).
-  wireAutosaveField(document.getElementById("f-qte-estimee"), {
-    table: "lettres_voiture", ensureId: ensureLv, field: "quantite_estimee", transform: toNumberOrNull });
-  wireAutosaveField(document.getElementById("f-qte-estimee-unite"), {
-    table: "lettres_voiture", ensureId: ensureLv, field: "quantite_estimee_unite",
-    transform: (v) => v || null });
+  // beta.22 (E6) : le champ « Quantité estimée de la journée » a été retiré de
+  // l'interface et du PDF (colonne conservée en base, plus saisie ni affichée).
 }
 
 function toNumberOrNull(v) {
@@ -1836,6 +1839,7 @@ async function loadToursFor(lv) {
   listEl.innerHTML = "";
   state.tours = [];
   if (!lv) {
+    await renderDraftTour(); // E5 : tour vide dès l'ouverture d'une nouvelle lettre
     await refreshWeightGauge();
     return;
   }
@@ -1855,6 +1859,9 @@ async function loadToursFor(lv) {
     const entry = { tour, lignes };
     state.tours.push(entry);
     await renderTourCard(entry);
+  }
+  if (state.tours.length === 0) {
+    await renderDraftTour(); // E5 : lettre existante sans tour -> un tour vide proposé
   }
   await refreshWeightGauge();
 }
@@ -1987,26 +1994,101 @@ async function handleDeleteTour(entry, node) {
   }
 }
 
+// Crée réellement un tour en base (crée la LV au besoin ; le 1er tour attribue le
+// numéro KER-##### via trigger) et renvoie l'entrée { tour, lignes }.
+async function createTourEntry() {
+  const lvId = await ensureLv();
+  const ordre = state.tours.length + 1;
+  const tour = await createTour({ lv_id: lvId, ordre });
+  const entry = { tour, lignes: [] };
+  state.tours.push(entry);
+  try {
+    state.lv = await getLv(lvId);
+  } catch (err) {
+    /* ignore */
+  }
+  renderLvNumero();
+  pushServerUndo();
+  return entry;
+}
+
+function removeDraftTour() {
+  const d = document.querySelector('#tours-list [data-draft="1"]');
+  if (d) d.remove();
+}
+
 async function addTour() {
   try {
-    const lvId = await ensureLv();
-    const ordre = state.tours.length + 1;
-    const tour = await createTour({ lv_id: lvId, ordre });
-    const entry = { tour, lignes: [] };
-    state.tours.push(entry);
+    removeDraftTour(); // le « + » remplace l'éventuel tour vide d'ouverture
+    const entry = await createTourEntry();
     await renderTourCard(entry);
-    try {
-      state.lv = await getLv(lvId); // le 1er tour attribue le numéro KER-##### via trigger
-    } catch (err) {
-      /* ignore */
-    }
-    renderLvNumero();
-    pushServerUndo();
     await refreshWeightGauge();
   } catch (err) {
     console.error(err);
     alert("Impossible de créer le tour pour le moment (hors ligne ?). La création nécessite un aller-retour réseau.");
   }
+}
+
+// beta.22 (E5) : un tour VIDE affiché dès l'ouverture d'une nouvelle lettre. Il
+// n'est PAS enregistré tant qu'il est vide (aucune LV créée, aucun numéro, absent
+// du PDF) ; il ne bloque rien. Il se « matérialise » en tour réel au 1er choix.
+async function renderDraftTour() {
+  const tpl = document.getElementById("tpl-tour");
+  const node = tpl.content.firstElementChild.cloneNode(true);
+  node.dataset.draft = "1";
+  node.querySelector(".tour-card-title").textContent = `Tour n°${state.tours.length + 1}`;
+
+  const chargementSel = node.querySelector(".f-site-chargement");
+  const dechargementSel = node.querySelector(".f-site-dechargement");
+  const siteOptions = await getSiteOptionsList();
+  populateSelect(chargementSel, siteOptions, (s) => s.id, (s) => s.nom, "Choisir un site…");
+  populateSelect(dechargementSel, siteOptions, (s) => s.id, (s) => s.nom, "Choisir un site…");
+
+  let materializing = false;
+  const materialize = async (apply) => {
+    if (materializing) return;
+    materializing = true;
+    try {
+      const entry = await createTourEntry();
+      node.remove();
+      const realNode = await renderTourCard(entry);
+      if (apply) await apply(entry, realNode);
+      await refreshWeightGauge();
+    } catch (err) {
+      materializing = false;
+      console.error(err);
+      alert("Impossible de créer le tour pour le moment (hors ligne ?).");
+    }
+  };
+
+  const onPickSite = (cssSel) => function () {
+    const v = this.value;
+    if (!v) return;
+    materialize(async (entry, realNode) => {
+      const sel = realNode.querySelector(cssSel);
+      sel.value = v;
+      refreshCombobox(sel);
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+  };
+  chargementSel.addEventListener("change", onPickSite(".f-site-chargement"));
+  dechargementSel.addEventListener("change", onPickSite(".f-site-dechargement"));
+
+  const siteCbOpts = (sel) => ({
+    entity: "site", driverId: driverIdForRecents, placeholder: "Choisir un site…",
+    createLabel: "un site",
+    onCreate: (text) => openQuickCreate("site", text),
+    onEdit: (value) => openQuickCreate("site", "", value), canEdit: () => true,
+  });
+  enhanceSelect(chargementSel, siteCbOpts(chargementSel));
+  enhanceSelect(dechargementSel, siteCbOpts(dechargementSel));
+
+  node.querySelector(".btn-delete-tour").addEventListener("click", () => node.remove());
+  node.querySelector(".btn-add-ligne").addEventListener("click", () =>
+    materialize(async (entry, realNode) => handleAddLigne(entry, realNode)));
+
+  document.getElementById("tours-list").appendChild(node);
+  initTooltips(node);
 }
 
 /* ========================================================= Prestations (H) == */

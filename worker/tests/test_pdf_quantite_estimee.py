@@ -39,11 +39,12 @@ def test_fmt_qte_virgule_fr_sans_zeros():
     assert pdf._fmt_qte("8.250") == "8,25"
 
 
-def test_ligne_quantite_estimee_imprimee_si_renseignee():
+def test_quantite_estimee_jamais_imprimee_beta22():
+    # beta.22 (E6) : même renseignée, la quantité estimée n'apparaît plus au PDF.
     ctx = _context()
     ctx["lv"]["quantite_estimee_aff"] = "12,5 tonnes"
     html = pdf.render_html(ctx)
-    assert "Quantité estimée de la journée : 12,5 tonnes" in html
+    assert "Quantité estimée de la journée" not in html
 
 
 def test_ligne_quantite_estimee_absente_si_vide():

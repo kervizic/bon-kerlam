@@ -164,13 +164,9 @@ def build_context(lv_id: int) -> dict[str, Any]:
     # l'ancien texte libre heures_regie pour les lettres antérieures non migrées.
     lv["heures_aff"] = format_creneaux(lv.get("heures")) or (lv.get("heures_regie") or "")
 
-    # Quantité estimée de la journée (mention obligatoire — arrêté du 9/11/1999
-    # art. 5 I a). Imprimée en une ligne « X unité » UNIQUEMENT si renseignée.
-    qte = lv.get("quantite_estimee")
-    if qte is not None:
-        lv["quantite_estimee_aff"] = f"{_fmt_qte(qte)} {unite_label(lv.get('quantite_estimee_unite'), qte)}"
-    else:
-        lv["quantite_estimee_aff"] = ""
+    # beta.22 (E6) : la « Quantité estimée de la journée » n'est plus imprimée sur
+    # la lettre de voiture (colonne conservée en base, plus affichée).
+    lv["quantite_estimee_aff"] = ""
 
     tours = db.query(
         """

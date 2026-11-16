@@ -240,7 +240,7 @@
               <select id="f-projet" name="projet_id"><option value="">Choisir…</option></select>
             </div>
             <div class="field">
-              <label for="f-contact" data-tt="contact">Contact signataire</label>
+              <label for="f-contact" data-tt="contact">Contact</label>
               <select id="f-contact" name="contact_id"><option value="">Choisir…</option></select>
             </div>
             <div class="field">
@@ -261,31 +261,31 @@
               <input type="text" id="f-dest-legacy" readonly>
             </div>
             <div class="field field-heures">
-              <label data-tt="heures">Heures</label>
-              <div id="creneaux-list" class="creneaux-list"></div>
-              <button type="button" id="btn-add-creneau" class="btn btn-secondary btn-sm btn-add-creneau">+ Ajouter un créneau</button>
-            </div>
-            <div class="field">
-              <label for="f-qte-estimee" data-tt="quantite_estimee">Quantité estimée de la journée</label>
-              <div class="qte-estimee-row">
-                <input type="text" id="f-qte-estimee" name="quantite_estimee" inputmode="decimal" placeholder="Qté">
-                <select id="f-qte-estimee-unite" name="quantite_estimee_unite" aria-label="Unité de la quantité estimée">
-                  <option value="">Unité…</option>
-                  <option value="t">t</option>
-                  <option value="m3">m³</option>
-                  <option value="big_bag">big bag</option>
-                </select>
+              <div class="form-section-head">
+                <label data-tt="heures">Heures</label>
+                <button type="button" id="btn-add-creneau" class="section-add btn-add-creneau" aria-label="Ajouter un créneau" title="Ajouter un créneau">
+                  <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                </button>
               </div>
+              <div id="creneaux-list" class="creneaux-list"></div>
             </div>
           </form>
 
-          <h2 class="form-section-title" data-tt="prestations">Prestations</h2>
+          <div class="form-section-head">
+            <h2 class="form-section-title" data-tt="prestations">Prestations</h2>
+            <button type="button" id="btn-add-prestation" class="section-add" aria-label="Ajouter une prestation" title="Ajouter une prestation">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+          </div>
           <div id="prestations-list" class="prestations-list"></div>
-          <button type="button" id="btn-add-prestation" class="btn btn-secondary btn-block">+ Ajouter une prestation</button>
 
-          <h2 class="form-section-title" data-tt="tours">Tours</h2>
+          <div class="form-section-head">
+            <h2 class="form-section-title" data-tt="tours">Tours</h2>
+            <button type="button" id="btn-add-tour" class="section-add" aria-label="Ajouter un tour" title="Ajouter un tour">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+          </div>
           <div id="tours-list" class="tours-list"></div>
-          <button type="button" id="btn-add-tour" class="btn btn-secondary btn-block">+ Ajouter un tour</button>
         </section>
 
         <!-- -------------------------------------------------------------- Mes LV -->
@@ -476,7 +476,7 @@
     <div id="selection-bar" class="selection-bar" aria-label="Actions sur la sélection">
       <button type="button" id="btn-signer" class="btn btn-primary selection-signer">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-        Signer (<span id="signer-count">0</span>)
+        Signer
       </button>
       <button type="button" id="btn-selection-pdf" class="icon-btn selection-icon" title="Exporter en PDF" aria-label="Exporter en PDF" hidden>
         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M12 18v-6"/><path d="m9 15 3 3 3-3"/></svg>

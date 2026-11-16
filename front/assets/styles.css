@@ -528,6 +528,44 @@ input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
 .field-group legend { font-weight: 700; padding: 0 6px; }
 .radio-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; font-size: 16px; }
 
+/* beta.22 (E7) : champs d'en-tête EN LIGNE, façon Réglages iOS — libellé + ⓘ à
+   gauche, valeur à droite, même ligne ; un nom long passe sur 2 lignes plutôt que
+   d'être tronqué. Les blocs Heures/Prestations/Tours gardent leur disposition. */
+.lv-header-form .field:not(.field-heures) {
+  flex-direction: row; flex-wrap: wrap; align-items: center;
+  gap: 4px 12px; margin-bottom: 0; min-height: 52px;
+  padding: 10px 0; border-bottom: 1px solid var(--border);
+}
+.lv-header-form .field:not(.field-heures) > .tt-row,
+.lv-header-form .field:not(.field-heures) > label {
+  flex: 0 1 46%; margin: 0; font-weight: 500;
+}
+.lv-header-form .field:not(.field-heures) > .combobox,
+.lv-header-form .field:not(.field-heures) > select,
+.lv-header-form .field:not(.field-heures) > input {
+  flex: 1 1 45%; min-width: 0; margin-left: auto;
+}
+
+/* beta.22 (E4) : titre de section (Heures, Prestations, Tours) + « + » orange à
+   droite, même ligne, zone tactile >= 44 px (norme iOS, économise une ligne). */
+.form-section-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; margin: 20px 0 8px;
+}
+.form-section-head .form-section-title,
+.form-section-head > label,
+.form-section-head > .tt-row { margin: 0; }
+.field-heures .form-section-head { margin: 0 0 6px; }
+/* « + » orange (zone tactile 44px), fond discret : évite le texte blanc sur
+   l'orange de marque (garde-fou de contraste). */
+.section-add {
+  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+  width: 44px; height: 44px; min-width: 44px; padding: 0;
+  border: none; border-radius: 50%; background: var(--bg); color: var(--c-orange); cursor: pointer;
+}
+.section-add:hover, .section-add:focus-visible { background: var(--border); outline: none; }
+.section-add svg { width: 24px; height: 24px; }
+
 /* -------------------------------------------------------------- Tour cards */
 .tours-list { display: flex; flex-direction: column; gap: var(--gap); margin-bottom: var(--gap); }
 .tour-card {
@@ -676,10 +714,25 @@ input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
 .lv-row-action-signer { background: var(--c-blue); }
 .lv-row-action-pdf { background: var(--c-grey); }
 .lv-row-action.is-danger { background: var(--c-red); } /* corbeille en rouge, en dernier */
-/* Ordinateur (survol fin) : pas de JS tactile — on révèle au survol. */
+/* Ordinateur (survol fin) : norme Gmail — la ligne NE glisse PAS, la case reste
+   visible, trois petites icônes (Signer, PDF, Corbeille en rouge) apparaissent à
+   droite au survol, au-dessus du contenu. Le glissement reste réservé au tactile. */
 @media (hover: hover) and (pointer: fine) {
-  .lv-swipe:hover .lv-swipe-content { transform: translateX(calc(-1 * var(--actions-w, 0px))); transition: transform .2s ease; }
-  .lv-swipe:hover .lv-row-actions { visibility: visible; }
+  .lv-swipe:hover .lv-swipe-content { transform: none; } /* jamais de décalage au survol */
+  .lv-swipe:hover .lv-row-actions {
+    visibility: visible; z-index: 3;          /* au-dessus du contenu (z-index 2) */
+    background: linear-gradient(to right, transparent, var(--surface) 20px);
+    padding-left: 24px; gap: 2px; align-items: center;
+  }
+  /* icônes compactes (pas les panneaux larges du swipe tactile) */
+  .lv-swipe:hover .lv-row-action {
+    width: 40px; min-width: 40px; height: 40px; border-radius: 8px;
+    background: transparent; color: var(--text-muted); font-size: 0; /* masque le libellé */
+  }
+  .lv-swipe:hover .lv-row-action svg { width: 20px; height: 20px; }
+  .lv-swipe:hover .lv-row-action-signer { color: var(--c-blue); }
+  .lv-swipe:hover .lv-row-action.is-danger { color: var(--c-red); }
+  .lv-swipe:hover .lv-row-action:hover { background: var(--bg); }
 }
 
 /* Visionneuse PDF intégrée plein écran (beta.21). */
