@@ -206,6 +206,10 @@ jobs:
   screenshots:
     name: captures responsive (Playwright)
     runs-on: ubuntu-latest
+    # Garde-fou : le job ne doit jamais tourner indéfiniment (une capture qui pend
+    # échoue vite au lieu de bloquer 6 h). Les captures déjà prises sont publiées
+    # (upload if: always()).
+    timeout-minutes: 25
     # Image officielle Playwright : Chromium + dépendances préinstallés (pas d'apt,
     # évite les pannes réseau transitoires des miroirs Ubuntu).
     container:

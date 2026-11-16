@@ -77,7 +77,7 @@ def shoot(ctx, prefix, route, theme, label, *, role="", drawer=False, check=True
     try:
         extra = f"&role={role}" if role else ""
         url = f"{BASE}?demo=1&screen={route}&theme={theme}{extra}"
-        page.goto(url, wait_until="networkidle")
+        page.goto(url, wait_until="load")
         page.wait_for_timeout(500)
         if drawer:
             page.click("#btn-nav-more", timeout=3000)
@@ -100,7 +100,7 @@ def shoot_lv_modif(ctx, prefix: str) -> None:
     (bouton Annuler visible)."""
     page = ctx.new_page()
     try:
-        page.goto(f"{BASE}?demo=1&screen=today&role=bureau&theme=clair", wait_until="networkidle")
+        page.goto(f"{BASE}?demo=1&screen=today&role=bureau&theme=clair", wait_until="load")
         page.wait_for_timeout(600)
         undo_before = page.locator("#btn-undo").is_hidden()
         page.screenshot(path=str(OUT / f"{prefix}-lv-avant-modif-clair.png"), full_page=False)
@@ -129,7 +129,7 @@ def shoot_signer(ctx, prefix: str) -> None:
     for theme in ("clair", "sombre"):
         page = ctx.new_page()
         try:
-            page.goto(f"{BASE}?demo=1&screen=mes-lv&role=chauffeur&theme={theme}", wait_until="networkidle")
+            page.goto(f"{BASE}?demo=1&screen=mes-lv&role=chauffeur&theme={theme}", wait_until="load")
             page.wait_for_timeout(600)
             boxes = page.locator("#mes-lv-list .lv-row-check input")
             # Deux lettres du même contact (démo : KER-03041 + KER-03042).
@@ -154,7 +154,7 @@ def shoot_prestations(ctx, prefix: str) -> None:
     for theme in ("clair", "sombre"):
         page = ctx.new_page()
         try:
-            page.goto(f"{BASE}?demo=1&screen=today&role=chauffeur&theme={theme}", wait_until="networkidle")
+            page.goto(f"{BASE}?demo=1&screen=today&role=chauffeur&theme={theme}", wait_until="load")
             page.wait_for_timeout(600)
             page.locator("#prestations-list .prestation-row").first.scroll_into_view_if_needed()
             page.wait_for_timeout(200)
@@ -168,7 +168,7 @@ def shoot_prestations(ctx, prefix: str) -> None:
     for theme in ("clair", "sombre"):
         page = ctx.new_page()
         try:
-            page.goto(f"{BASE}?demo=1&screen=prestations&role=bureau&theme={theme}", wait_until="networkidle")
+            page.goto(f"{BASE}?demo=1&screen=prestations&role=bureau&theme={theme}", wait_until="load")
             page.wait_for_timeout(600)
             page.screenshot(path=str(OUT / f"{prefix}-prestations-bureau-{theme}.png"), full_page=True)
             check_no_hscroll(page, f"{prefix}-prestations-bureau-{theme}")
@@ -185,7 +185,7 @@ def shoot_suppression(ctx, prefix: str) -> None:
     for theme in ("clair", "sombre"):
         page = ctx.new_page()
         try:
-            page.goto(f"{BASE}?demo=1&screen=today&role=chauffeur&theme={theme}", wait_until="networkidle")
+            page.goto(f"{BASE}?demo=1&screen=today&role=chauffeur&theme={theme}", wait_until="load")
             page.wait_for_timeout(600)
             page.click("#btn-delete-lv", timeout=3000)
             page.wait_for_timeout(300)
@@ -203,7 +203,7 @@ def shoot_formulaire_heures(ctx, prefix: str) -> None:
     for theme in ("clair", "sombre"):
         page = ctx.new_page()
         try:
-            page.goto(f"{BASE}?demo=1&screen=today&role=chauffeur&theme={theme}", wait_until="networkidle")
+            page.goto(f"{BASE}?demo=1&screen=today&role=chauffeur&theme={theme}", wait_until="load")
             page.wait_for_timeout(600)
             page.screenshot(path=str(OUT / f"{prefix}-formulaire-heures-{theme}.png"), full_page=True)
             check_no_hscroll(page, f"{prefix}-formulaire-heures-{theme}")
@@ -233,7 +233,7 @@ def shoot_date_heures(ctx, prefix: str) -> None:
         try:
             page.goto(
                 f"{BASE}?demo=1&screen=today&role=bureau&theme={theme}",
-                wait_until="networkidle",
+                wait_until="load",
             )
             page.wait_for_timeout(600)
             # Valeurs explicites pour que le texte natif soit visible sur la capture.
@@ -306,7 +306,7 @@ def shoot_logo(ctx, prefix: str) -> None:
         try:
             page.goto(
                 f"{BASE}?demo=1&screen=dashboard&role=bureau&theme={theme}",
-                wait_until="networkidle",
+                wait_until="load",
             )
             page.wait_for_timeout(500)
             logo = page.locator(".topbar .logo").first
@@ -347,7 +347,7 @@ def shoot_login(ctx, prefix: str) -> None:
     for theme in ("clair", "sombre"):
         page = ctx.new_page()
         try:
-            page.goto(f"{BASE}?demo=1&theme={theme}", wait_until="networkidle")
+            page.goto(f"{BASE}?demo=1&theme={theme}", wait_until="load")
             page.wait_for_timeout(400)
             page.evaluate(
                 """() => {
@@ -375,7 +375,7 @@ def shoot_combobox(ctx, prefix: str) -> None:
     for theme in ("clair", "sombre"):
         page = ctx.new_page()
         try:
-            page.goto(f"{BASE}?demo=1&screen=today&role=chauffeur&theme={theme}", wait_until="networkidle")
+            page.goto(f"{BASE}?demo=1&screen=today&role=chauffeur&theme={theme}", wait_until="load")
             page.wait_for_timeout(600)
             # Ouvre le combobox Client et tape « jean » -> liste filtrée + « + Créer ».
             page.evaluate(
@@ -413,7 +413,7 @@ def shoot_combobox(ctx, prefix: str) -> None:
     for theme in ("clair", "sombre"):
         page = ctx.new_page()
         try:
-            page.goto(f"{BASE}?demo=1&screen=clients&role=bureau&theme={theme}", wait_until="networkidle")
+            page.goto(f"{BASE}?demo=1&screen=clients&role=bureau&theme={theme}", wait_until="load")
             page.wait_for_timeout(600)
             page.screenshot(path=str(OUT / f"{prefix}-clients-bureau-{theme}.png"), full_page=False)
             check_no_hscroll(page, f"{prefix}-clients-bureau-{theme}")
@@ -489,7 +489,7 @@ def shoot_beta20_fiches(ctx, prefix: str) -> None:
     for theme in ("clair", "sombre"):
         page = ctx.new_page()
         try:
-            page.goto(f"{BASE}?demo=1&screen=today&role=bureau&theme={theme}", wait_until="networkidle")
+            page.goto(f"{BASE}?demo=1&screen=today&role=bureau&theme={theme}", wait_until="load")
             page.wait_for_timeout(600)
             # Un client doit être choisi avant de créer un contact.
             page.evaluate(
@@ -638,7 +638,7 @@ def shoot_beta20_infobulles(ctx, prefix: str) -> None:
     for theme in ("clair", "sombre"):
         page = ctx.new_page()
         try:
-            page.goto(f"{BASE}?demo=1&screen=today&role=bureau&theme={theme}", wait_until="networkidle")
+            page.goto(f"{BASE}?demo=1&screen=today&role=bureau&theme={theme}", wait_until="load")
             page.wait_for_timeout(600)
 
             n_icons = page.locator(".tt-btn").count()
@@ -713,7 +713,7 @@ def shoot_beta20_infobulles(ctx, prefix: str) -> None:
     # --- Fiche rapide contact : ⓘ sur l'e-mail (clair).
     page = ctx.new_page()
     try:
-        page.goto(f"{BASE}?demo=1&screen=today&role=chauffeur&theme=clair", wait_until="networkidle")
+        page.goto(f"{BASE}?demo=1&screen=today&role=chauffeur&theme=clair", wait_until="load")
         page.wait_for_timeout(600)
         # Choisir un client (prérequis de la fiche contact) puis ouvrir la fiche.
         page.evaluate(
@@ -757,7 +757,7 @@ def shoot_beta20_fiche_clavier(ctx, prefix: str) -> None:
     for theme in ("clair", "sombre"):
         page = ctx.new_page()
         try:
-            page.goto(f"{BASE}?demo=1&screen=today&role=chauffeur&theme={theme}", wait_until="networkidle")
+            page.goto(f"{BASE}?demo=1&screen=today&role=chauffeur&theme={theme}", wait_until="load")
             page.wait_for_timeout(600)
             # Choisir un client (prérequis du contact) puis ouvrir la fiche contact.
             page.evaluate(
@@ -835,7 +835,7 @@ def shoot_beta20_completeness(ctx, prefix: str) -> None:
     for theme in ("clair", "sombre"):
         page = ctx.new_page()
         try:
-            page.goto(f"{BASE}?demo=1&screen=today&role=bureau&theme={theme}", wait_until="networkidle")
+            page.goto(f"{BASE}?demo=1&screen=today&role=bureau&theme={theme}", wait_until="load")
             page.wait_for_timeout(600)
             # Force un manque : on vide la date (mention obligatoire).
             page.evaluate(
@@ -873,7 +873,7 @@ def shoot_beta20_bureau_filter(ctx, prefix: str) -> None:
     """beta.20 : filtre « À compléter » sur l'écran bureau Clients (clair)."""
     page = ctx.new_page()
     try:
-        page.goto(f"{BASE}?demo=1&screen=clients&role=bureau&theme=clair", wait_until="networkidle")
+        page.goto(f"{BASE}?demo=1&screen=clients&role=bureau&theme=clair", wait_until="load")
         page.wait_for_timeout(600)
         present = page.evaluate("() => !!document.getElementById('filter-clients-incomplete')")
         if not present:
@@ -904,6 +904,7 @@ def main() -> int:
             user_agent=IOS26_UA, **LOCALE,
         )
         iphone.set_default_timeout(8000)
+        iphone.set_default_navigation_timeout(20000)
         # Logo KERLAM : vérifie que la police Sarpanch est bien chargée et appliquée
         # (régression iPhone : le logo retombait en police système) + gros plan.
         shoot_logo(iphone, "iphone")
@@ -929,11 +930,13 @@ def main() -> int:
 
         ipad = browser.new_context(viewport=IPAD, device_scale_factor=2, is_mobile=True, has_touch=True, **LOCALE)
         ipad.set_default_timeout(8000)
+        ipad.set_default_navigation_timeout(20000)
         shoot(ipad, "ipad", "dashboard", "clair", "tableau-de-bord", role="bureau")
         ipad.close()
 
         desktop = browser.new_context(viewport=DESKTOP, **LOCALE)
         desktop.set_default_timeout(8000)
+        desktop.set_default_navigation_timeout(20000)
         shoot(desktop, "bureau", "dashboard", "clair", "tableau-de-bord", check=False)
         shoot(desktop, "bureau", "chauffeurs", "clair", "chauffeurs", check=False)
         desktop.close()
@@ -944,9 +947,10 @@ def main() -> int:
             has_touch=True, user_agent=IOS26_UA, **LOCALE,
         )
         inst.set_default_timeout(8000)
+        inst.set_default_navigation_timeout(20000)
         ip = inst.new_page()
         try:
-            ip.goto(BASE.replace("index.html", "") + "installer/", wait_until="networkidle")
+            ip.goto(BASE.replace("index.html", "") + "installer/", wait_until="load")
             ip.wait_for_timeout(500)
             ip.screenshot(path=str(OUT / "iphone-installer-clair.png"), full_page=True)
             check_no_hscroll(ip, "installer")
@@ -967,6 +971,7 @@ def main() -> int:
             user_agent=IOS26_UA, **LOCALE,
         )
         wk_iphone.set_default_timeout(8000)
+        wk_iphone.set_default_navigation_timeout(20000)
         print("WebKit (Safari iOS) : alignement Date / Heures")
         shoot_date_heures(wk_iphone, "webkit-iphone")
         wk_iphone.close()
@@ -978,6 +983,7 @@ def main() -> int:
             user_agent=IOS26_UA, **LOCALE,
         )
         wk_iphone2.set_default_timeout(8000)
+        wk_iphone2.set_default_navigation_timeout(20000)
         print("WebKit (Safari iOS, DSR 2) : fiches rapides autosave beta.20")
         shoot_beta20_fiches(wk_iphone2, "webkit-iphone")
         print("WebKit (Safari iOS, DSR 2) : fiche plein écran + clavier beta.20")
