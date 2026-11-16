@@ -545,6 +545,11 @@ input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
 .lv-header-form .field:not(.field-heures) > input {
   flex: 1 1 56%; min-width: 55%; margin-left: auto;
 }
+/* Nom long tronqué dans la combobox en ligne : fond opaque sous les icônes
+   (crayon / ✕ / chevron) pour éviter toute superposition visible avec le texte. */
+.lv-header-form .field:not(.field-heures) .cb-edit,
+.lv-header-form .field:not(.field-heures) .cb-clear,
+.lv-header-form .field:not(.field-heures) .cb-caret { background: var(--surface); }
 
 /* beta.22 (E4) : titre de section (Heures, Prestations, Tours) + « + » orange à
    droite, même ligne, zone tactile >= 44 px (norme iOS, économise une ligne). */
