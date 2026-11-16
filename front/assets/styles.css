@@ -538,12 +538,12 @@ input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
 }
 .lv-header-form .field:not(.field-heures) > .tt-row,
 .lv-header-form .field:not(.field-heures) > label {
-  flex: 0 1 46%; margin: 0; font-weight: 500;
+  flex: 0 1 38%; margin: 0; font-weight: 500;
 }
 .lv-header-form .field:not(.field-heures) > .combobox,
 .lv-header-form .field:not(.field-heures) > select,
 .lv-header-form .field:not(.field-heures) > input {
-  flex: 1 1 45%; min-width: 0; margin-left: auto;
+  flex: 1 1 56%; min-width: 55%; margin-left: auto;
 }
 
 /* beta.22 (E4) : titre de section (Heures, Prestations, Tours) + « + » orange à

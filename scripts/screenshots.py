@@ -105,15 +105,22 @@ def shoot_lv_modif(ctx, prefix: str) -> None:
         undo_before = page.locator("#btn-undo").is_hidden()
         page.screenshot(path=str(OUT / f"{prefix}-lv-avant-modif-clair.png"), full_page=False)
         print("   lv-avant-modif (undo masqué:", undo_before, ")")
-        # Premier créneau horaire VISIBLE (éviter #f-dest-legacy, caché).
-        field = page.locator("#creneaux-list input[type='time']").first
-        # Centrer le champ (sinon la topbar fixe / le bandeau peuvent intercepter le clic).
-        field.evaluate("el => el.scrollIntoView({block: 'center'})")
-        page.wait_for_timeout(150)
-        field.click()
-        field.fill("08:30")
-        page.locator("h1").first.click()  # blur -> empile l'annulation
-        page.wait_for_timeout(300)
+        # Premier créneau horaire : modification via JS (mise en page compacte
+        # beta.22 — champs d'en-tête en ligne — on évite les aléas d'actionnabilité
+        # du clic Playwright ; change + blur empilent l'annulation comme une saisie).
+        page.evaluate(
+            """() => {
+                const el = document.querySelector("#creneaux-list input[type='time']");
+                if (!el) return;
+                el.scrollIntoView({block: 'center'});
+                el.focus();
+                el.value = '08:30';
+                el.dispatchEvent(new Event('input', {bubbles:true}));
+                el.dispatchEvent(new Event('change', {bubbles:true}));
+                el.blur();
+            }"""
+        )
+        page.wait_for_timeout(400)
         undo_after = page.locator("#btn-undo").is_visible()
         page.screenshot(path=str(OUT / f"{prefix}-lv-apres-modif-clair.png"), full_page=False)
         print("   lv-apres-modif (undo visible:", undo_after, ")")
@@ -507,7 +514,8 @@ def shoot_beta20_fiches(ctx, prefix: str) -> None:
             )
             page.wait_for_timeout(200)
 
-            # Aide « Contact signataire » portée par l'infobulle ⓘ.
+            # beta.22 (E8) : libellé « Contact » (au lieu de « Contact signataire »),
+            # l'aide est portée par l'infobulle ⓘ.
             lab = page.evaluate(
                 """() => {
                   const l = document.querySelector('label[for="f-contact"]');
@@ -516,7 +524,7 @@ def shoot_beta20_fiches(ctx, prefix: str) -> None:
                   return { label: l ? l.textContent.trim() : '', help: bubble ? bubble.textContent.trim() : '' };
                 }"""
             )
-            _assert(lab["label"] == "Contact signataire", f"label contact = {lab['label']!r}")
+            _assert(lab["label"] == "Contact", f"label contact = {lab['label']!r}")
             _assert("Signe les lettres de voiture" in lab["help"], "aide contact (infobulle) absente")
 
             # Ouvre « Nouveau contact signataire » (combobox + Créer).
@@ -703,14 +711,8 @@ def shoot_beta20_infobulles(ctx, prefix: str) -> None:
             page.screenshot(path=str(OUT / f"{prefix}-infobulle-destinataire-{theme}.png"), full_page=False)
             check_no_hscroll(page, f"infobulles-{theme}")
 
-            # --- Champ « Quantité estimée de la journée » (beta.20) : capture + ⓘ présent.
-            qrow = page.locator('.tt-row:has(label[data-tt="quantite_estimee"])')
-            if qrow.count() == 0:
-                beta20_failures.append(f"quantite-estimee/{theme}: libellé/infobulle absent du formulaire")
-            else:
-                qrow.scroll_into_view_if_needed()
-                page.wait_for_timeout(150)
-                page.screenshot(path=str(OUT / f"{prefix}-quantite-estimee-{theme}.png"), full_page=False)
+            # beta.22 (E6) : le champ « Quantité estimée de la journée » a été retiré
+            # de l'interface (plus de capture ni de contrôle de présence).
             print(f"   infobulles-{theme} ({n_icons} icônes ⓘ)")
         except Exception as exc:  # noqa: BLE001
             beta20_failures.append(f"infobulles/{theme}: {exc}")
