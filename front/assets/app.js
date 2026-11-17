@@ -44,6 +44,11 @@ import {
   sendEmailOtp,
   verifyEmailOtp,
   signOut,
+  webauthnSupported,
+  registerPasskey,
+  signInWithPasskey,
+  listPasskeys,
+  deletePasskey,
   getProfil,
   getChauffeurByEmail,
   getLvDuJour,
@@ -5243,6 +5248,9 @@ function wireStaticUI() {
   document.getElementById("btn-logout").addEventListener("click", () => logout());
 
   wireEmailOtpLogin();
+  wirePasskeyLogin();
+  wirePasskeyEnrollSheet();
+  wirePasskeyReglages();
   wireReglagesBureauFields();
   initInstall();
 
@@ -5300,6 +5308,143 @@ function wireStaticUI() {
 // (handleSessionChange) n'a rien de spécifique à gérer ici.
 let otpResendTimer = null;
 let otpEmail = "";
+
+// -------------------------------------------- Passkeys / Face ID (beta.27) --
+let justLoggedInViaOtp = false;
+const PASSKEY_SNOOZE_KEY = "bon_passkey_snooze"; // timestamp ms : ne pas reproposer avant
+const PASSKEY_SNOOZE_MS = 7 * 24 * 60 * 60 * 1000; // 7 jours
+
+function passkeySnoozed() {
+  try {
+    const until = parseInt(localStorage.getItem(PASSKEY_SNOOZE_KEY) || "0", 10);
+    return Number.isFinite(until) && Date.now() < until;
+  } catch (e) { return false; }
+}
+function snoozePasskeyOffer() {
+  try { localStorage.setItem(PASSKEY_SNOOZE_KEY, String(Date.now() + PASSKEY_SNOOZE_MS)); } catch (e) { /* noop */ }
+}
+
+function showPasskeyEnrollSheet(show) {
+  const el = document.getElementById("passkey-enroll-sheet");
+  if (el) el.hidden = !show;
+}
+
+// Propose UNE fois d'activer Face ID après une connexion par code e-mail, si le
+// navigateur gère WebAuthn et qu'aucune passkey n'existe encore pour ce compte.
+async function maybePromptPasskeyEnroll() {
+  if (!justLoggedInViaOtp) return;
+  justLoggedInViaOtp = false;
+  if (!webauthnSupported() || passkeySnoozed()) return;
+  try {
+    const list = await listPasskeys();
+    if (Array.isArray(list) && list.length > 0) return; // déjà au moins une passkey
+  } catch (e) { return; } // en cas d'échec, on ne force rien
+  showPasskeyEnrollSheet(true);
+}
+
+async function doRegisterPasskey() {
+  await registerPasskey();
+  showToast("Face ID activé.");
+  await refreshPasskeyList();
+}
+
+function wirePasskeyEnrollSheet() {
+  const activate = document.getElementById("btn-passkey-enroll-activate");
+  const later = document.getElementById("btn-passkey-enroll-later");
+  const later2 = document.getElementById("btn-passkey-enroll-later-2");
+  const dismiss = () => { snoozePasskeyOffer(); showPasskeyEnrollSheet(false); };
+  if (later) later.addEventListener("click", dismiss);
+  if (later2) later2.addEventListener("click", dismiss);
+  if (activate) {
+    activate.addEventListener("click", async () => {
+      activate.disabled = true;
+      try {
+        await doRegisterPasskey();
+        showPasskeyEnrollSheet(false);
+      } catch (err) {
+        // Annulation utilisateur ou échec : on referme sans insister (snooze).
+        snoozePasskeyOffer();
+        showPasskeyEnrollSheet(false);
+      } finally {
+        activate.disabled = false;
+      }
+    });
+  }
+}
+
+// Bouton « Se connecter avec Face ID » sur l'écran de login (si WebAuthn dispo).
+function wirePasskeyLogin() {
+  const btn = document.getElementById("btn-passkey-login");
+  const divider = document.getElementById("passkey-login-divider");
+  if (!btn) return;
+  if (!webauthnSupported()) return;
+  btn.hidden = false;
+  if (divider) divider.hidden = false;
+  btn.addEventListener("click", async () => {
+    hideAuthError();
+    btn.disabled = true;
+    try {
+      await signInWithPasskey(); // onAuthStateChange pilote la suite
+    } catch (err) {
+      const msg = (err && err.message) || "";
+      showAuthError(/no.*credential|not.*found|NotAllowed|aucune/i.test(msg)
+        ? "Aucune passkey trouvée sur cet appareil. Utilisez le code par mail."
+        : "Connexion Face ID impossible. Utilisez le code par mail.");
+      btn.disabled = false;
+    }
+  });
+}
+
+// Section « Face ID / clés de sécurité » dans Réglages : liste + ajout + suppression.
+async function refreshPasskeyList() {
+  const section = document.getElementById("reglages-passkeys");
+  const listEl = document.getElementById("passkey-list");
+  if (!section || !listEl) return;
+  if (!webauthnSupported()) { section.hidden = true; return; }
+  section.hidden = false;
+  let items = [];
+  try { items = await listPasskeys(); } catch (e) { items = []; }
+  listEl.innerHTML = "";
+  if (!items.length) {
+    listEl.innerHTML = '<p class="muted">Aucune clé enregistrée.</p>';
+    return;
+  }
+  for (const pk of items) {
+    const row = document.createElement("div");
+    row.className = "passkey-row";
+    const label = (pk.friendly_name || "Appareil").trim();
+    const date = pk.created_at ? formatDateFr(pk.created_at.slice(0, 10)) : "";
+    const info = document.createElement("span");
+    info.className = "passkey-info";
+    info.innerHTML = `<span class="passkey-name">${escapeHtml(label)}</span>${date ? ` <span class="passkey-date muted">ajoutée le ${escapeHtml(date)}</span>` : ""}`;
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "btn btn-secondary btn-sm";
+    del.textContent = "Supprimer";
+    del.addEventListener("click", async () => {
+      if (!confirm(`Supprimer « ${label} » ?`)) return;
+      del.disabled = true;
+      try { await deletePasskey(pk.id); showToast("Clé supprimée."); await refreshPasskeyList(); }
+      catch (err) { alert("Suppression impossible : " + (err.message || err)); del.disabled = false; }
+    });
+    row.append(info, del);
+    listEl.appendChild(row);
+  }
+}
+
+function wirePasskeyReglages() {
+  const add = document.getElementById("btn-add-passkey");
+  if (add) {
+    add.addEventListener("click", async () => {
+      add.disabled = true;
+      try { await doRegisterPasskey(); }
+      catch (err) {
+        const msg = (err && err.message) || "";
+        if (!/NotAllowed|cancel|abort/i.test(msg)) alert("Ajout impossible : " + msg);
+      } finally { add.disabled = false; }
+    });
+  }
+}
 
 function showLoginStep(step) {
   document.getElementById("login-choice").hidden = step !== "choice";
@@ -5406,10 +5551,12 @@ function wireEmailOtpLogin() {
     hideAuthError();
     btn.disabled = true;
     try {
+      justLoggedInViaOtp = true; // proposer Face ID après l'ouverture de session
       await verifyEmailOtp(otpEmail, code);
       // onAuthStateChange se déclenche automatiquement (nouvelle session) et
       // pilote la suite via handleSessionChange — rien à faire ici.
     } catch (err) {
+      justLoggedInViaOtp = false;
       showAuthError(otpErrorMessage(err));
       btn.disabled = false;
     }
@@ -5516,6 +5663,11 @@ async function handleSessionChange(session) {
     btnProfil.addEventListener("click", () => navigate("reglages"));
   }
   showScreen("app");
+
+  // Passkeys (beta.27) : peuple la section Réglages et propose une fois Face ID
+  // après une connexion par code e-mail. Non bloquant.
+  refreshPasskeyList();
+  maybePromptPasskeyEnroll();
 
   await loadRefs();
   const navAppSel = document.getElementById("f-nav-app");

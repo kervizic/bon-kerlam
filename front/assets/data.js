@@ -160,6 +160,32 @@ export async function signOut() {
   if (DEMO) return;
   return live.signOut();
 }
+// Passkeys / Face ID (beta.27). En démo, on NE propose PAS de passkey (aucun
+// backend auth) : webauthnSupported renvoie false pour désactiver toute l'UI.
+export function webauthnSupported() {
+  if (DEMO) return false;
+  return live.webauthnSupported();
+}
+export async function platformAuthenticatorAvailable() {
+  if (DEMO) return false;
+  return live.platformAuthenticatorAvailable();
+}
+export async function registerPasskey() {
+  if (DEMO) return { demo: true };
+  return live.registerPasskey();
+}
+export async function signInWithPasskey() {
+  if (DEMO) return { session: null, user: null };
+  return live.signInWithPasskey();
+}
+export async function listPasskeys() {
+  if (DEMO) return [];
+  return live.listPasskeys();
+}
+export async function deletePasskey(passkeyId) {
+  if (DEMO) return;
+  return live.deletePasskey(passkeyId);
+}
 export async function getProfil() {
   if (DEMO) return seed.cloneSeed(seed.DEMO_PROFILE);
   return live.getProfil();

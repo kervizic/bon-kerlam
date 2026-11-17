@@ -51,7 +51,10 @@ services:
 
   auth:
     container_name: bon-auth
-    image: supabase/gotrue:v2.189.0
+    # beta.27 : v2.190.0 = plus petite version stable supportant les passkeys
+    # (WebAuthn natif Supabase). La migration 20260302000000_add_passkeys était déjà
+    # appliquée par v2.189.0 : upgrade sans changement de schéma.
+    image: supabase/gotrue:v2.190.0
     restart: unless-stopped
     depends_on:
       db:
@@ -67,6 +70,14 @@ services:
       GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       GOTRUE_SITE_URL: ${SITE_URL}
       GOTRUE_URI_ALLOW_LIST: ${ADDITIONAL_REDIRECT_URLS}
+      # Passkeys / WebAuthn (beta.27). RP ID = domaine définitif bon.kerlam.fr,
+      # origine exacte https://bon.kerlam.fr. Une passkey ne peut être enregistrée
+      # que par un utilisateur DÉJÀ authentifié (donc déjà passé par la liste
+      # blanche) : elle n'ouvre jamais un compte hors liste blanche.
+      GOTRUE_PASSKEY_ENABLED: "true"
+      GOTRUE_WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:-bon.kerlam.fr}
+      GOTRUE_WEBAUTHN_RP_DISPLAY_NAME: ${WEBAUTHN_RP_DISPLAY_NAME:-KERLAM}
+      GOTRUE_WEBAUTHN_RP_ORIGINS: ${WEBAUTHN_RP_ORIGINS:-https://bon.kerlam.fr}
       # Connexion : Google OU code OTP e-mail (6 chiffres, sans mot de passe).
       # L'inscription « libre » est bloquée par la liste blanche (RLS + hook) :
       # un e-mail non listé peut obtenir un code mais ne voit RIEN.

@@ -83,6 +83,56 @@ export async function verifyEmailOtp(email, code) {
   return data; // { session, user }
 }
 
+// --------------------------------------------- Passkeys / Face ID (beta.27) --
+// WebAuthn natif Supabase (GoTrue v2.190, supabase-js 2.119). Une passkey ne peut
+// être enregistrée que par un utilisateur DÉJÀ connecté : elle n'ouvre jamais un
+// compte hors liste blanche.
+
+// Le navigateur gère-t-il WebAuthn (et de préférence un authentificateur de
+// plateforme = Face ID / Touch ID / Windows Hello) ?
+export function webauthnSupported() {
+  return typeof window !== "undefined" &&
+    typeof window.PublicKeyCredential === "function" &&
+    !!(navigator.credentials && typeof navigator.credentials.create === "function");
+}
+
+// Y a-t-il un authentificateur de plateforme (Face ID / Touch ID) disponible ?
+export async function platformAuthenticatorAvailable() {
+  if (!webauthnSupported() || !window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable) {
+    return false;
+  }
+  try {
+    return await window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+  } catch (e) {
+    return false;
+  }
+}
+
+// Enregistre une passkey pour l'utilisateur connecté (cérémonie WebAuthn complète).
+export async function registerPasskey() {
+  const { data, error } = await requireClient().auth.registerPasskey();
+  if (error) throw error;
+  return data;
+}
+
+// Connexion par passkey (cérémonie complète -> session).
+export async function signInWithPasskey() {
+  const { data, error } = await requireClient().auth.signInWithPasskey();
+  if (error) throw error;
+  return data; // { session, user }
+}
+
+export async function listPasskeys() {
+  const { data, error } = await requireClient().auth.passkey.list();
+  if (error) throw error;
+  return data || [];
+}
+
+export async function deletePasskey(passkeyId) {
+  const { error } = await requireClient().auth.passkey.delete({ passkeyId });
+  if (error) throw error;
+}
+
 // --------------------------------------------------------------- Profil -----
 
 // api.profil : vide (aucune ligne) si l'e-mail connecté n'est pas sur la liste

@@ -1536,3 +1536,10 @@ body.qc-lock { position: fixed; left: 0; right: 0; width: 100%; overflow: hidden
 .spinner { width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--c-orange); border-radius: 50%; animation: kspin 0.8s linear infinite; flex-shrink: 0; }
 @keyframes kspin { to { transform: rotate(360deg); } }
 
+
+/* Passkeys / Face ID (beta.27) : liste dans Réglages. */
+.passkey-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.passkey-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; }
+.passkey-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.passkey-name { font-weight: 600; }
+.passkey-date { font-size: 0.85em; }

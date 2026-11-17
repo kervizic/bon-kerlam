@@ -4,6 +4,36 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.27] — 2026-11-17
+
+Connexion par passkey (Face ID / Touch ID / clé de sécurité).
+
+### Ajouté
+- **Passkeys (WebAuthn natif Supabase).** Serveur : bon-auth passé à
+  `supabase/gotrue:v2.190.0` (plus petite version stable supportant les passkeys ;
+  migration `add_passkeys` déjà appliquée par v2.189 → aucun changement de schéma),
+  `GOTRUE_PASSKEY_ENABLED=true`, RP ID `bon.kerlam.fr` (définitif), display name
+  « KERLAM », origine `https://bon.kerlam.fr`.
+- Front : bundle `@supabase/supabase-js` passé de 2.97.0 à **2.119.0** (API passkey).
+  - Écran de connexion : bouton **« Se connecter avec Face ID »** (si le navigateur
+    gère WebAuthn), le code par e-mail reste disponible en secours.
+  - Après une connexion par code réussie, si aucune passkey n'est enregistrée et que
+    le navigateur gère WebAuthn : feuille **« Activer Face ID »** (Activer / Plus
+    tard). « Plus tard » ne repropose pas avant 7 jours.
+  - Réglages : section **« Face ID / clés de sécurité »** pour ajouter et supprimer
+    ses passkeys. Libellés sans jargon.
+- **Liste blanche inchangée** : une passkey ne peut être enregistrée que par un
+  utilisateur DÉJÀ authentifié (donc déjà autorisé par la liste blanche) ; elle
+  n'ouvre jamais un compte hors liste blanche.
+
+### Vérifié en production
+- Connexion par code e-mail toujours fonctionnelle (HTTP 200, audit event).
+- `/settings` → `passkeys_enabled: true` ; `/passkeys/authentication/options` →
+  `rpId: bon.kerlam.fr` (direct et via nginx).
+- Nouveau bundle testé en local contre l'API prod : l'app démarre, l'écran de login
+  et le bouton Face ID s'affichent, les API supabase-js existantes restent
+  fonctionnelles.
+
 ## [0.1.0-beta.26] — 2026-11-17
 
 Vue chauffeur restreinte au propriétaire + copie KERLAM du mail des lettres signées.

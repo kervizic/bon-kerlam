@@ -10,8 +10,8 @@
   <!-- Empreinte de version du shell (cf. assets/app-version.js). Bumper `app-rev`
        à chaque déploiement backend devant forcer un refresh (sinon le bump d'un
        `?v=` d'asset suffit). -->
-  <meta name="app-version" content="0.1.0-beta.26">
-  <meta name="app-rev" content="260">
+  <meta name="app-version" content="0.1.0-beta.27">
+  <meta name="app-rev" content="270">
 
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
@@ -31,7 +31,7 @@
        en police système). crossorigin obligatoire : les polices sont toujours
        récupérées en mode CORS, l'attribut évite un double téléchargement. -->
   <link rel="preload" href="/assets/fonts/sarpanch-900.woff2?v=14" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/assets/styles.css?v=260">
+  <link rel="stylesheet" href="/assets/styles.css?v=270">
   <!-- Garde-fou anti page blanche (beta.25) : si l'appli n'a pas démarré sous 8 s
        (flag window.__bonBooted posé en fin de boot d'app.js), on désenregistre le
        SW, on vide les caches et on recharge UNE fois (anti-boucle sessionStorage).
@@ -76,6 +76,11 @@
       <p class="auth-tagline">Lettres de voiture</p>
 
       <div id="login-choice" class="login-choice">
+        <button id="btn-passkey-login" class="btn btn-primary btn-block" type="button" hidden>
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          Se connecter avec Face ID
+        </button>
+        <p id="passkey-login-divider" class="auth-divider" hidden><span>ou</span></p>
         <button id="btn-google-login" class="btn btn-primary btn-block" type="button">
           <svg class="google-g" viewBox="0 0 48 48" width="20" height="20" aria-hidden="true" focusable="false">
             <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.9 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.3 17.7 9.5 24 9.5z"/>
@@ -385,6 +390,16 @@
             </div>
           </fieldset>
 
+          <fieldset class="field-group" id="reglages-passkeys" hidden>
+            <legend>Face ID / clés de sécurité</legend>
+            <p class="muted">Connectez-vous sans code, avec Face ID, Touch ID ou une clé de sécurité.</p>
+            <div id="passkey-list" class="passkey-list"></div>
+            <button type="button" id="btn-add-passkey" class="btn btn-secondary btn-block">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              Ajouter Face ID / une clé
+            </button>
+          </fieldset>
+
           <fieldset class="field-group js-install-zone">
             <legend>Installer l'application</legend>
             <p class="muted">Ajoutez bon.kerlam.fr à votre écran d'accueil pour un accès rapide, en plein écran.</p>
@@ -618,6 +633,19 @@
       <input type="search" id="fusion-search" class="filter-input" placeholder="Rechercher…">
       <div id="fusion-list" class="sheet-list"></div>
       <button type="button" class="btn btn-primary btn-block is-spaced" id="btn-fusion-confirm" disabled>Fusionner</button>
+    </div>
+  </div>
+
+  <!-- Feuille d'activation Face ID (proposée une fois après connexion par code). -->
+  <div id="passkey-enroll-sheet" class="sheet-overlay" hidden>
+    <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="passkey-enroll-title">
+      <div class="sheet-header">
+        <h2 id="passkey-enroll-title">Activer Face ID</h2>
+        <button type="button" class="icon-btn" id="btn-passkey-enroll-later" aria-label="Plus tard"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      </div>
+      <p class="muted">La prochaine fois, connectez-vous d'un geste avec Face ID, Touch ID ou une clé de sécurité — sans attendre de code par mail.</p>
+      <button type="button" class="btn btn-primary btn-block is-spaced" id="btn-passkey-enroll-activate">Activer</button>
+      <button type="button" class="btn-link" id="btn-passkey-enroll-later-2">Plus tard</button>
     </div>
   </div>
 
@@ -858,7 +886,7 @@
 
   <!-- ================================================================== Scripts -->
   <script src="/assets/config.js?v=21"></script>
-  <script src="/assets/vendor/supabase/supabase.js"></script>
-  <script type="module" src="/assets/app.js?v=260"></script>
+  <script src="/assets/vendor/supabase/supabase.js?v=270"></script>
+  <script type="module" src="/assets/app.js?v=270"></script>
 </body>
 </html>
