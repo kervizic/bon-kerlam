@@ -122,6 +122,7 @@ import {
   workerLvPdf,
   workerSignatureSurPlace,
   workerSignatureParMail,
+  workerSignatureSync,
   searchAddress,
   reverseAddress,
   rpcPrefill,
@@ -2868,7 +2869,6 @@ function openSignerChoice() {
   signerState.groups = groups;
   signerState.sansContact = sansContact;
   signerState.mode = "sur_place";
-  document.getElementById("signer-choice-count").textContent = `(${lvs.length})`;
   renderSignerChoice();
   const sheet = document.getElementById("signer-choice-sheet");
   if (sheet) sheet.hidden = false;
@@ -2942,20 +2942,25 @@ async function confirmSigner() {
   closeSignerChoice();
   if (signerState.mode === "sur_place") {
     const batch = plan.batches[0];
+    showSignPreparing(true);
+    let res;
     try {
-      const res = await workerSignatureSurPlace(batch.lvIds);
-      const urls = (res.lettres || []).map((l) => l.signing_url).filter(Boolean);
-      // Les autres lettres (autres signataires) restent sélectionnées.
-      for (const id of batch.lvIds) signSelection.delete(id);
-      refreshSelectionBar();
-      await loadMesLv();
-      if (urls.length) {
-        alert(`${plur(urls.length, "lettre prête", "lettres prêtes")} à signer sur ce téléphone. Ouverture de la première.`);
-        window.location.href = urls[0];
-      }
+      res = await workerSignatureSurPlace(batch.lvIds);
     } catch (err) {
-      alert("Échec de la préparation sur place : " + (err.message || err));
+      showSignPreparing(false);
+      alert("Échec de la préparation du document : " + (err.message || err));
+      return;
     }
+    // Les autres lettres (autres signataires) restent sélectionnées.
+    for (const id of batch.lvIds) signSelection.delete(id);
+    refreshSelectionBar();
+    showSignPreparing(false);
+    if (!res || !res.token) {
+      alert("Document préparé mais aucun lien de signature reçu.");
+      await loadMesLv();
+      return;
+    }
+    openEmbeddedSigning(res);
     return;
   }
   // Par mail : un envoi (un lot) par signataire.
@@ -2974,6 +2979,89 @@ async function confirmSigner() {
   if (done.length) {
     alert(`${plur(done.length, "lot envoyé", "lots envoyés")} : ${done.join(" · ")}.`);
   }
+}
+
+/* ============================ Signature INTÉGRÉE (beta.24) ====================
+ * « Signer sur ce téléphone » ouvre la signature DANS l'appli (iframe vers
+ * /embed/sign/{token}), sans navigation hors PWA ni compte Documenso visible.
+ * L'embed reprend le mode (sombre/clair) de l'appli. On écoute les postMessage
+ * de l'embed (document-completed / all-documents-completed / document-error). */
+
+// Thème EFFECTIF de l'appli : sombre si data-theme=sombre, ou auto + système sombre.
+function isAppDark() {
+  const attr = document.documentElement.getAttribute("data-theme");
+  if (attr === "sombre") return true;
+  if (attr === "clair") return false;
+  return !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+}
+
+function showSignPreparing(on) {
+  const el = document.getElementById("sign-preparing");
+  if (el) el.hidden = !on;
+}
+
+let embedMessageHandler = null;
+
+function openEmbeddedSigning(res) {
+  const sheet = document.getElementById("embed-sign-sheet");
+  const frame = document.getElementById("embed-sign-frame");
+  const titleEl = document.getElementById("embed-sign-title");
+  if (!sheet || !frame) return;
+  const base = (res.documenso_url || "").replace(/\/$/, "");
+  const dark = isAppDark();
+  const options = {
+    name: res.signer_name || "",
+    lockName: true,
+    email: res.signer_email || undefined,
+    lockEmail: true,
+    language: "fr",
+    allowDocumentRejection: false,
+    // darkModeDisabled = inverse du thème de l'appli : l'embed peut passer en
+    // sombre uniquement si l'appli est en sombre.
+    darkModeDisabled: !dark,
+    // Couleurs KERLAM (orange primaire, texte anthracite) si l'embed les applique.
+    cssVars: { primary: "#FD8008", primaryForeground: "#1D1D1B" },
+  };
+  const frag = btoa(encodeURIComponent(JSON.stringify(options)));
+  const nums = (res.numeros || []).join(", ");
+  if (titleEl) titleEl.textContent = nums ? `Signature — ${nums}` : "Signature";
+  // Écoute des messages de l'embed (origine Documenso uniquement).
+  let embedOrigin = "";
+  try { embedOrigin = new URL(base).origin; } catch (e) { embedOrigin = ""; }
+  if (embedMessageHandler) window.removeEventListener("message", embedMessageHandler);
+  embedMessageHandler = (ev) => {
+    if (embedOrigin && ev.origin !== embedOrigin) return;
+    const action = ev.data && (ev.data.action || ev.data.type);
+    if (action === "document-completed" || action === "all-documents-completed") {
+      onEmbeddedSigned(res);
+    } else if (action === "document-error") {
+      alert("Erreur pendant la signature. Réessayez.");
+    } else if (action === "document-rejected") {
+      closeEmbeddedSigning();
+    }
+  };
+  window.addEventListener("message", embedMessageHandler);
+  frame.src = `${base}/embed/sign/${res.token}#${frag}`;
+  sheet.hidden = false;
+}
+
+function closeEmbeddedSigning() {
+  const sheet = document.getElementById("embed-sign-sheet");
+  const frame = document.getElementById("embed-sign-frame");
+  if (frame) frame.src = "about:blank";
+  if (sheet) sheet.hidden = true;
+  if (embedMessageHandler) {
+    window.removeEventListener("message", embedMessageHandler);
+    embedMessageHandler = null;
+  }
+}
+
+async function onEmbeddedSigned(res) {
+  closeEmbeddedSigning();
+  // Finalise côté worker (passe les lettres du lot à « signée », archive le PDF).
+  try { await workerSignatureSync(); } catch (e) { /* le polling de fond rattrapera */ }
+  await loadMesLv();
+  showToast(`${plur((res.lv_ids || []).length, "lettre signée", "lettres signées")}.`);
 }
 
 /* ---- Actions de la sélection : corbeille groupée + PDF (beta.21) ------------ */
@@ -5011,6 +5099,8 @@ function wireStaticUI() {
   if (btnSigner) btnSigner.addEventListener("click", openSignerChoice);
   const btnSignerClose = document.getElementById("btn-signer-choice-close");
   if (btnSignerClose) btnSignerClose.addEventListener("click", closeSignerChoice);
+  const btnEmbedClose = document.getElementById("btn-embed-sign-close");
+  if (btnEmbedClose) btnEmbedClose.addEventListener("click", closeEmbeddedSigning);
   const signerSheet = document.getElementById("signer-choice-sheet");
   if (signerSheet) signerSheet.addEventListener("click", (e) => { if (e.target.id === "signer-choice-sheet") closeSignerChoice(); });
   const modeSurPlace = document.getElementById("mode-sur-place");

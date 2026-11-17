@@ -152,14 +152,16 @@ def _assert_user_access(email: str | None, lv_ids: list[int]) -> None:
 
 @router.post("/signature/sur-place")
 def signature_sur_place(payload: dict, user=Depends(require_user)):
-    """Signature « sur place » : une enveloppe par lettre, sans e-mail. Renvoie
-    les liens de signature que le front enchaîne sur le téléphone du chauffeur."""
+    """Signature « sur place » (intégrée) : UN SEUL document combiné pour le lot,
+    sans e-mail. Renvoie le token Documenso pour la signature intégrée (iframe
+    /embed/sign/{token}) + l'URL de base Documenso."""
     lv_ids = [int(x) for x in (payload or {}).get("lv_ids") or []]
     if not lv_ids:
         raise HTTPException(status_code=400, detail="Aucune lettre sélectionnée.")
     _assert_user_access(user.get("email"), lv_ids)
     try:
-        return {"mode": "sur_place", "lettres": signature.sur_place(lv_ids)}
+        res = signature.sur_place(lv_ids)
+        return {"mode": "sur_place", "documenso_url": settings.documenso_url.rstrip("/"), **res}
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -180,6 +182,14 @@ def signature_par_mail(payload: dict, user=Depends(require_user)):
 @router.post("/signature/poll")
 def signature_poll(_=Depends(require_token("write"))):
     """Déclenche la vérification des enveloppes en attente (archivage + statut)."""
+    return signature.poll_pending()
+
+
+@router.post("/signature/sync")
+def signature_sync(user=Depends(require_user)):
+    """Synchronisation immédiate après signature intégrée : vérifie les enveloppes
+    terminées côté Documenso et passe les lettres à « signée » (archivage inclus).
+    Déclenché par le front à la fin de la signature embarquée."""
     return signature.poll_pending()
 
 

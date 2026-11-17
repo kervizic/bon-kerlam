@@ -98,34 +98,9 @@ def _rows(lv_ids: list[int]) -> list[dict]:
     )
 
 
-def sur_place(lv_ids: list[int]) -> list[dict]:
-    """Une enveloppe par lettre (sans e-mail). Renvoie les liens de signature."""
-    out = []
-    for lv_id in lv_ids:
-        signer = _signer(lv_id)
-        if not signer or not signer.get("contact_email"):
-            raise ValueError(f"Lettre {lv_id} : aucun contact signataire avec e-mail.")
-        # Une seule lettre : signature + nom mesurés sur SA page.
-        pdf_bytes, _last, fields = build_combined_pdf([lv_id])
-        res = documenso.create_document(
-            title=f"Lettre de voiture {signer.get('numero') or lv_id}",
-            signer_name=signer.get("contact_nom") or "",
-            signer_email=signer["contact_email"],
-            pdf_bytes=pdf_bytes,
-            send_email=False,
-            fields=fields,
-        )
-        db.query(
-            "UPDATE bon.lettres_voiture SET documenso_document_id = %s, signature_mode = 'sur_place', "
-            "signature_sent_at = now(), statut = 'a_signer' WHERE id = %s",
-            (res["document_id"], lv_id),
-        )
-        out.append({"lv_id": lv_id, "numero": signer.get("numero"), "signing_url": res["signing_url"]})
-    return out
-
-
-def par_mail(lv_ids: list[int]) -> dict:
-    """UNE enveloppe groupée (PDF fusionné) envoyée au contact signataire commun."""
+def _validate_lot(lv_ids: list[int]) -> tuple[list[dict], dict]:
+    """Valide un lot (toutes les lettres du MÊME contact signataire avec e-mail) et
+    renvoie (lignes, signataire). Lève ValueError sinon."""
     rows = _rows(lv_ids)
     if not rows:
         raise ValueError("Aucune lettre valide.")
@@ -135,33 +110,67 @@ def par_mail(lv_ids: list[int]) -> dict:
     signer = _signer(rows[0]["id"])
     if not signer or not signer.get("contact_email"):
         raise ValueError("Contact signataire sans e-mail.")
+    return rows, signer
 
-    # PDF combiné (un par envoi) : chaque lettre sur de nouvelles pages, avec sa
-    # propre signature + nom mesurés sur SA zone (art. 5 : une signature par lettre).
+
+def _create_lot_document(
+    rows: list[dict], signer: dict, *, send_email: bool, subject: str = "", message: str = "",
+) -> dict:
+    """UN SEUL document Documenso pour tout le lot : PDF combiné (une signature par
+    lettre, positions mesurées) + 1 SIGNATURE + 1 NAME par lettre. Renvoie la réponse
+    Documenso (document_id, token, signing_url)."""
     merged, _last, fields = build_combined_pdf([r["id"] for r in rows])
-
     numeros = ", ".join(str(r["numero"] or f"brouillon#{r['id']}") for r in rows)
-    res = documenso.create_document(
+    return documenso.create_document(
         title=f"Lettres de voiture KERLAM ({numeros})",
         signer_name=signer.get("contact_nom") or "",
         signer_email=signer["contact_email"],
         pdf_bytes=merged,
-        send_email=True,
+        send_email=send_email,
         fields=fields,
+        subject=subject,
+        message=message,
+    )
+
+
+def sur_place(lv_ids: list[int]) -> dict:
+    """UN SEUL document combiné pour le lot (toutes les lettres du même signataire),
+    SANS e-mail, pour signature INTÉGRÉE dans l'appli. Toutes les lettres portent le
+    même documenso_id. Renvoie le token (pour /embed/sign/{token}) et le signataire."""
+    rows, signer = _validate_lot(lv_ids)
+    res = _create_lot_document(rows, signer, send_email=False)
+    ids = [r["id"] for r in rows]
+    db.query(
+        "UPDATE bon.lettres_voiture SET documenso_document_id = %s, signature_mode = 'sur_place', "
+        "signature_sent_at = now(), statut = 'a_signer' WHERE id = ANY(%s)",
+        (res["document_id"], ids),
+    )
+    return {
+        "document_id": res["document_id"],
+        "token": res.get("token"),
+        "signer_name": signer.get("contact_nom") or "",
+        "signer_email": signer["contact_email"],
+        "numeros": [r["numero"] or f"#{r['id']}" for r in rows],
+        "lv_ids": ids,
+    }
+
+
+def par_mail(lv_ids: list[int]) -> dict:
+    """UNE enveloppe groupée (PDF combiné, une signature par lettre) envoyée au
+    contact signataire commun. Toutes les lettres portent le même documenso_id."""
+    rows, signer = _validate_lot(lv_ids)
+    res = _create_lot_document(
+        rows, signer, send_email=True,
         subject="Lettres de voiture à signer — KERLAM",
         message="Bonjour, merci de signer les lettres de voiture KERLAM ci-jointes.",
     )
-    for r in rows:
-        db.query(
-            "UPDATE bon.lettres_voiture SET documenso_document_id = %s, signature_mode = 'par_mail', "
-            "signature_sent_at = now(), statut = 'envoyee' WHERE id = %s",
-            (res["document_id"], r["id"]),
-        )
-    return {
-        "document_id": res["document_id"],
-        "contact_email": signer["contact_email"],
-        "lv_ids": [r["id"] for r in rows],
-    }
+    ids = [r["id"] for r in rows]
+    db.query(
+        "UPDATE bon.lettres_voiture SET documenso_document_id = %s, signature_mode = 'par_mail', "
+        "signature_sent_at = now(), statut = 'envoyee' WHERE id = ANY(%s)",
+        (res["document_id"], ids),
+    )
+    return {"document_id": res["document_id"], "contact_email": signer["contact_email"], "lv_ids": ids}
 
 
 def _archive_signed(document_id: int, pdf_bytes: bytes) -> str | None:

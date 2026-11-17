@@ -77,9 +77,39 @@ def test_par_mail_refuse_contact_absent(monkeypatch):
 
 
 def test_sur_place_exige_contact_email(monkeypatch):
+    monkeypatch.setattr(signature, "_rows",
+                        lambda ids: [{"id": 1, "numero": "KER-1", "contact_id": 10, "statut": "en_cours"}])
     monkeypatch.setattr(signature, "_signer", lambda lv_id: {"numero": "KER-1", "contact_email": None})
-    with pytest.raises(ValueError, match="contact signataire"):
+    with pytest.raises(ValueError, match="contact signataire|e-mail"):
         signature.sur_place([1])
+
+
+def test_sur_place_un_seul_document_pour_le_lot(monkeypatch):
+    # beta.24 : UN SEUL document Documenso pour tout le lot (même signataire).
+    monkeypatch.setattr(signature, "_rows", lambda ids: [
+        {"id": 7, "numero": "KER-03003", "contact_id": 10, "statut": "en_cours"},
+        {"id": 8, "numero": "KER-03004", "contact_id": 10, "statut": "en_cours"},
+    ])
+    monkeypatch.setattr(signature, "_signer",
+                        lambda lv_id: {"contact_nom": "Manu", "contact_email": "manu@kervizic.fr"})
+    monkeypatch.setattr(signature, "build_combined_pdf", lambda ids: (b"%PDF", [1, 2], [{"type": "SIGNATURE"}]))
+    created = {}
+
+    def fake_create(**kw):
+        created.update(kw)
+        return {"document_id": 99, "token": "tok99", "signing_url": "u"}
+
+    monkeypatch.setattr(signature.documenso, "create_document", fake_create)
+    updates = []
+    monkeypatch.setattr(signature.db, "query", lambda sql, params=None: updates.append((sql, params)) or [])
+    res = signature.sur_place([7, 8])
+    # Un seul appel create_document, pas d'e-mail, token renvoyé.
+    assert created["send_email"] is False
+    assert res["document_id"] == 99 and res["token"] == "tok99"
+    assert res["lv_ids"] == [7, 8] and res["signer_name"] == "Manu"
+    # Un seul UPDATE qui marque TOUTES les lettres du lot avec le même documenso_id.
+    assert len(updates) == 1
+    assert updates[0][1] == (99, [7, 8])
 
 
 def _blank_pdf(n_pages: int) -> bytes:

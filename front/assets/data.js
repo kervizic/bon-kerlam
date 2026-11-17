@@ -787,7 +787,14 @@ export async function workerDocumentSignedUrl(key) {
 }
 export async function workerSignatureSurPlace(lvIds) {
   if (DEMO) {
-    return { mode: "sur_place", lettres: lvIds.map((id) => ({ lv_id: id, numero: "KER-DEMO", signing_url: "about:blank#demo-sign-" + id })) };
+    // Signature intégrée (beta.24) : UN document, un token. En démo, une page
+    // locale factice sert d'iframe (pas de réseau, pas de Documenso réel).
+    return {
+      mode: "sur_place", documenso_url: location.origin, document_id: 1234,
+      token: "demo-token", signer_name: "Manu Démo", signer_email: "manu@kervizic.fr",
+      numeros: lvIds.map((id) => (byId(demoDb.lettres_voiture, id) || {}).numero || "#" + id),
+      lv_ids: lvIds,
+    };
   }
   return live.workerSignatureSurPlace(lvIds);
 }
@@ -797,6 +804,10 @@ export async function workerSignatureParMail(lvIds) {
     return { mode: "par_mail", document_id: 1234, contact_email: "contact@demo.test", lv_ids: lvIds, _demo: first };
   }
   return live.workerSignatureParMail(lvIds);
+}
+export async function workerSignatureSync() {
+  if (DEMO) return { verifiees: 0, signees: 0 };
+  return live.workerSignatureSync();
 }
 export async function workerLvPdf(lvId) {
   if (DEMO) {

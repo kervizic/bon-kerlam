@@ -685,6 +685,9 @@ export async function workerSignatureSurPlace(lvIds) {
 export async function workerSignatureParMail(lvIds) {
   return callWorker("/signature/par-mail", { method: "POST", body: { lv_ids: lvIds } });
 }
+export async function workerSignatureSync() {
+  return callWorker("/signature/sync", { method: "POST", body: {} });
+}
 export async function workerChauffeurDepart(chauffeurId) {
   return callWorker(`/chauffeur/${chauffeurId}/depart`, { method: "POST" });
 }

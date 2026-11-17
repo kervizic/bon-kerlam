@@ -4,6 +4,30 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.24] — 2026-11-17
+
+Signature INTÉGRÉE (embedded) : un seul document par envoi, signature dans l'appli.
+
+### Changé
+- **Un seul document Documenso par envoi** (worker) : « sur place » et « par mail »
+  créent UN document combiné (toutes les lettres du signataire), avec 1 SIGNATURE
+  + 1 NAME par lettre aux positions mesurées (méthode 2). Toutes les lettres du lot
+  portent le même documenso_id ; la synchronisation de fin passe TOUTES les lettres
+  du lot à « signée ». (Avant : une enveloppe par lettre.)
+- **Signature intégrée dans la PWA** (front), mode « sur place » : un écran plein
+  écran KERLAM (logo + numéros + ✕) ouvre une iframe vers `/embed/sign/{token}`,
+  sans navigation hors de l'appli ni compte Documenso visible. Options passées dans
+  le fragment (base64) : name + lockName, e-mail verrouillé, language 'fr',
+  allowDocumentRejection false, darkModeDisabled = inverse du thème de l'appli
+  (l'embed reprend le mode sombre/clair de l'appli), cssVars KERLAM (orange). Écoute
+  des `postMessage` (document-completed / all-documents-completed / document-error).
+  Indicateur « Préparation du document… » pendant la création ; messages d'erreur
+  clairs ; toast « Lettres signées » et rafraîchissement en fin de signature.
+- **nginx sign.kerlam.fr** : sur les routes `/embed/` uniquement, X-Frame-Options
+  retiré et `frame-ancestors` restreint à `https://bon.kerlam.fr` (les autres routes
+  gardent SAMEORIGIN). Aucune modification de Documenso ni de sa base.
+- Feuille « Signer » : titre sans le compteur.
+
 ## [0.1.0-beta.23.2] — 2026-11-17
 
 Signature : zone en flux + placement Documenso fiable (worker) ; envoi groupé

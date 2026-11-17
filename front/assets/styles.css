@@ -1517,3 +1517,22 @@ body.qc-lock { position: fixed; left: 0; right: 0; width: 100%; overflow: hidden
 .signer-mail { font-size: 12px; color: var(--text-muted); overflow-wrap: anywhere; }
 .signer-count { font-size: 12px; color: var(--text-muted); }
 .signer-warn { color: #B4451F; }
+
+/* ---- Signature intégrée plein écran (beta.24) ----------------------------- */
+.embed-sign { position: fixed; inset: 0; z-index: 2000; background: var(--surface); display: flex; flex-direction: column; }
+.embed-sign-bar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; padding-top: calc(10px + env(safe-area-inset-top));
+  border-bottom: 1px solid var(--border); background: var(--surface);
+}
+.embed-sign-logo { font-size: 18px; line-height: 1; }
+.embed-sign-title { flex: 1; min-width: 0; font-weight: 600; font-size: 14px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.embed-sign-close { margin-left: auto; }
+.embed-sign-frame { flex: 1; width: 100%; border: 0; background: var(--surface); }
+
+/* Indicateur « Préparation du document… » */
+.sign-preparing { position: fixed; inset: 0; z-index: 2100; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.35); }
+.sign-preparing-box { display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-radius: 12px; background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3); }
+.spinner { width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--c-orange); border-radius: 50%; animation: kspin 0.8s linear infinite; flex-shrink: 0; }
+@keyframes kspin { to { transform: rotate(360deg); } }
+
