@@ -19,7 +19,7 @@
  */
 "use strict";
 
-const VERSION = "0.1.0-beta.24";
+const VERSION = "0.1.0-beta.25";
 const CACHE_NAME = `bon-kerlam-${VERSION}`;
 const VERSIONED_QS_RE = /\?v=/;
 
@@ -65,6 +65,10 @@ self.addEventListener("fetch", (event) => {
   // Cross-origin (API Supabase self-hosted, api-adresse.data.gouv.fr...) : jamais
   // touché par le SW, ni mis en cache, ni réécrit.
   if (url.origin !== self.location.origin) return;
+
+  // /version.json : signal de mise à jour. JAMAIS intercepté ni mis en cache par
+  // le SW -> toujours servi par le réseau (no-store côté nginx).
+  if (url.pathname === "/version.json") return;
 
   const isHTML =
     req.mode === "navigate" || (req.headers.get("accept") || "").includes("text/html");

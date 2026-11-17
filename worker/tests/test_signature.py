@@ -2,7 +2,7 @@
 validation du groupage par mail."""
 
 import pytest
-from app import documenso, signature
+from app import documenso, pdf, signature
 from app.config import settings
 
 
@@ -22,26 +22,38 @@ def test_headers_exige_cle(monkeypatch):
         documenso._headers()
 
 
-def test_create_document_flux(monkeypatch):
-    monkeypatch.setattr(settings, "documenso_api_key", "api_test")
-    monkeypatch.setattr(settings, "documenso_url", "https://sign.kerlam.fr")
-    calls = {"post": [], "put": 0}
+class FakeClient:
+    """Client httpx factice (keep-alive) : enregistre les appels de create_document."""
+    def __init__(self, calls, **kw):
+        self.calls = calls
 
-    def fake_post(url, **kw):
-        calls["post"].append(url)
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def post(self, url, **kw):
+        self.calls["post"].append(url)
         if url.endswith("/documents"):
             return FakeResp(200, {
                 "documentId": 77, "uploadUrl": "https://s3/up",
                 "recipients": [{"recipientId": 5, "token": "tok123"}],
             })
+        if url.endswith("/fields"):
+            self.calls.setdefault("fields", []).append(kw.get("json"))
         return FakeResp(200, {"message": "ok"})
 
-    def fake_put(url, **kw):
-        calls["put"] += 1
+    def put(self, url, **kw):
+        self.calls["put"] += 1
         return FakeResp(200)
 
-    monkeypatch.setattr(documenso.httpx, "post", fake_post)
-    monkeypatch.setattr(documenso.httpx, "put", fake_put)
+
+def test_create_document_flux(monkeypatch):
+    monkeypatch.setattr(settings, "documenso_api_key", "api_test")
+    monkeypatch.setattr(settings, "documenso_url", "https://sign.kerlam.fr")
+    calls = {"post": [], "put": 0}
+    monkeypatch.setattr(documenso.httpx, "Client", lambda **kw: FakeClient(calls, **kw))
 
     res = documenso.create_document(
         "Titre", "Jean", "jean@example.test", b"%PDF-1.4", send_email=False,
@@ -49,7 +61,6 @@ def test_create_document_flux(monkeypatch):
     assert res["document_id"] == 77
     assert res["signing_url"] == "https://sign.kerlam.fr/sign/tok123"
     assert calls["put"] == 1
-    # create + fields + send
     assert any(u.endswith("/documents") for u in calls["post"])
     assert any(u.endswith("/fields") for u in calls["post"])
     assert any(u.endswith("/send") for u in calls["post"])
@@ -130,7 +141,7 @@ def test_anchor_field_conversion_pct():
     # Boîte d'ancre WeasyPrint (px, origine haut-gauche) -> champ Documenso (%).
     # Page A4 en px à 96 dpi : 793.70 x 1122.52.
     pw, ph = 793.7007874015749, 1122.5196850393702
-    sig = signature.anchor_field("SIGNATURE", 3, (72.252, 411.772, 321.701, 468.465), pw, ph)
+    sig = pdf.anchor_field("SIGNATURE", 3, (72.252, 411.772, 321.701, 468.465), pw, ph)
     assert sig["type"] == "SIGNATURE" and sig["pageNumber"] == 3
     assert sig["pageX"] == round(72.252 / pw * 100, 4)
     assert sig["pageY"] == round(411.772 / ph * 100, 4)
@@ -141,41 +152,28 @@ def test_anchor_field_conversion_pct():
     assert 4.8 < sig["pageHeight"] < 5.3
 
 
-class _FakePage:
-    def __init__(self, anchors, w=793.7, h=1122.5):
-        self.anchors = anchors
-        self.width = w
-        self.height = h
-
-
-class _FakeDoc:
-    def __init__(self, n_pages, pdf_bytes, anchors_on_last):
-        # Les ancres ne sont présentes que sur la DERNIÈRE page de la lettre.
-        self.pages = [_FakePage({}) for _ in range(n_pages - 1)]
-        self.pages.append(_FakePage(anchors_on_last))
-        self._b = pdf_bytes
-
-    def write_pdf(self):
-        return self._b
-
-
-def test_build_combined_pdf_mesure_champs_et_pages(monkeypatch):
-    # Lettres de 1, 2 et 1 pages -> dernières pages 1, 3, 4 ; 1 paire SIGNATURE/NAME
-    # par lettre, mesurée sur sa dernière page.
-    anchors = {"doc-signature": (72, 411, 321, 468), "doc-nom": (72, 476, 321, 495)}
+def test_build_combined_pdf_depuis_cache(monkeypatch):
+    # beta.25 : build_combined_pdf fusionne les PDF EN CACHE par lettre (pas de
+    # rendu). Lettres de 1, 2 et 1 pages -> dernières pages 1, 3, 4 ; 1 paire
+    # SIGNATURE/NAME par lettre, sur la dernière page de chaque lettre (page-locale).
     pages_par_lv = {7: 1, 8: 2, 9: 1}
-    monkeypatch.setattr(signature.pdf, "build_context", lambda lv_id: lv_id)
-    monkeypatch.setattr(
-        signature.pdf, "render_document",
-        lambda lv_id: _FakeDoc(pages_par_lv[lv_id], _blank_pdf(pages_par_lv[lv_id]), anchors),
-    )
+
+    def fake_cached(lv_id):
+        n = pages_par_lv[lv_id]
+        local = [
+            {"type": "SIGNATURE", "pageNumber": n, "pageX": 9, "pageY": 43, "pageWidth": 31, "pageHeight": 5},
+            {"type": "NAME", "pageNumber": n, "pageX": 9, "pageY": 49, "pageWidth": 31, "pageHeight": 2},
+        ]
+        return _blank_pdf(n), local, n
+
+    monkeypatch.setattr(signature.pdf, "letter_cached", fake_cached)
     merged, last_pages, fields = signature.build_combined_pdf([7, 8, 9])
     assert last_pages == [1, 3, 4]
     import io
 
     from pypdf import PdfReader
     assert len(PdfReader(io.BytesIO(merged)).pages) == 4
-    # 3 lettres -> 3 SIGNATURE + 3 NAME, chacun sur la dernière page de sa lettre.
+    # Champs décalés en pages absolues : lettre 7 -> p1, lettre 8 -> p3, lettre 9 -> p4.
     assert [f["type"] for f in fields] == ["SIGNATURE", "NAME", "SIGNATURE", "NAME", "SIGNATURE", "NAME"]
     assert [f["pageNumber"] for f in fields] == [1, 1, 3, 3, 4, 4]
 
@@ -184,26 +182,25 @@ def test_create_document_pose_signature_et_nom(monkeypatch):
     # Les champs fournis (SIGNATURE + NAME) sont tous postés avec recipientId.
     monkeypatch.setattr(settings, "documenso_api_key", "api_test")
     monkeypatch.setattr(settings, "documenso_url", "https://sign.kerlam.fr")
-    posted_fields = []
+    calls = {"post": [], "put": 0}
 
-    def fake_post(url, **kw):
-        if url.endswith("/documents"):
-            return FakeResp(200, {
-                "documentId": 9, "uploadUrl": "https://s3/up",
-                "recipients": [{"recipientId": 3, "token": "tok"}],
-            })
-        if url.endswith("/fields"):
-            posted_fields.append(kw.get("json"))
-        return FakeResp(200, {"message": "ok"})
+    class _C(FakeClient):
+        def post(self, url, **kw):
+            if url.endswith("/documents"):
+                self.calls["post"].append(url)
+                return FakeResp(200, {"documentId": 9, "uploadUrl": "https://s3/up",
+                                      "recipients": [{"recipientId": 3, "token": "tok"}]})
+            if url.endswith("/fields"):
+                self.calls.setdefault("fields", []).append(kw.get("json"))
+            return FakeResp(200, {"message": "ok"})
 
-    monkeypatch.setattr(documenso.httpx, "post", fake_post)
-    monkeypatch.setattr(documenso.httpx, "put", lambda url, **kw: FakeResp(200))
-
+    monkeypatch.setattr(documenso.httpx, "Client", lambda **kw: _C(calls, **kw))
     fields = [
-        signature.anchor_field("SIGNATURE", 2, (72, 411, 321, 468), 793.7, 1122.5),
-        signature.anchor_field("NAME", 2, (72, 476, 321, 495), 793.7, 1122.5),
+        pdf.anchor_field("SIGNATURE", 2, (72, 411, 321, 468), 793.7, 1122.5),
+        pdf.anchor_field("NAME", 2, (72, 476, 321, 495), 793.7, 1122.5),
     ]
     documenso.create_document("T", "Jean", "j@example.test", b"%PDF-1.4", send_email=False, fields=fields)
-    assert [f["type"] for f in posted_fields] == ["SIGNATURE", "NAME"]
-    assert all(f["recipientId"] == 3 for f in posted_fields)
-    assert all(f["pageNumber"] == 2 for f in posted_fields)
+    posted = calls.get("fields", [])
+    assert {f["type"] for f in posted} == {"SIGNATURE", "NAME"}
+    assert all(f["recipientId"] == 3 for f in posted)
+    assert all(f["pageNumber"] == 2 for f in posted)

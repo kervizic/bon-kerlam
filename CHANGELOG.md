@@ -4,6 +4,40 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.25] — 2026-11-17
+
+Mise à jour automatique de la PWA + signature quasi instantanée.
+
+### Changé
+- **Mise à jour automatique (PWA)** : fichier `/version.json` servi en `no-store`
+  (jamais mis en cache, ni navigateur ni SW), vérifié au démarrage, au retour au
+  premier plan (visibilitychange/focus/pageshow) et toutes les 5 min. Sur
+  changement de version : `registration.update()`, le SW fait skipWaiting +
+  clients.claim, et la page se recharge à un moment SÛR (jamais pendant une saisie
+  ni une signature intégrée ouverte), puis toast « Appli mise à jour ». Le SW sert
+  `index.html` en network-first. **Garde-fou anti page blanche** : si l'appli n'a pas
+  démarré sous 8 s, un script inline désenregistre le SW, vide les caches et recharge
+  UNE fois (anti-boucle). Corrige le blocage « page blanche » sur Safari Mac.
+- **Signature quasi instantanée** : le PDF rendu de chaque lettre et les positions
+  de ses ancres sont désormais EN CACHE (table `bon.lv_pdf_cache`, clé = hash du
+  contenu). Au moment de signer, on ne refait plus le rendu WeasyPrint (lent :
+  sous-typage de police, ~8 s/lettre) — on fusionne les PDF en cache (quelques ms).
+  Préparation ANTICIPÉE : dès qu'un signataire est choisi dans la feuille « Signer »
+  (présentiel), le document est préparé en arrière-plan ; au toucher sur « Signer »,
+  l'écran intégré s'ouvre immédiatement. Spinner seulement si l'attente dépasse
+  300 ms. Les champs Documenso sont créés EN PARALLÈLE (connexion keep-alive). Un
+  brouillon préparé mais non utilisé est supprimé (changement de sélection, ou
+  automatiquement après 30 min). UN SEUL document par envoi.
+- Garde-fou : la feuille n'envoie QUE les lettres du signataire choisi.
+
+### Base de données
+- **0025** : table de cache `bon.lv_pdf_cache` (PDF + ancres par lettre). Purement
+  du cache, reconstructible. Idempotente, avec down (`supabase/down/0025_down.sql`).
+
+### nginx
+- `sign.kerlam.fr` /embed/ : déjà ouvert à bon.kerlam.fr (beta.24).
+- `bon.kerlam.fr` : `/version.json` servi en `no-store`.
+
 ## [0.1.0-beta.24] — 2026-11-17
 
 Signature INTÉGRÉE (embedded) : un seul document par envoi, signature dans l'appli.

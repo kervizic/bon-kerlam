@@ -688,6 +688,15 @@ export async function workerSignatureParMail(lvIds) {
 export async function workerSignatureSync() {
   return callWorker("/signature/sync", { method: "POST", body: {} });
 }
+export async function workerSignaturePrepare(lvIds) {
+  return callWorker("/signature/prepare", { method: "POST", body: { lv_ids: lvIds } });
+}
+export async function workerSignatureConfirm(documentId, lvIds) {
+  return callWorker("/signature/confirm", { method: "POST", body: { document_id: documentId, lv_ids: lvIds } });
+}
+export async function workerSignatureCancel(documentId) {
+  return callWorker("/signature/cancel", { method: "POST", body: { document_id: documentId } });
+}
 export async function workerChauffeurDepart(chauffeurId) {
   return callWorker(`/chauffeur/${chauffeurId}/depart`, { method: "POST" });
 }

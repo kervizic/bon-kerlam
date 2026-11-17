@@ -785,10 +785,9 @@ export async function workerDocumentSignedUrl(key) {
   if (DEMO) return { signed_url: "about:blank#demo-" + encodeURIComponent(key) };
   return live.workerDocumentSignedUrl(key);
 }
-export async function workerSignatureSurPlace(lvIds) {
+export async function workerSignaturePrepare(lvIds) {
   if (DEMO) {
-    // Signature intégrée (beta.24) : UN document, un token. En démo, une page
-    // locale factice sert d'iframe (pas de réseau, pas de Documenso réel).
+    // Signature intégrée (beta.24/25) : UN document, un token, préparé en avance.
     return {
       mode: "sur_place", documenso_url: location.origin, document_id: 1234,
       token: "demo-token", signer_name: "Manu Démo", signer_email: "manu@kervizic.fr",
@@ -796,7 +795,15 @@ export async function workerSignatureSurPlace(lvIds) {
       lv_ids: lvIds,
     };
   }
-  return live.workerSignatureSurPlace(lvIds);
+  return live.workerSignaturePrepare(lvIds);
+}
+export async function workerSignatureConfirm(documentId, lvIds) {
+  if (DEMO) return { document_id: documentId, lv_ids: lvIds };
+  return live.workerSignatureConfirm(documentId, lvIds);
+}
+export async function workerSignatureCancel(documentId) {
+  if (DEMO) return { deleted: true, document_id: documentId };
+  return live.workerSignatureCancel(documentId);
 }
 export async function workerSignatureParMail(lvIds) {
   if (DEMO) {

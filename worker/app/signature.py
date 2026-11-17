@@ -19,46 +19,16 @@ import httpx
 from . import db, documenso, pdf
 from .config import settings
 
-# Documenso — MÉTHODE 2 (retenue) : le worker MESURE la position réelle des ancres
-# #doc-signature / #doc-nom dans le rendu WeasyPrint (la zone signature est en flux,
-# sa position varie d'une lettre à l'autre) et crée les champs à ces coordonnées en
-# % de page. La méthode 1 (balises texte {{signature}}) n'est PAS détectée par notre
-# version de Documenso lors d'une création par l'API (vérifié : 0 champ auto-créé).
-_ANCHORS = (("SIGNATURE", "doc-signature"), ("NAME", "doc-nom"))
 
-
-def anchor_field(field_type: str, page_number: int, box, page_w: float, page_h: float) -> dict:
-    """Convertit une boîte d'ancre WeasyPrint (x0, y0, x1, y1 en px, origine
-    haut-gauche) en champ Documenso (% de page). Fonction pure, testée."""
-    x0, y0, x1, y1 = box
-    return {
-        "type": field_type,
-        "pageNumber": page_number,
-        "pageX": round(x0 / page_w * 100, 4),
-        "pageY": round(y0 / page_h * 100, 4),
-        "pageWidth": round((x1 - x0) / page_w * 100, 4),
-        "pageHeight": round((y1 - y0) / page_h * 100, 4),
-    }
-
-
-def _fields_from_document(document, page_offset: int) -> list[dict]:
-    """Champs SIGNATURE + NAME d'UNE lettre, mesurés sur ses pages WeasyPrint.
-    page_offset = nombre de pages déjà accumulées dans le PDF combiné (les numéros
-    de page Documenso sont 1-based et absolus dans le combiné)."""
-    fields: list[dict] = []
-    for i, page in enumerate(document.pages):
-        for ftype, anchor in _ANCHORS:
-            box = page.anchors.get(anchor)
-            if box:
-                fields.append(anchor_field(ftype, page_offset + i + 1, box, page.width, page.height))
-    return fields
-
-
+# Documenso — MÉTHODE 2 (retenue) : les positions des ancres #doc-signature /
+# #doc-nom sont MESURÉES dans le rendu WeasyPrint (cf. pdf.measure_fields) puis
+# posées en % de page. La méthode 1 (balises texte {{signature}}) n'est PAS détectée
+# par notre Documenso à la création par l'API. beta.25 : le PDF et les positions de
+# chaque lettre sont CACHÉS (bon.lv_pdf_cache) -> au moment de signer, on ne fait
+# plus de rendu, seulement la fusion des PDF en cache (quelques ms).
 def build_combined_pdf(lv_ids: list[int]) -> tuple[bytes, list[int], list[dict]]:
-    """Construit le PDF combiné (un par envoi, chaque lettre sur de nouvelles pages)
-    et MESURE les champs Documenso. Renvoie (pdf, dernières_pages, champs) :
-    dernières_pages[k] = dernière page (1-based) de la lettre k ; champs = liste de
-    géométries SIGNATURE/NAME (sans recipientId), une paire par lettre, à la bonne page."""
+    """PDF combiné (un par envoi, chaque lettre sur de nouvelles pages) + champs
+    Documenso, depuis le CACHE par lettre. Renvoie (pdf, dernières_pages, champs)."""
     from pypdf import PdfReader, PdfWriter
 
     writer = PdfWriter()
@@ -66,12 +36,13 @@ def build_combined_pdf(lv_ids: list[int]) -> tuple[bytes, list[int], list[dict]]
     fields: list[dict] = []
     offset = 0
     for lv_id in lv_ids:
-        document = pdf.render_document(pdf.build_context(lv_id))
-        fields.extend(_fields_from_document(document, offset))
-        reader = PdfReader(io.BytesIO(document.write_pdf()))
+        pdf_bytes, letter_fields, n_pages = pdf.letter_cached(lv_id)
+        reader = PdfReader(io.BytesIO(pdf_bytes))
         for page in reader.pages:
             writer.add_page(page)
-        offset += len(document.pages)
+        for f in letter_fields:
+            fields.append({**f, "pageNumber": offset + f["pageNumber"]})
+        offset += n_pages
         last_pages.append(offset)
     buf = io.BytesIO()
     writer.write(buf)
@@ -133,26 +104,86 @@ def _create_lot_document(
     )
 
 
-def sur_place(lv_ids: list[int]) -> dict:
-    """UN SEUL document combiné pour le lot (toutes les lettres du même signataire),
-    SANS e-mail, pour signature INTÉGRÉE dans l'appli. Toutes les lettres portent le
-    même documenso_id. Renvoie le token (pour /embed/sign/{token}) et le signataire."""
+def prepare(lv_ids: list[int]) -> dict:
+    """PRÉPARE (en anticipation) UN document Documenso combiné pour le lot, SANS
+    e-mail, pour signature INTÉGRÉE. NE change PAS le statut des lettres (ça n'arrive
+    qu'au moment où l'utilisateur ouvre réellement l'écran de signature, cf. confirm).
+    Renvoie le token (pour /embed/sign/{token}) et le signataire. Le PDF vient du
+    cache par lettre : préparation quasi instantanée."""
     rows, signer = _validate_lot(lv_ids)
     res = _create_lot_document(rows, signer, send_email=False)
-    ids = [r["id"] for r in rows]
-    db.query(
-        "UPDATE bon.lettres_voiture SET documenso_document_id = %s, signature_mode = 'sur_place', "
-        "signature_sent_at = now(), statut = 'a_signer' WHERE id = ANY(%s)",
-        (res["document_id"], ids),
-    )
     return {
         "document_id": res["document_id"],
         "token": res.get("token"),
         "signer_name": signer.get("contact_nom") or "",
         "signer_email": signer["contact_email"],
         "numeros": [r["numero"] or f"#{r['id']}" for r in rows],
-        "lv_ids": ids,
+        "lv_ids": [r["id"] for r in rows],
     }
+
+
+def confirm(document_id: int, lv_ids: list[int]) -> dict:
+    """Confirme la signature EN COURS : marque les lettres du lot « à signer » et y
+    inscrit le même documenso_id. Appelé quand l'écran de signature intégré s'ouvre."""
+    rows = _rows(lv_ids)
+    ids = [r["id"] for r in rows]
+    db.query(
+        "UPDATE bon.lettres_voiture SET documenso_document_id = %s, signature_mode = 'sur_place', "
+        "signature_sent_at = now(), statut = 'a_signer' WHERE id = ANY(%s)",
+        (document_id, ids),
+    )
+    return {"document_id": document_id, "lv_ids": ids}
+
+
+def cancel(document_id: int) -> dict:
+    """Supprime un document préparé mais NON utilisé (changement de sélection, ou
+    abandon). Aucun mail n'a été envoyé (préparation sans e-mail)."""
+    ok = documenso.delete_document(int(document_id)) if document_id else False
+    return {"deleted": bool(ok), "document_id": document_id}
+
+
+def purge_abandoned_drafts(older_than_min: int = 30) -> dict:
+    """Supprime les documents de signature PRÉPARÉS mais jamais utilisés (brouillons
+    « Lettres de voiture KERLAM » non signés, de plus de `older_than_min` minutes, et
+    NON rattachés à une lettre). Aucun mail. Appelé périodiquement."""
+    import datetime
+
+    try:
+        docs = documenso.list_documents(per_page=100)
+    except Exception:  # noqa: BLE001
+        return {"purges": 0}
+    linked = {
+        r["documenso_document_id"]
+        for r in db.query("SELECT DISTINCT documenso_document_id FROM bon.lettres_voiture "
+                          "WHERE documenso_document_id IS NOT NULL")
+    }
+    cutoff = datetime.datetime.now(datetime.UTC) - datetime.timedelta(minutes=older_than_min)
+    purged = 0
+    for d in docs:
+        title = d.get("title") or ""
+        if not title.startswith("Lettres de voiture KERLAM"):
+            continue
+        if str(d.get("status", "")).upper() == "COMPLETED":
+            continue
+        if d.get("id") in linked:
+            continue  # rattaché à une lettre -> en cours de signature, on garde
+        created = (d.get("createdAt") or "").replace("Z", "+00:00")
+        try:
+            when = datetime.datetime.fromisoformat(created)
+        except ValueError:
+            continue
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=datetime.UTC)
+        if when < cutoff and documenso.delete_document(d["id"]):
+            purged += 1
+    return {"purges": purged}
+
+
+def sur_place(lv_ids: list[int]) -> dict:
+    """Compat : prépare + confirme immédiatement (un document, sans e-mail)."""
+    res = prepare(lv_ids)
+    confirm(res["document_id"], res["lv_ids"])
+    return res
 
 
 def par_mail(lv_ids: list[int]) -> dict:

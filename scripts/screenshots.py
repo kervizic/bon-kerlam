@@ -440,6 +440,7 @@ beta222_failures: list[str] = []
 beta225_failures: list[str] = []
 beta226_failures: list[str] = []
 beta232_failures: list[str] = []
+beta25_failures: list[str] = []
 
 
 def _assert(cond: bool, msg: str) -> None:
@@ -1422,6 +1423,50 @@ def shoot_keyboard_dismiss(ctx, prefix: str) -> None:
         page.close()
 
 
+def shoot_auto_update(ctx, prefix: str) -> None:
+    """beta.25 : mise à jour automatique de la PWA. On simule un /version.json dont
+    la version diffère de l'appli chargée : l'appli doit se recharger SEULE (sans
+    que l'utilisateur ferme), après avoir mémorisé la cible (anti-boucle)."""
+    page = ctx.new_page()
+    try:
+        page.goto(f"{BASE}?demo=1&screen=mes-lv&role=bureau", wait_until="load")
+        page.wait_for_timeout(600)
+        # File de sync non vide -> « moment non calme » : le reload est DIFFÉRÉ (pas
+        # de navigation qui détruirait le contexte du test), mais la détection a lieu
+        # et la cible est mémorisée. /version.json renvoie une version différente.
+        page.evaluate(
+            """() => {
+                try { sessionStorage.removeItem('bon_update_version'); } catch (e) {}
+                window.bonSync = { queueLength: 1 };
+                const of = window.fetch.bind(window);
+                window.fetch = (u, o) => {
+                    const s = String((u && u.url) || u || '');
+                    if (s.indexOf('/version.json') !== -1) {
+                        return Promise.resolve(new Response(JSON.stringify({ version: '9.9.9-test', rev: '999' }),
+                                               { status: 200, headers: { 'content-type': 'application/json' } }));
+                    }
+                    return of(u, o);
+                };
+            }"""
+        )
+        page.evaluate("window.bonAppVersion.forceCheck()")
+        page.wait_for_timeout(800)
+        res = page.evaluate(
+            "() => ({ booted: window.__bonBooted, guard: sessionStorage.getItem('bon_update_version') })"
+        )
+        if not res["booted"]:
+            beta25_failures.append("auto-update : flag __bonBooted non posé (garde-fou anti page blanche KO)")
+        if res["guard"] != "9.9.9-test":
+            beta25_failures.append(f"auto-update : changement de version non détecté (guard={res['guard']!r})")
+        page.evaluate("() => { window.bonSync = { queueLength: 0 }; }")
+        print(f"   auto-update (booted={res['booted']}, guard={res['guard']})")
+    except Exception as exc:  # noqa: BLE001
+        beta25_failures.append(f"auto-update : exception {exc}")
+        print(f"   !! auto-update: {exc}")
+    finally:
+        page.close()
+
+
 def shoot_signer_groupes(ctx, prefix: str) -> None:
     """beta.23.2 : « Signer » ouvre une feuille qui REGROUPE les lettres par
     signataire (plus de blocage « même contact »). Deux modes : en présentiel
@@ -1681,6 +1726,8 @@ def main() -> int:
         shoot_keyboard_dismiss(wk_iphone2, "webkit-iphone")
         print("WebKit (Safari iOS, DSR 2) : feuille signataires groupés beta.23.2")
         shoot_signer_groupes(wk_iphone2, "webkit-iphone")
+        print("WebKit (Safari iOS, DSR 2) : mise à jour automatique PWA beta.25")
+        shoot_auto_update(wk_iphone2, "webkit-iphone")
         print("WebKit (Safari iOS) : pas de débordement + Veolia beta.22.2")
         shoot_overflow_veolia(wk_iphone2, "webkit-iphone")
         print("WebKit (Safari iOS, DSR 2) : fiches rapides autosave beta.20")
@@ -1793,6 +1840,13 @@ def main() -> int:
         rc = 1
     else:
         print("OK : beta.23.2 (feuille signataires groupés : présentiel radio / par mail cases).")
+    if beta25_failures:
+        print("beta.25 KO (mise à jour automatique PWA) :")
+        for f in beta25_failures:
+            print("  -", f)
+        rc = 1
+    else:
+        print("OK : beta.25 (mise à jour automatique sur changement de version.json).")
     return rc
 
 

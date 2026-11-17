@@ -78,8 +78,15 @@
     return 0;
   }
 
+  // Signature intégrée ouverte : ne JAMAIS recharger pendant une signature.
+  function isSigningOpen() {
+    var el = document.getElementById("embed-sign-sheet");
+    return !!(el && !el.hidden);
+  }
+
   function isCalmMoment() {
-    return queueLength() === 0 && !isFieldFocused() && document.visibilityState !== "hidden";
+    return queueLength() === 0 && !isFieldFocused() && !isSigningOpen()
+      && document.visibilityState !== "hidden";
   }
 
   var pendingReason = null;   // 'html' | 'sw' | 'server' | null
@@ -94,6 +101,7 @@
   }
 
   function doReloadNow() {
+    try { sessionStorage.setItem("bon_updated", "1"); } catch (e) {}  // toast après reload
     var go = function () { window.location.reload(); };
     purgeCaches().then(go, go);
   }
@@ -162,11 +170,44 @@
       .then(function () { checking = false; });
   }
 
+  // ----------------------------------------- Check /version.json (robuste) ----
+  // Fichier servi en no-store (jamais mis en cache par le SW) : signal de version
+  // le plus fiable, indépendant de l'empreinte HTML (qui peut passer par le SW).
+  var VGUARD = "bon_update_version";
+  function loadedVersion() {
+    var m = document.querySelector('meta[name="app-version"]');
+    return m ? (m.getAttribute("content") || "") : "";
+  }
+  var LOADED_VERSION = loadedVersion();
+
+  function checkVersion() {
+    if (document.visibilityState === "hidden") return;
+    fetch("/version.json?_=" + Date.now(), { cache: "no-store", credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (!data || !data.version) return;
+        if (data.version === LOADED_VERSION) {
+          try { sessionStorage.removeItem(VGUARD); } catch (e) {}
+          return;
+        }
+        var target = null;
+        try { target = sessionStorage.getItem(VGUARD); } catch (e) {}
+        if (target === data.version) return; // déjà engagé vers cette version -> anti-boucle
+        try { sessionStorage.setItem(VGUARD, data.version); } catch (e) {}
+        // Force le SW à aller chercher un nouveau /sw.js (sinon il peut rester bloqué).
+        if (swReg && swReg.update) { try { swReg.update(); } catch (e) {} }
+        safeReload("version");
+      })
+      .catch(function () {});
+  }
+
   // ----------------------------------------------- Coordination service worker --
+
+  var swReg = null;
 
   function initServiceWorker() {
     if (!("serviceWorker" in navigator)) return;
-    navigator.serviceWorker.register("/sw.js").catch(function () {});
+    navigator.serviceWorker.register("/sw.js").then(function (reg) { swReg = reg; }).catch(function () {});
 
     var handled = false;
     navigator.serviceWorker.addEventListener("controllerchange", function () {
@@ -193,18 +234,25 @@
     notifyServerVersionTooOld: notifyServerVersionTooOld,
   };
 
-  // Déclencheurs : lancement, intervalle régulier, retour au premier plan,
-  // restauration depuis le bfcache (Safari/iOS).
+  // Vérifie à la fois /version.json (robuste) et l'empreinte HTML (secours).
+  function checkAll() { checkVersion(); check(); }
+
+  // Déclencheurs : lancement, intervalle régulier (5 min), retour au premier plan,
+  // focus fenêtre, restauration depuis le bfcache (Safari/iOS).
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", check);
+    document.addEventListener("DOMContentLoaded", checkAll);
   } else {
-    check();
+    checkAll();
   }
-  setInterval(check, CHECK_INTERVAL_MS);
+  setInterval(checkAll, CHECK_INTERVAL_MS);
   document.addEventListener("visibilitychange", function () {
-    if (document.visibilityState === "visible") check();
+    if (document.visibilityState === "visible") checkAll();
   });
-  window.addEventListener("pageshow", function (e) { if (e.persisted) check(); });
+  window.addEventListener("focus", checkAll);
+  window.addEventListener("pageshow", function () { checkAll(); });
+
+  // API publique : forceCheck déclenche les deux vérifications.
+  window.bonAppVersion.forceCheck = checkAll;
 
   initServiceWorker();
 })();

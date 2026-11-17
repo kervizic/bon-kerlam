@@ -120,7 +120,9 @@ import {
   workerEnvoiGroupe,
   workerChauffeurDepart,
   workerLvPdf,
-  workerSignatureSurPlace,
+  workerSignaturePrepare,
+  workerSignatureConfirm,
+  workerSignatureCancel,
   workerSignatureParMail,
   workerSignatureSync,
   searchAddress,
@@ -2854,7 +2856,9 @@ function onSelectAllChange(checked) {
 
 // « Signer (N) » : regroupe la sélection PAR SIGNATAIRE (beta.23.2) et propose le
 // mode (en présentiel = un seul signataire ; par mail = un lot par signataire).
-const signerState = { mode: "sur_place", groups: [], sansContact: [] };
+// prepared : document de signature PRÉPARÉ en anticipation (présentiel) pour le
+// signataire sélectionné. { contactId, lvIds, promise, result, documentId }.
+const signerState = { mode: "sur_place", groups: [], sansContact: [], prepared: null };
 
 function contactsById() {
   const map = new Map();
@@ -2869,6 +2873,7 @@ function openSignerChoice() {
   signerState.groups = groups;
   signerState.sansContact = sansContact;
   signerState.mode = "sur_place";
+  cancelPreparedSignature();
   renderSignerChoice();
   const sheet = document.getElementById("signer-choice-sheet");
   if (sheet) sheet.hidden = false;
@@ -2876,7 +2881,40 @@ function openSignerChoice() {
 
 function setSignerMode(mode) {
   signerState.mode = mode;
+  // Par mail n'anticipe pas ; tout changement de mode annule un éventuel brouillon.
+  cancelPreparedSignature();
   renderSignerChoice();
+}
+
+// Annule (supprime côté Documenso) un brouillon préparé mais non utilisé.
+function cancelPreparedSignature() {
+  const prep = signerState.prepared;
+  signerState.prepared = null;
+  if (!prep) return;
+  const kill = (docId) => { if (docId) workerSignatureCancel(docId).catch(() => {}); };
+  if (prep.documentId) kill(prep.documentId);
+  else if (prep.promise) prep.promise.then((r) => kill(r && r.document_id)).catch(() => {});
+}
+
+// Sélection d'un signataire (présentiel) : prépare le document EN ARRIÈRE-PLAN pour
+// qu'au toucher sur « Signer », l'écran de signature s'ouvre immédiatement.
+function onSignerPick() {
+  if (signerState.mode !== "sur_place") return;
+  const ids = checkedContactIds();
+  const contactId = ids[0];
+  const group = signerState.groups.find((g) => g.contactId === contactId);
+  if (!group || !group.hasEmail) { cancelPreparedSignature(); return; }
+  if (signerState.prepared && signerState.prepared.contactId === contactId) return; // déjà en prépa
+  cancelPreparedSignature();
+  const prep = { contactId, lvIds: group.lvIds.slice(), promise: null, result: null, documentId: null };
+  prep.promise = workerSignaturePrepare(group.lvIds).then((res) => {
+    // Si la sélection a changé entre-temps, annule ce document devenu inutile.
+    if (signerState.prepared !== prep) { if (res && res.document_id) workerSignatureCancel(res.document_id).catch(() => {}); return res; }
+    prep.result = res;
+    prep.documentId = res && res.document_id;
+    return res;
+  });
+  signerState.prepared = prep;
 }
 
 function renderSignerChoice() {
@@ -2902,6 +2940,7 @@ function renderSignerChoice() {
     input.className = "signer-check";
     input.dataset.contactId = String(g.contactId);
     input.disabled = !g.hasEmail;
+    input.addEventListener("change", onSignerPick);
     const info = document.createElement("span");
     info.className = "signer-info";
     const nb = plur(g.count, "lettre", "lettres");
@@ -2928,6 +2967,12 @@ function closeSignerChoice() {
   if (sheet) sheet.hidden = true;
 }
 
+// Fermeture SANS signer (bouton fermer ou fond) : annule le brouillon préparé puis masque.
+function dismissSignerChoice() {
+  cancelPreparedSignature();
+  closeSignerChoice();
+}
+
 function checkedContactIds() {
   return [...document.querySelectorAll("#signer-group-list .signer-check:checked")]
     .map((el) => Number(el.dataset.contactId));
@@ -2942,25 +2987,38 @@ async function confirmSigner() {
   closeSignerChoice();
   if (signerState.mode === "sur_place") {
     const batch = plan.batches[0];
-    showSignPreparing(true);
+    // Document déjà préparé en anticipation pour ce signataire ? Sinon, prépare maintenant.
+    let promise;
+    if (signerState.prepared && signerState.prepared.contactId === batch.contactId) {
+      promise = signerState.prepared.promise;
+    } else {
+      promise = workerSignaturePrepare(batch.lvIds);
+    }
+    signerState.prepared = null; // consommé
+    // Spinner « Préparation… » SEULEMENT si l'attente dépasse 300 ms.
+    const spinnerTimer = setTimeout(() => showSignPreparing(true), 300);
     let res;
     try {
-      res = await workerSignatureSurPlace(batch.lvIds);
+      res = await promise;
     } catch (err) {
+      clearTimeout(spinnerTimer);
       showSignPreparing(false);
       alert("Échec de la préparation du document : " + (err.message || err));
       return;
     }
-    // Les autres lettres (autres signataires) restent sélectionnées.
-    for (const id of batch.lvIds) signSelection.delete(id);
-    refreshSelectionBar();
+    clearTimeout(spinnerTimer);
     showSignPreparing(false);
     if (!res || !res.token) {
       alert("Document préparé mais aucun lien de signature reçu.");
-      await loadMesLv();
       return;
     }
+    // Marque les lettres du lot « à signer » (confirme l'ouverture de la signature).
+    try { await workerSignatureConfirm(res.document_id, batch.lvIds); } catch (e) { /* non bloquant */ }
+    // Les autres lettres (autres signataires) restent sélectionnées.
+    for (const id of batch.lvIds) signSelection.delete(id);
+    refreshSelectionBar();
     openEmbeddedSigning(res);
+    loadMesLv();
     return;
   }
   // Par mail : un envoi (un lot) par signataire.
@@ -5098,11 +5156,11 @@ function wireStaticUI() {
   const btnSigner = document.getElementById("btn-signer");
   if (btnSigner) btnSigner.addEventListener("click", openSignerChoice);
   const btnSignerClose = document.getElementById("btn-signer-choice-close");
-  if (btnSignerClose) btnSignerClose.addEventListener("click", closeSignerChoice);
+  if (btnSignerClose) btnSignerClose.addEventListener("click", dismissSignerChoice);
   const btnEmbedClose = document.getElementById("btn-embed-sign-close");
   if (btnEmbedClose) btnEmbedClose.addEventListener("click", closeEmbeddedSigning);
   const signerSheet = document.getElementById("signer-choice-sheet");
-  if (signerSheet) signerSheet.addEventListener("click", (e) => { if (e.target.id === "signer-choice-sheet") closeSignerChoice(); });
+  if (signerSheet) signerSheet.addEventListener("click", (e) => { if (e.target.id === "signer-choice-sheet") dismissSignerChoice(); });
   const modeSurPlace = document.getElementById("mode-sur-place");
   if (modeSurPlace) modeSurPlace.addEventListener("click", () => setSignerMode("sur_place"));
   const modeParMail = document.getElementById("mode-par-mail");
@@ -5547,6 +5605,16 @@ async function boot() {
     /* ignore : traité comme non connecté */
   }
   await handleSessionChange(session);
+
+  // beta.25 : signale que l'appli a démarré (désarme le garde-fou anti page
+  // blanche inline). Si on vient d'une mise à jour, affiche un toast.
+  window.__bonBooted = true;
+  try {
+    if (sessionStorage.getItem("bon_updated") === "1") {
+      sessionStorage.removeItem("bon_updated");
+      showToast("Appli mise à jour.");
+    }
+  } catch (e) { /* ignore */ }
 }
 
 boot();

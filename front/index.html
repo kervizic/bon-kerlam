@@ -10,8 +10,8 @@
   <!-- Empreinte de version du shell (cf. assets/app-version.js). Bumper `app-rev`
        à chaque déploiement backend devant forcer un refresh (sinon le bump d'un
        `?v=` d'asset suffit). -->
-  <meta name="app-version" content="0.1.0-beta.24">
-  <meta name="app-rev" content="240">
+  <meta name="app-version" content="0.1.0-beta.25">
+  <meta name="app-rev" content="250">
 
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
@@ -31,8 +31,39 @@
        en police système). crossorigin obligatoire : les polices sont toujours
        récupérées en mode CORS, l'attribut évite un double téléchargement. -->
   <link rel="preload" href="/assets/fonts/sarpanch-900.woff2?v=14" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/assets/styles.css?v=240">
-  <script src="/assets/app-version.js?v=21" defer></script>
+  <link rel="stylesheet" href="/assets/styles.css?v=250">
+  <!-- Garde-fou anti page blanche (beta.25) : si l'appli n'a pas démarré sous 8 s
+       (flag window.__bonBooted posé en fin de boot d'app.js), on désenregistre le
+       SW, on vide les caches et on recharge UNE fois (anti-boucle sessionStorage).
+       Inline et autonome : fonctionne même si app.js ne se charge pas. -->
+  <script>
+  (function () {
+    "use strict";
+    window.__bonBooted = false;
+    var RECOVER = "bon_blank_recovered";
+    setTimeout(function () {
+      if (window.__bonBooted) { try { sessionStorage.removeItem(RECOVER); } catch (e) {} return; }
+      var already = false;
+      try { already = sessionStorage.getItem(RECOVER) === "1"; } catch (e) {}
+      if (already) return;  // déjà tenté : on n'insiste pas (évite toute boucle)
+      try { sessionStorage.setItem(RECOVER, "1"); } catch (e) {}
+      var done = function () { window.location.reload(); };
+      var jobs = [];
+      if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+        jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) {
+          return Promise.all(rs.map(function (r) { return r.unregister(); }));
+        }).catch(function () {}));
+      }
+      if (window.caches && caches.keys) {
+        jobs.push(caches.keys().then(function (ks) {
+          return Promise.all(ks.map(function (k) { return caches.delete(k); }));
+        }).catch(function () {}));
+      }
+      Promise.all(jobs).then(done, done);
+    }, 8000);
+  })();
+  </script>
+  <script src="/assets/app-version.js?v=22" defer></script>
 </head>
 <body>
   <a href="#main" class="skip-link">Aller au contenu</a>
@@ -828,6 +859,6 @@
   <!-- ================================================================== Scripts -->
   <script src="/assets/config.js?v=21"></script>
   <script src="/assets/vendor/supabase/supabase.js"></script>
-  <script type="module" src="/assets/app.js?v=240"></script>
+  <script type="module" src="/assets/app.js?v=250"></script>
 </body>
 </html>

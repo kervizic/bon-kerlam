@@ -7,6 +7,8 @@ HTML (et ses tests) ne dépendent pas des bibliothèques système (pango/cairo).
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 from typing import Any
 
@@ -308,3 +310,62 @@ def render_pdf(context: dict[str, Any]) -> bytes:
     # base_url = dossier des gabarits : permet au @font-face de résoudre
     # l'URL relative vers sarpanch-900.woff2 (logo KERLAM du PDF).
     return render_document(context).write_pdf()
+
+
+# --- Champs Documenso mesurés sur le rendu WeasyPrint (page.anchors) ----------
+_ANCHORS = (("SIGNATURE", "doc-signature"), ("NAME", "doc-nom"))
+
+
+def anchor_field(field_type: str, page_number: int, box, page_w: float, page_h: float) -> dict:
+    """Boîte d'ancre WeasyPrint (x0,y0,x1,y1 px, origine haut-gauche) -> champ
+    Documenso en % de page. Fonction pure, testée."""
+    x0, y0, x1, y1 = box
+    return {
+        "type": field_type,
+        "pageNumber": page_number,
+        "pageX": round(x0 / page_w * 100, 4),
+        "pageY": round(y0 / page_h * 100, 4),
+        "pageWidth": round((x1 - x0) / page_w * 100, 4),
+        "pageHeight": round((y1 - y0) / page_h * 100, 4),
+    }
+
+
+def measure_fields(document, page_offset: int = 0) -> list[dict]:
+    """Champs SIGNATURE + NAME mesurés sur les pages d'un rendu (numéros de page
+    1-based, décalés de page_offset)."""
+    fields: list[dict] = []
+    for i, page in enumerate(document.pages):
+        for ftype, anchor in _ANCHORS:
+            box = page.anchors.get(anchor)
+            if box:
+                fields.append(anchor_field(ftype, page_offset + i + 1, box, page.width, page.height))
+    return fields
+
+
+def letter_cached(lv_id: int) -> tuple[bytes, list[dict], int]:
+    """(pdf, champs page-locaux, nb_pages) d'UNE lettre, depuis le cache si son
+    contenu n'a pas changé (clé = hash du HTML rendu, qui détermine entièrement le
+    PDF), sinon rend via WeasyPrint et met en cache. Évite le rendu coûteux
+    (sous-typage de police) au moment de signer."""
+    html = render_html(build_context(lv_id))
+    content_hash = hashlib.sha256(html.encode("utf-8")).hexdigest()
+    row = db.query_one(
+        "SELECT pdf, anchors, n_pages FROM bon.lv_pdf_cache WHERE lv_id = %s AND content_hash = %s",
+        (lv_id, content_hash),
+    )
+    if row:
+        return bytes(row["pdf"]), row["anchors"], row["n_pages"]
+    from weasyprint import HTML
+
+    document = HTML(string=html, base_url=_TPL_DIR + os.sep).render()
+    fields_local = measure_fields(document, 0)
+    pdf_bytes = document.write_pdf()
+    n_pages = len(document.pages)
+    db.query(
+        "INSERT INTO bon.lv_pdf_cache (lv_id, content_hash, pdf, anchors, n_pages, updated_at) "
+        "VALUES (%s, %s, %s, %s, %s, now()) "
+        "ON CONFLICT (lv_id) DO UPDATE SET content_hash = EXCLUDED.content_hash, "
+        "pdf = EXCLUDED.pdf, anchors = EXCLUDED.anchors, n_pages = EXCLUDED.n_pages, updated_at = now()",
+        (lv_id, content_hash, pdf_bytes, json.dumps(fields_local), n_pages),
+    )
+    return pdf_bytes, fields_local, n_pages
