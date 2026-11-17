@@ -295,9 +295,16 @@ def render_html(context: dict[str, Any]) -> str:
     return _env.get_template("lv.html").render(**context)
 
 
-def render_pdf(context: dict[str, Any]) -> bytes:
+def render_document(context: dict[str, Any]):
+    """Rend le document WeasyPrint (objet Document). Expose `pages[i].anchors`
+    (boîte des ancres #doc-signature / #doc-nom en px, origine haut-gauche) pour
+    le placement Documenso mesuré, et `write_pdf()` pour les octets."""
     from weasyprint import HTML  # import paresseux (dépendances système)
 
+    return HTML(string=render_html(context), base_url=_TPL_DIR + os.sep).render()
+
+
+def render_pdf(context: dict[str, Any]) -> bytes:
     # base_url = dossier des gabarits : permet au @font-face de résoudre
     # l'URL relative vers sarpanch-900.woff2 (logo KERLAM du PDF).
-    return HTML(string=render_html(context), base_url=_TPL_DIR + os.sep).write_pdf()
+    return render_document(context).write_pdf()

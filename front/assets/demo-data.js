@@ -198,7 +198,7 @@ function nowIsoAt(hh, mm) {
   return d.toISOString();
 }
 
-const nextLvId = makeCounter(3);
+const nextLvId = makeCounter(4);
 export const LETTRES_VOITURE = [
   {
     id: 1, numero: "KER-03041", date_etablissement: todayIso(), date_prise_en_charge: todayIso(),
@@ -220,6 +220,15 @@ export const LETTRES_VOITURE = [
     camion_id: 3, chauffeur_id: 3, client_id: 1, projet_id: 1, contact_id: 1, heures_regie: null,
     heures: null,
     statut: "preparee", preparee: true, owner_email: "hugo.lefevre@kerlam.fr", deleted_at: null,
+  },
+  // beta.23.2 : lettre d'un AUTRE contact signataire (Julien Masse, client 2) pour
+  // illustrer l'envoi groupé multi-signataires (feuille regroupée par signataire).
+  {
+    id: 4, numero: "KER-03043", date_etablissement: addDays(-2), date_prise_en_charge: addDays(-2),
+    expediteur: "Groupe Valoris Environnement", destinataire: "Groupe Valoris Environnement", dest_identique: true,
+    camion_id: 2, chauffeur_id: 2, client_id: 2, projet_id: 2, contact_id: 2, heures_regie: null,
+    heures: [{ debut: "08:00", fin: "16:00" }],
+    statut: "a_signer", preparee: false, owner_email: "fatou.diallo@kerlam.fr", deleted_at: null,
   },
 ];
 

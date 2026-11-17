@@ -1496,3 +1496,24 @@ body.qc-lock { position: fixed; left: 0; right: 0; width: 100%; overflow: hidden
 .doublons-pair { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; font-size: 14px; border-top: 1px solid var(--border); }
 .doublons-pair:first-of-type { border-top: none; }
 .entity-toolbar-actions { display: inline-flex; gap: 8px; align-items: center; }
+
+/* ---- Feuille « Signer » : regroupement par signataire (beta.23.2) ---------- */
+.signer-modes { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin: 4px 0 10px; }
+.signer-mode-btn {
+  flex: 1; padding: 8px 10px; background: var(--surface); color: var(--text);
+  border: 0; font: inherit; cursor: pointer; min-height: 40px;
+}
+.signer-mode-btn + .signer-mode-btn { border-left: 1px solid var(--border); }
+.signer-mode-btn.is-active { background: var(--c-orange); color: var(--c-anthracite); font-weight: 600; }
+.signer-group-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.signer-row {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--surface); cursor: pointer;
+}
+.signer-row:has(.signer-check:disabled) { opacity: 0.7; cursor: not-allowed; }
+.signer-check { width: 20px; height: 20px; flex-shrink: 0; }
+.signer-info { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.signer-nom { font-weight: 600; color: var(--text); }
+.signer-mail { font-size: 12px; color: var(--text-muted); overflow-wrap: anywhere; }
+.signer-count { font-size: 12px; color: var(--text-muted); }
+.signer-warn { color: #B4451F; }

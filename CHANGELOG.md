@@ -4,6 +4,29 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.23.2] — 2026-11-17
+
+Signature : zone en flux + placement Documenso fiable (worker) ; envoi groupé
+multi-signataires (front).
+
+### Changé
+- **Zone « Signature »** placée EN FLUX juste après le dernier transport
+  (`break-inside: avoid` : passe entière à la page suivante si elle ne tient pas),
+  au lieu d'être épinglée en bas de page.
+- **Placement Documenso (méthode retenue : mesure worker)** : le worker lit la
+  position réelle des ancres `#doc-signature` / `#doc-nom` dans le rendu WeasyPrint
+  (`page.anchors`) et crée les champs SIGNATURE + NAME en % de page, sur la bonne
+  page de chaque lettre du PDF combiné. La méthode « balises texte `{{signature}}` »
+  n'est PAS détectée par notre Documenso lors d'une création par l'API (0 champ
+  auto-créé) — écartée. Test réel : brouillon des 5 lettres, 10 champs relus aux
+  bonnes pages, brouillon supprimé, aucun envoi.
+- **Envoi groupé multi-signataires (front)** : « Signer » n'est plus bloqué quand
+  la sélection mêle des signataires différents. Une feuille regroupe les lettres
+  PAR SIGNATAIRE (nom, e-mail, nombre de lettres). Mode « en présentiel » = un seul
+  signataire (radio) ; mode « par mail » = plusieurs signataires, un lot par
+  signataire. Une lettre sans contact, ou dont le contact n'a pas d'e-mail, est
+  signalée et ne part pas. Fonctions pures testées (groupBySignataire, signatureBatches).
+
 ## [0.1.0-beta.23.1] — 2026-11-17
 
 Deux retouches du gabarit PDF (worker uniquement).

@@ -96,33 +96,58 @@ def _blank_pdf(n_pages: int) -> bytes:
     return buf.getvalue()
 
 
-def test_signature_fields_positions_et_pages():
-    # Deux lettres : dernières pages 2 et 5 dans le PDF combiné.
-    fields = signature.signature_fields([2, 5])
-    assert len(fields) == 4  # SIGNATURE + NAME par lettre
-    sig2, nom2, sig5, nom5 = fields
-    assert [f["type"] for f in fields] == ["SIGNATURE", "NAME", "SIGNATURE", "NAME"]
-    assert [sig2["pageNumber"], nom2["pageNumber"]] == [2, 2]
-    assert [sig5["pageNumber"], nom5["pageNumber"]] == [5, 5]
-    # Ancres en % de page A4 (210 x 297 mm), coin haut-gauche.
-    assert sig2["pageX"] == round(17 / 210 * 100, 4) == 8.0952
-    assert sig2["pageY"] == round(245 / 297 * 100, 4) == 82.4916
-    assert sig2["pageWidth"] == round(66 / 210 * 100, 4) == 31.4286
-    assert sig2["pageHeight"] == round(15 / 297 * 100, 4) == 5.0505
-    assert nom2["pageY"] == round(262 / 297 * 100, 4) == 88.2155
-    assert nom2["pageHeight"] == round(5 / 297 * 100, 4) == 1.6835
+def test_anchor_field_conversion_pct():
+    # Boîte d'ancre WeasyPrint (px, origine haut-gauche) -> champ Documenso (%).
+    # Page A4 en px à 96 dpi : 793.70 x 1122.52.
+    pw, ph = 793.7007874015749, 1122.5196850393702
+    sig = signature.anchor_field("SIGNATURE", 3, (72.252, 411.772, 321.701, 468.465), pw, ph)
+    assert sig["type"] == "SIGNATURE" and sig["pageNumber"] == 3
+    assert sig["pageX"] == round(72.252 / pw * 100, 4)
+    assert sig["pageY"] == round(411.772 / ph * 100, 4)
+    assert sig["pageWidth"] == round((321.701 - 72.252) / pw * 100, 4)
+    assert sig["pageHeight"] == round((468.465 - 411.772) / ph * 100, 4)
+    # ~66 x 15 mm (31,4 % x 5,05 %) en bas de page (~37 %).
+    assert 31.0 < sig["pageWidth"] < 31.9
+    assert 4.8 < sig["pageHeight"] < 5.3
 
 
-def test_build_combined_pdf_dernieres_pages(monkeypatch):
-    # Lettres de 1, 2 et 1 pages -> dernières pages 1, 3, 4 dans le combiné.
+class _FakePage:
+    def __init__(self, anchors, w=793.7, h=1122.5):
+        self.anchors = anchors
+        self.width = w
+        self.height = h
+
+
+class _FakeDoc:
+    def __init__(self, n_pages, pdf_bytes, anchors_on_last):
+        # Les ancres ne sont présentes que sur la DERNIÈRE page de la lettre.
+        self.pages = [_FakePage({}) for _ in range(n_pages - 1)]
+        self.pages.append(_FakePage(anchors_on_last))
+        self._b = pdf_bytes
+
+    def write_pdf(self):
+        return self._b
+
+
+def test_build_combined_pdf_mesure_champs_et_pages(monkeypatch):
+    # Lettres de 1, 2 et 1 pages -> dernières pages 1, 3, 4 ; 1 paire SIGNATURE/NAME
+    # par lettre, mesurée sur sa dernière page.
+    anchors = {"doc-signature": (72, 411, 321, 468), "doc-nom": (72, 476, 321, 495)}
     pages_par_lv = {7: 1, 8: 2, 9: 1}
-    monkeypatch.setattr(signature, "_build_pdf", lambda lv_id: _blank_pdf(pages_par_lv[lv_id]))
-    merged, last_pages = signature.build_combined_pdf([7, 8, 9])
+    monkeypatch.setattr(signature.pdf, "build_context", lambda lv_id: lv_id)
+    monkeypatch.setattr(
+        signature.pdf, "render_document",
+        lambda lv_id: _FakeDoc(pages_par_lv[lv_id], _blank_pdf(pages_par_lv[lv_id]), anchors),
+    )
+    merged, last_pages, fields = signature.build_combined_pdf([7, 8, 9])
     assert last_pages == [1, 3, 4]
     import io
 
     from pypdf import PdfReader
     assert len(PdfReader(io.BytesIO(merged)).pages) == 4
+    # 3 lettres -> 3 SIGNATURE + 3 NAME, chacun sur la dernière page de sa lettre.
+    assert [f["type"] for f in fields] == ["SIGNATURE", "NAME", "SIGNATURE", "NAME", "SIGNATURE", "NAME"]
+    assert [f["pageNumber"] for f in fields] == [1, 1, 3, 3, 4, 4]
 
 
 def test_create_document_pose_signature_et_nom(monkeypatch):
@@ -144,10 +169,11 @@ def test_create_document_pose_signature_et_nom(monkeypatch):
     monkeypatch.setattr(documenso.httpx, "post", fake_post)
     monkeypatch.setattr(documenso.httpx, "put", lambda url, **kw: FakeResp(200))
 
-    documenso.create_document(
-        "T", "Jean", "j@example.test", b"%PDF-1.4", send_email=False,
-        fields=signature.signature_fields([2]),
-    )
+    fields = [
+        signature.anchor_field("SIGNATURE", 2, (72, 411, 321, 468), 793.7, 1122.5),
+        signature.anchor_field("NAME", 2, (72, 476, 321, 495), 793.7, 1122.5),
+    ]
+    documenso.create_document("T", "Jean", "j@example.test", b"%PDF-1.4", send_email=False, fields=fields)
     assert [f["type"] for f in posted_fields] == ["SIGNATURE", "NAME"]
     assert all(f["recipientId"] == 3 for f in posted_fields)
     assert all(f["pageNumber"] == 2 for f in posted_fields)

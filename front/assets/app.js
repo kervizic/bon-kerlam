@@ -148,7 +148,7 @@ import { initInstall } from "./install.js?v=13";
 import { UndoStack } from "./undo-stack.js?v=13";
 import { PdfCache, shouldCachePdf, formatGeneratedAt } from "./pdf-cache.js?v=13";
 import { statutLabel, lvBadge } from "./status-labels.js?v=21";
-import { canGroupForSignature } from "./signature-group.js?v=13";
+import { groupBySignataire, signatureBatches } from "./signature-group.js?v=232";
 import { swipeActionsFor, attachSwipe, closeOpenSwipe } from "./swipe-actions.js?v=21";
 // pdf-viewer.js (et pdf.js) chargés en import DYNAMIQUE à la 1re ouverture (g).
 import { enhanceSelect, refreshCombobox, ensureOption } from "./combobox.js?v=17";
@@ -2851,19 +2851,76 @@ function onSelectAllChange(checked) {
   });
 }
 
-// « Signer (N) » : valide le groupage puis ouvre le choix sur place / par mail.
+// « Signer (N) » : regroupe la sélection PAR SIGNATAIRE (beta.23.2) et propose le
+// mode (en présentiel = un seul signataire ; par mail = un lot par signataire).
+const signerState = { mode: "sur_place", groups: [], sansContact: [] };
+
+function contactsById() {
+  const map = new Map();
+  for (const c of state.refs.contacts || []) map.set(c.id, c);
+  return map;
+}
+
 function openSignerChoice() {
   const lvs = [...signSelection.values()];
-  const grp = canGroupForSignature(lvs);
-  const msgEl = document.getElementById("signer-choice-msg");
-  const sheet = document.getElementById("signer-choice-sheet");
+  if (!lvs.length) return;
+  const { groups, sansContact } = groupBySignataire(lvs, contactsById());
+  signerState.groups = groups;
+  signerState.sansContact = sansContact;
+  signerState.mode = "sur_place";
   document.getElementById("signer-choice-count").textContent = `(${lvs.length})`;
-  if (!grp.ok) {
-    alert(grp.reason);
-    return;
-  }
-  if (msgEl) msgEl.textContent = `${plur(lvs.length, "lettre de voiture", "lettres de voiture")}, même contact signataire.`;
+  renderSignerChoice();
+  const sheet = document.getElementById("signer-choice-sheet");
   if (sheet) sheet.hidden = false;
+}
+
+function setSignerMode(mode) {
+  signerState.mode = mode;
+  renderSignerChoice();
+}
+
+function renderSignerChoice() {
+  const mode = signerState.mode;
+  const singleMode = mode === "sur_place";
+  document.getElementById("mode-sur-place").classList.toggle("is-active", singleMode);
+  document.getElementById("mode-par-mail").classList.toggle("is-active", !singleMode);
+  const msgEl = document.getElementById("signer-choice-msg");
+  if (msgEl) {
+    msgEl.textContent = singleMode
+      ? "Choisissez UN signataire : signature sur ce téléphone."
+      : "Choisissez un ou plusieurs signataires : un envoi par signataire.";
+  }
+  const list = document.getElementById("signer-group-list");
+  list.innerHTML = "";
+  const inputType = singleMode ? "radio" : "checkbox";
+  for (const g of signerState.groups) {
+    const row = document.createElement("label");
+    row.className = "signer-row";
+    const input = document.createElement("input");
+    input.type = inputType;
+    input.name = "signer-group";
+    input.className = "signer-check";
+    input.dataset.contactId = String(g.contactId);
+    input.disabled = !g.hasEmail;
+    const info = document.createElement("span");
+    info.className = "signer-info";
+    const nb = plur(g.count, "lettre", "lettres");
+    const mail = g.hasEmail
+      ? `<span class="signer-mail">${escapeHtml(g.email)}</span>`
+      : `<span class="signer-mail signer-warn">e-mail manquant</span>`;
+    info.innerHTML = `<span class="signer-nom">${escapeHtml(g.nom)}</span> ${mail} <span class="signer-count">${nb}</span>`;
+    row.appendChild(input);
+    row.appendChild(info);
+    list.appendChild(row);
+  }
+  if (signerState.sansContact.length) {
+    const warn = document.createElement("p");
+    warn.className = "signer-warn muted";
+    warn.textContent = `${plur(signerState.sansContact.length, "lettre sans contact signataire", "lettres sans contact signataire")} : ne partira pas.`;
+    list.appendChild(warn);
+  }
+  const btn = document.getElementById("btn-signer-confirm");
+  if (btn) btn.textContent = singleMode ? "Signer sur ce téléphone" : "Envoyer par mail";
 }
 
 function closeSignerChoice() {
@@ -2871,37 +2928,51 @@ function closeSignerChoice() {
   if (sheet) sheet.hidden = true;
 }
 
-async function doSignSurPlace() {
-  const ids = [...signSelection.keys()];
-  if (!ids.length) return;
-  closeSignerChoice();
-  try {
-    const res = await workerSignatureSurPlace(ids);
-    const urls = (res.lettres || []).map((l) => l.signing_url).filter(Boolean);
-    clearSignSelection();
-    await loadMesLv();
-    // On enchaîne les signatures sur ce téléphone : on ouvre la première ; chaque
-    // retour ramène l'utilisateur ici pour la suivante (liste des liens affichée).
-    if (urls.length) {
-      alert(`${plur(urls.length, "lettre prête", "lettres prêtes")} à signer sur ce téléphone. Ouverture de la première.`);
-      window.location.href = urls[0];
-    }
-  } catch (err) {
-    alert("Échec de la préparation sur place : " + (err.message || err));
-  }
+function checkedContactIds() {
+  return [...document.querySelectorAll("#signer-group-list .signer-check:checked")]
+    .map((el) => Number(el.dataset.contactId));
 }
 
-async function doSignParMail() {
-  const ids = [...signSelection.keys()];
-  if (!ids.length) return;
+async function confirmSigner() {
+  const plan = signatureBatches(signerState.groups, signerState.mode, checkedContactIds());
+  if (!plan.ok) {
+    alert(plan.reason);
+    return;
+  }
   closeSignerChoice();
-  try {
-    const res = await workerSignatureParMail(ids);
-    clearSignSelection();
-    await loadMesLv();
-    alert(`Enveloppe envoyée à ${res.contact_email || "le contact"}. ${plur(ids.length, "lettre de voiture en attente de signature", "lettres de voiture en attente de signature")}.`);
-  } catch (err) {
-    alert("Échec de l'envoi par mail : " + (err.message || err));
+  if (signerState.mode === "sur_place") {
+    const batch = plan.batches[0];
+    try {
+      const res = await workerSignatureSurPlace(batch.lvIds);
+      const urls = (res.lettres || []).map((l) => l.signing_url).filter(Boolean);
+      // Les autres lettres (autres signataires) restent sélectionnées.
+      for (const id of batch.lvIds) signSelection.delete(id);
+      refreshSelectionBar();
+      await loadMesLv();
+      if (urls.length) {
+        alert(`${plur(urls.length, "lettre prête", "lettres prêtes")} à signer sur ce téléphone. Ouverture de la première.`);
+        window.location.href = urls[0];
+      }
+    } catch (err) {
+      alert("Échec de la préparation sur place : " + (err.message || err));
+    }
+    return;
+  }
+  // Par mail : un envoi (un lot) par signataire.
+  const done = [];
+  for (const batch of plan.batches) {
+    try {
+      await workerSignatureParMail(batch.lvIds);
+      for (const id of batch.lvIds) signSelection.delete(id);
+      done.push(`${batch.email} (${plur(batch.lvIds.length, "lettre", "lettres")})`);
+    } catch (err) {
+      alert(`Échec de l'envoi à ${batch.email} : ${err.message || err}`);
+    }
+  }
+  refreshSelectionBar();
+  await loadMesLv();
+  if (done.length) {
+    alert(`${plur(done.length, "lot envoyé", "lots envoyés")} : ${done.join(" · ")}.`);
   }
 }
 
@@ -4942,10 +5013,12 @@ function wireStaticUI() {
   if (btnSignerClose) btnSignerClose.addEventListener("click", closeSignerChoice);
   const signerSheet = document.getElementById("signer-choice-sheet");
   if (signerSheet) signerSheet.addEventListener("click", (e) => { if (e.target.id === "signer-choice-sheet") closeSignerChoice(); });
-  const btnSurPlace = document.getElementById("btn-sign-sur-place");
-  if (btnSurPlace) btnSurPlace.addEventListener("click", doSignSurPlace);
-  const btnParMail = document.getElementById("btn-sign-par-mail");
-  if (btnParMail) btnParMail.addEventListener("click", doSignParMail);
+  const modeSurPlace = document.getElementById("mode-sur-place");
+  if (modeSurPlace) modeSurPlace.addEventListener("click", () => setSignerMode("sur_place"));
+  const modeParMail = document.getElementById("mode-par-mail");
+  if (modeParMail) modeParMail.addEventListener("click", () => setSignerMode("par_mail"));
+  const btnSignerConfirm = document.getElementById("btn-signer-confirm");
+  if (btnSignerConfirm) btnSignerConfirm.addEventListener("click", confirmSigner);
 
   // Barre de sélection (beta.21) : corbeille groupée + PDF (si 1 cochée).
   const btnSelDelete = document.getElementById("btn-selection-delete");

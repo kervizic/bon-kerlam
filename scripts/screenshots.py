@@ -439,6 +439,7 @@ beta221_failures: list[str] = []
 beta222_failures: list[str] = []
 beta225_failures: list[str] = []
 beta226_failures: list[str] = []
+beta232_failures: list[str] = []
 
 
 def _assert(cond: bool, msg: str) -> None:
@@ -1421,6 +1422,52 @@ def shoot_keyboard_dismiss(ctx, prefix: str) -> None:
         page.close()
 
 
+def shoot_signer_groupes(ctx, prefix: str) -> None:
+    """beta.23.2 : « Signer » ouvre une feuille qui REGROUPE les lettres par
+    signataire (plus de blocage « même contact »). Deux modes : en présentiel
+    (un seul signataire, radio) ou par mail (plusieurs, cases). Capture clair +
+    sombre, modes présentiel et par mail."""
+    for theme in ("clair", "sombre"):
+        page = ctx.new_page()
+        try:
+            page.goto(f"{BASE}?demo=1&screen=mes-lv&role=bureau&theme={theme}", wait_until="load")
+            page.wait_for_timeout(700)
+            # Tout sélectionner -> la sélection couvre 2 signataires (Claire / Julien).
+            page.locator("#mes-lv-select-all").check()
+            page.wait_for_timeout(250)
+            page.locator("#btn-signer").click()
+            page.wait_for_timeout(350)
+            info = page.evaluate(
+                """() => {
+                    const rows = [...document.querySelectorAll('#signer-group-list .signer-row')];
+                    const noms = rows.map(r => (r.querySelector('.signer-nom')||{}).textContent);
+                    const type = (document.querySelector('#signer-group-list .signer-check')||{}).type;
+                    const m = document.getElementById('mode-sur-place');
+                    return { nb: rows.length, noms, type, presentielActive: m.classList.contains('is-active') };
+                }"""
+            )
+            if info["nb"] < 2:
+                beta232_failures.append(f"signer/{theme}: feuille non regroupée par signataire ({info['nb']} ligne(s))")
+            if info["type"] != "radio" or not info["presentielActive"]:
+                beta232_failures.append(f"signer/{theme}: mode présentiel (radio) non actif par défaut")
+            page.screenshot(path=str(OUT / f"{prefix}-signer-presentiel-{theme}.png"), full_page=False)
+            # Bascule « Par mail » -> cases à cocher (plusieurs signataires possibles).
+            page.locator("#mode-par-mail").click()
+            page.wait_for_timeout(250)
+            kind = page.evaluate(
+                "() => (document.querySelector('#signer-group-list .signer-check')||{}).type"
+            )
+            if kind != "checkbox":
+                beta232_failures.append(f"signer/{theme}: mode par mail n'affiche pas de cases à cocher")
+            page.screenshot(path=str(OUT / f"{prefix}-signer-par-mail-{theme}.png"), full_page=False)
+            print(f"   signer-groupes-{theme} (signataires={info['noms']})")
+        except Exception as exc:  # noqa: BLE001
+            beta232_failures.append(f"signer/{theme}: exception {exc}")
+            print(f"   !! signer/{theme}: {exc}")
+        finally:
+            page.close()
+
+
 def shoot_overflow_veolia(ctx, prefix: str) -> None:
     """beta.22.2 : AUCUN débordement horizontal sur l'écran lettre rempli avec des
     noms longs (client « Veolia » + adresse « Épinay · 2 rue Pasteur, 93800
@@ -1632,6 +1679,8 @@ def main() -> int:
         shoot_sites_veolia_sep(wk_iphone2, "webkit-iphone")
         print("WebKit (Safari iOS, DSR 2) : fermeture du clavier (3 gestes) beta.22.6")
         shoot_keyboard_dismiss(wk_iphone2, "webkit-iphone")
+        print("WebKit (Safari iOS, DSR 2) : feuille signataires groupés beta.23.2")
+        shoot_signer_groupes(wk_iphone2, "webkit-iphone")
         print("WebKit (Safari iOS) : pas de débordement + Veolia beta.22.2")
         shoot_overflow_veolia(wk_iphone2, "webkit-iphone")
         print("WebKit (Safari iOS, DSR 2) : fiches rapides autosave beta.20")
@@ -1737,6 +1786,13 @@ def main() -> int:
         rc = 1
     else:
         print("OK : beta.22.6 (clavier fermé au tap hors champ, au défilement, et à Entrée ; valeur enregistrée).")
+    if beta232_failures:
+        print("beta.23.2 KO (feuille signataires groupés) :")
+        for f in beta232_failures:
+            print("  -", f)
+        rc = 1
+    else:
+        print("OK : beta.23.2 (feuille signataires groupés : présentiel radio / par mail cases).")
     return rc
 
 

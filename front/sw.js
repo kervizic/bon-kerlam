@@ -19,7 +19,7 @@
  */
 "use strict";
 
-const VERSION = "0.1.0-beta.22.6";
+const VERSION = "0.1.0-beta.23.2";
 const CACHE_NAME = `bon-kerlam-${VERSION}`;
 const VERSIONED_QS_RE = /\?v=/;
 
