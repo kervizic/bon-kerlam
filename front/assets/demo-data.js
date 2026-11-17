@@ -205,8 +205,9 @@ export const LETTRES_VOITURE = [
     expediteur: "KERLAM", destinataire: "KERLAM", dest_identique: true,
     camion_id: 1, chauffeur_id: 1, client_id: 1, projet_id: 1, contact_id: 1, heures_regie: null,
     heures: [{ debut: "08:00", fin: "12:00" }, { debut: "13:00", fin: "17:00" }],
-    // owner_email = profil démo actif (demo.directeur) : en vue chauffeur il ne voit
-    // QUE cette lettre ; en vue bureau il les voit toutes (démo du filtrage beta.26).
+    // beta.26 : les lettres démo appartiennent au profil démo actif (demo.directeur)
+    // pour que la vue chauffeur (filtrée par owner_email) reste peuplée. La
+    // non-fuite vers un autre propriétaire est couverte par lv-visibility.test.mjs.
     statut: "en_cours", preparee: false, owner_email: "demo.directeur@kerlam.fr", deleted_at: null,
   },
   {
@@ -230,7 +231,7 @@ export const LETTRES_VOITURE = [
     expediteur: "Groupe Valoris Environnement", destinataire: "Groupe Valoris Environnement", dest_identique: true,
     camion_id: 2, chauffeur_id: 2, client_id: 2, projet_id: 2, contact_id: 2, heures_regie: null,
     heures: [{ debut: "08:00", fin: "16:00" }],
-    statut: "a_signer", preparee: false, owner_email: "fatou.diallo@kerlam.fr", deleted_at: null,
+    statut: "a_signer", preparee: false, owner_email: "demo.directeur@kerlam.fr", deleted_at: null,
   },
 ];
 
