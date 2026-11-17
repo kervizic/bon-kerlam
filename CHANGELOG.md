@@ -4,6 +4,28 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.25.1] — 2026-11-17
+
+Filet de sécurité sur la mise à jour automatique de la PWA (front uniquement).
+
+### Ajouté
+- **Test e2e de la mise à jour automatique** (`front/assets/app-version.test.mjs`,
+  exécuté en CI via `node --test`). Il charge `app-version.js` dans un bac à sable
+  (DOM, `fetch`, service worker, `sessionStorage`, `location.reload` simulés) et
+  vérifie le comportement observable : un changement de `/version.json` recharge
+  l'onglet ouvert tout seul (sans fermeture) avec le toast « Appli mise à jour »
+  armé ; aucun rechargement pendant une signature intégrée ouverte ou un champ en
+  focus, puis rechargement dès le « moment calme » (fin de signature / focusout) ;
+  anti-boucle (pas de second rechargement pour la même version) ; aucun
+  rechargement si la version est inchangée.
+
+### Note
+- La mise à jour automatique elle-même (version.json no-store, SW network-first
+  HTML + exclusion de version.json, vérifications au démarrage / visibilitychange /
+  focus / pageshow / toutes les 5 min, `registration.update()`, rechargement au
+  moment calme, toast, garde-fou inline anti page blanche 8 s) a été livrée en
+  beta.25 et est en production. beta.25.1 ajoute sa couverture de test.
+
 ## [0.1.0-beta.25] — 2026-11-17
 
 Mise à jour automatique de la PWA + signature quasi instantanée.
