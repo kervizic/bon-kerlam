@@ -4,6 +4,26 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.26] — 2026-11-17
+
+Vue chauffeur restreinte au propriétaire + copie KERLAM du mail des lettres signées.
+
+### Changé
+- **Vue chauffeur : chacun ne voit que SES lettres.** En vue chauffeur, la liste
+  « Mes lettres », les « Signées » et la corbeille n'affichent plus que les lettres
+  dont l'utilisateur est propriétaire (`owner_email`, comparaison insensible à la
+  casse) — y compris pour les comptes qui ont aussi le rôle bureau et qui ont
+  basculé en vue chauffeur. La **vue bureau reste inchangée** (toutes les lettres,
+  selon la RLS). La RLS serveur n'est pas modifiée (elle reste l'autorité) : c'est un
+  filtrage d'affichage. Nouveau module pur `front/assets/lv-visibility.js`
+  (`ownsLettre`, `filterLettresForView`) + tests `lv-visibility.test.mjs`. L'écran
+  « today » était déjà restreint au chauffeur (par `chauffeur_id`).
+- **Mail des lettres signées : copie KERLAM.** Le mail unique envoyé par le worker
+  après signature complète met désormais `contact@kerlam.fr` en copie (Cc), adresse
+  configurable via `KERLAM_CONTACT_EMAIL` (défaut `contact@kerlam.fr` ; vide =
+  aucune copie). Toujours UN SEUL mail, aucun autre envoi automatique. Tests worker
+  `test_mailer.py` (SMTP mocké, aucun envoi réel).
+
 ## [0.1.0-beta.25.1] — 2026-11-17
 
 Filet de sécurité sur la mise à jour automatique de la PWA (front uniquement).

@@ -205,7 +205,9 @@ export const LETTRES_VOITURE = [
     expediteur: "KERLAM", destinataire: "KERLAM", dest_identique: true,
     camion_id: 1, chauffeur_id: 1, client_id: 1, projet_id: 1, contact_id: 1, heures_regie: null,
     heures: [{ debut: "08:00", fin: "12:00" }, { debut: "13:00", fin: "17:00" }],
-    statut: "en_cours", preparee: false, owner_email: "demo.chauffeur@kerlam.fr", deleted_at: null,
+    // owner_email = profil démo actif (demo.directeur) : en vue chauffeur il ne voit
+    // QUE cette lettre ; en vue bureau il les voit toutes (démo du filtrage beta.26).
+    statut: "en_cours", preparee: false, owner_email: "demo.directeur@kerlam.fr", deleted_at: null,
   },
   {
     id: 2, numero: "KER-03042", date_etablissement: todayIso(), date_prise_en_charge: todayIso(),

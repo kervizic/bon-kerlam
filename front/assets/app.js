@@ -157,6 +157,7 @@ import { enhanceSelect, refreshCombobox, ensureOption } from "./combobox.js?v=17
 import { initTooltips } from "./tooltips.js?v=22";
 import { stripSocietePrefix } from "./site-label.js?v=225";
 import { lvCompleteness, entityMissingFields } from "./completeness.js?v=211";
+import { filterLettresForView } from "./lv-visibility.js?v=260";
 
 /* ============================================================== IndexedDB == */
 /* Deux object stores :
@@ -2712,7 +2713,12 @@ async function loadMesLv() {
     return;
   }
   try {
-    const data = await listLettresVoiture();
+    // Vue chauffeur : chacun ne voit que SES lettres (owner_email), même les
+    // comptes bureau basculés en vue chauffeur (beta.26). Vue bureau : inchangée.
+    const data = filterLettresForView(await listLettresVoiture(), {
+      mode: state.mode,
+      email: state.profil ? state.profil.email : null,
+    });
     // Non signées en haut (la plus récente d'abord, déjà trié par la requête) ;
     // les signées n'apparaissent que sous le filtre « Signées ».
     const rows = (data || []).filter((lv) => (showSignees ? lv.statut === "signee" : lv.statut !== "signee"));
@@ -2733,7 +2739,11 @@ async function loadMesLv() {
 // Corbeille : brouillons mis au rebut (restaurables 30 jours).
 async function loadCorbeille(listEl) {
   try {
-    const rows = await listCorbeille();
+    // Vue chauffeur : corbeille restreinte aux lettres de l'utilisateur (beta.26).
+    const rows = filterLettresForView(await listCorbeille(), {
+      mode: state.mode,
+      email: state.profil ? state.profil.email : null,
+    });
     if (!rows.length) {
       listEl.innerHTML = '<p class="entity-empty">Corbeille vide.</p>';
       return;

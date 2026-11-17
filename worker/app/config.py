@@ -59,8 +59,10 @@ class Settings:
         or "bon@kerlam.fr"
     )
     smtp_from_name: str = os.environ.get("WORKER_SMTP_FROM_NAME") or os.environ.get("GOTRUE_SMTP_SENDER_NAME", "KERLAM")
-    # Adresse KERLAM mise en copie du mail de lettres signées (si définie).
-    kerlam_contact_email: str = os.environ.get("KERLAM_CONTACT_EMAIL", "")
+    # Adresse KERLAM mise en copie (Cc) du mail unique de lettres signées (beta.26 :
+    # accord de Manu, défaut contact@kerlam.fr, configurable). Mettre une chaîne vide
+    # pour désactiver la copie.
+    kerlam_contact_email: str = os.environ.get("KERLAM_CONTACT_EMAIL", "contact@kerlam.fr")
 
 
 settings = Settings()
