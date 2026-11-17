@@ -214,14 +214,14 @@ export const LETTRES_VOITURE = [
     expediteur: "KERLAM", destinataire: "KERLAM", dest_identique: true,
     camion_id: 2, chauffeur_id: 2, client_id: 1, projet_id: 1, contact_id: 1, heures_regie: null,
     heures: [{ debut: "06:45", fin: "15:15" }],
-    statut: "a_signer", preparee: false, owner_email: "fatou.diallo@kerlam.fr", deleted_at: null,
+    statut: "a_signer", preparee: false, owner_email: "demo.directeur@kerlam.fr", deleted_at: null,
   },
   {
     id: 3, numero: null, date_etablissement: addDays(1), date_prise_en_charge: null,
     expediteur: "KERLAM", destinataire: "KERLAM", dest_identique: true,
     camion_id: 3, chauffeur_id: 3, client_id: 1, projet_id: 1, contact_id: 1, heures_regie: null,
     heures: null,
-    statut: "preparee", preparee: true, owner_email: "hugo.lefevre@kerlam.fr", deleted_at: null,
+    statut: "preparee", preparee: true, owner_email: "demo.directeur@kerlam.fr", deleted_at: null,
   },
   // beta.23.2 : lettre d'un AUTRE contact signataire (Julien Masse, client 2) pour
   // illustrer l'envoi groupé multi-signataires (feuille regroupée par signataire).
