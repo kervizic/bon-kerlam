@@ -203,6 +203,16 @@ services:
       DOCUMENSO_URL: ${DOCUMENSO_URL:-https://sign.kerlam.fr}
       DOCUMENSO_API_KEY: ${DOCUMENSO_API_KEY}
       SIGNED_BUCKET: ${SIGNED_BUCKET:-lettres-signees}
+      # SMTP (beta.25) : le worker envoie, au nom de KERLAM, le PDF signé au
+      # contact. Réutilise la connexion SMTP de la pile (GOTRUE_SMTP_*) ; aucun
+      # secret en dur. KERLAM_CONTACT_EMAIL = adresse mise en copie (si définie).
+      GOTRUE_SMTP_HOST: ${GOTRUE_SMTP_HOST}
+      GOTRUE_SMTP_PORT: ${GOTRUE_SMTP_PORT:-587}
+      GOTRUE_SMTP_USER: ${GOTRUE_SMTP_USER}
+      GOTRUE_SMTP_PASS: ${GOTRUE_SMTP_PASS}
+      GOTRUE_SMTP_ADMIN_EMAIL: ${GOTRUE_SMTP_ADMIN_EMAIL:-bon@kerlam.fr}
+      GOTRUE_SMTP_SENDER_NAME: ${GOTRUE_SMTP_SENDER_NAME:-KERLAM}
+      KERLAM_CONTACT_EMAIL: ${KERLAM_CONTACT_EMAIL:-}
 
   front:
     container_name: bon-front

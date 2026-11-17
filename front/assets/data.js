@@ -785,9 +785,14 @@ export async function workerDocumentSignedUrl(key) {
   if (DEMO) return { signed_url: "about:blank#demo-" + encodeURIComponent(key) };
   return live.workerDocumentSignedUrl(key);
 }
-export async function workerSignaturePrepare(lvIds) {
+export async function workerSignatureWarm(lvIds) {
+  // beta.25 : préchauffe LOCALE du cache PDF (aucun document Documenso, aucun mail).
+  if (DEMO) return { warmed: (lvIds || []).length };
+  return live.workerSignatureWarm(lvIds);
+}
+export async function workerSignatureSurPlace(lvIds) {
   if (DEMO) {
-    // Signature intégrée (beta.24/25) : UN document, un token, préparé en avance.
+    // Signature intégrée (beta.25) : UN document combiné créé AU TOUCHER, aucun mail.
     return {
       mode: "sur_place", documenso_url: location.origin, document_id: 1234,
       token: "demo-token", signer_name: "Manu Démo", signer_email: "manu@kervizic.fr",
@@ -795,15 +800,7 @@ export async function workerSignaturePrepare(lvIds) {
       lv_ids: lvIds,
     };
   }
-  return live.workerSignaturePrepare(lvIds);
-}
-export async function workerSignatureConfirm(documentId, lvIds) {
-  if (DEMO) return { document_id: documentId, lv_ids: lvIds };
-  return live.workerSignatureConfirm(documentId, lvIds);
-}
-export async function workerSignatureCancel(documentId) {
-  if (DEMO) return { deleted: true, document_id: documentId };
-  return live.workerSignatureCancel(documentId);
+  return live.workerSignatureSurPlace(lvIds);
 }
 export async function workerSignatureParMail(lvIds) {
   if (DEMO) {

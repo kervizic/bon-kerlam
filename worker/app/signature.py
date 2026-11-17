@@ -104,86 +104,41 @@ def _create_lot_document(
     )
 
 
-def prepare(lv_ids: list[int]) -> dict:
-    """PRÉPARE (en anticipation) UN document Documenso combiné pour le lot, SANS
-    e-mail, pour signature INTÉGRÉE. NE change PAS le statut des lettres (ça n'arrive
-    qu'au moment où l'utilisateur ouvre réellement l'écran de signature, cf. confirm).
-    Renvoie le token (pour /embed/sign/{token}) et le signataire. Le PDF vient du
-    cache par lettre : préparation quasi instantanée."""
+def warm_cache(lv_ids: list[int]) -> dict:
+    """Travail LOCAL uniquement (beta.25, décision Manu : AUCUN document Documenso
+    par anticipation) : s'assure que le PDF de chaque lettre est rendu et mis en
+    cache, pour que la création du document au toucher soit quasi instantanée.
+    Aucun appel Documenso, aucun mail."""
+    n = 0
+    for lv_id in lv_ids:
+        try:
+            pdf.letter_cached(lv_id)
+            n += 1
+        except Exception:  # noqa: BLE001
+            pass
+    return {"warmed": n}
+
+
+def sur_place(lv_ids: list[int]) -> dict:
+    """UN SEUL document combiné (toutes les lettres du même signataire), créé AU
+    TOUCHER sur « Signer sur ce téléphone ». distributionMethod=NONE : AUCUN mail.
+    Toutes les lettres portent le même documenso_id. Renvoie le token (embed)."""
     rows, signer = _validate_lot(lv_ids)
     res = _create_lot_document(rows, signer, send_email=False)
+    ids = [r["id"] for r in rows]
+    db.query(
+        "UPDATE bon.lettres_voiture SET documenso_document_id = %s, signature_mode = 'sur_place', "
+        "signature_sent_at = now(), statut = 'a_signer' WHERE id = ANY(%s)",
+        (res["document_id"], ids),
+    )
     return {
         "document_id": res["document_id"],
         "token": res.get("token"),
         "signer_name": signer.get("contact_nom") or "",
         "signer_email": signer["contact_email"],
         "numeros": [r["numero"] or f"#{r['id']}" for r in rows],
-        "lv_ids": [r["id"] for r in rows],
+        "lv_ids": ids,
     }
-
-
-def confirm(document_id: int, lv_ids: list[int]) -> dict:
-    """Confirme la signature EN COURS : marque les lettres du lot « à signer » et y
-    inscrit le même documenso_id. Appelé quand l'écran de signature intégré s'ouvre."""
-    rows = _rows(lv_ids)
-    ids = [r["id"] for r in rows]
-    db.query(
-        "UPDATE bon.lettres_voiture SET documenso_document_id = %s, signature_mode = 'sur_place', "
-        "signature_sent_at = now(), statut = 'a_signer' WHERE id = ANY(%s)",
-        (document_id, ids),
-    )
-    return {"document_id": document_id, "lv_ids": ids}
-
-
-def cancel(document_id: int) -> dict:
-    """Supprime un document préparé mais NON utilisé (changement de sélection, ou
-    abandon). Aucun mail n'a été envoyé (préparation sans e-mail)."""
-    ok = documenso.delete_document(int(document_id)) if document_id else False
-    return {"deleted": bool(ok), "document_id": document_id}
-
-
-def purge_abandoned_drafts(older_than_min: int = 30) -> dict:
-    """Supprime les documents de signature PRÉPARÉS mais jamais utilisés (brouillons
-    « Lettres de voiture KERLAM » non signés, de plus de `older_than_min` minutes, et
-    NON rattachés à une lettre). Aucun mail. Appelé périodiquement."""
-    import datetime
-
-    try:
-        docs = documenso.list_documents(per_page=100)
-    except Exception:  # noqa: BLE001
-        return {"purges": 0}
-    linked = {
-        r["documenso_document_id"]
-        for r in db.query("SELECT DISTINCT documenso_document_id FROM bon.lettres_voiture "
-                          "WHERE documenso_document_id IS NOT NULL")
-    }
-    cutoff = datetime.datetime.now(datetime.UTC) - datetime.timedelta(minutes=older_than_min)
-    purged = 0
-    for d in docs:
-        title = d.get("title") or ""
-        if not title.startswith("Lettres de voiture KERLAM"):
-            continue
-        if str(d.get("status", "")).upper() == "COMPLETED":
-            continue
-        if d.get("id") in linked:
-            continue  # rattaché à une lettre -> en cours de signature, on garde
-        created = (d.get("createdAt") or "").replace("Z", "+00:00")
-        try:
-            when = datetime.datetime.fromisoformat(created)
-        except ValueError:
-            continue
-        if when.tzinfo is None:
-            when = when.replace(tzinfo=datetime.UTC)
-        if when < cutoff and documenso.delete_document(d["id"]):
-            purged += 1
-    return {"purges": purged}
-
-
-def sur_place(lv_ids: list[int]) -> dict:
-    """Compat : prépare + confirme immédiatement (un document, sans e-mail)."""
-    res = prepare(lv_ids)
-    confirm(res["document_id"], res["lv_ids"])
-    return res
 
 
 def par_mail(lv_ids: list[int]) -> dict:
@@ -249,7 +204,42 @@ def poll_pending() -> dict:
                 "WHERE documenso_document_id = %s AND deleted_at IS NULL",
                 (path, doc_id),
             )
+            # UN SEUL mail KERLAM au contact (KERLAM en copie), avec le PDF signé.
+            if signed:
+                _send_signed_mail(doc_id, signed)
             completed += 1
         except Exception:  # noqa: BLE001
             continue
     return {"verifiees": len(pending), "signees": completed}
+
+
+def _send_signed_mail(doc_id: int, signed_pdf: bytes) -> None:
+    """Envoie, au nom de KERLAM, UN SEUL mail au contact signataire (KERLAM en copie)
+    avec le PDF signé en pièce jointe. Objet = numéros réels. Best-effort."""
+    from . import mailer
+
+    rows = db.query(
+        "SELECT lv.numero, ct.email AS contact_email FROM bon.lettres_voiture lv "
+        "LEFT JOIN bon.contacts ct ON ct.id = lv.contact_id "
+        "WHERE lv.documenso_document_id = %s AND lv.deleted_at IS NULL "
+        "ORDER BY lv.date_etablissement, lv.id",
+        (doc_id,),
+    )
+    if not rows:
+        return
+    to = rows[0].get("contact_email")
+    if not to:
+        return
+    numeros = [r["numero"] for r in rows if r.get("numero")]
+    plage = numeros[0] if len(numeros) == 1 else (f"{numeros[0]} à {numeros[-1]}" if numeros else "KERLAM")
+    nb = len(numeros)
+    subject = f"Lettres de voiture signées : {plage}"
+    quoi = "la lettre de voiture signée" if nb <= 1 else "les lettres de voiture signées"
+    body = (
+        f"Bonjour,\n\nVeuillez trouver ci-joint {quoi}"
+        f" ({', '.join(numeros) if numeros else 'KERLAM'}).\n\nCordialement,\nKERLAM"
+    )
+    mailer.send_mail(
+        to=to, subject=subject, body=body,
+        attachment=(f"lettres-voiture-{plage.replace(' ', '-')}.pdf", signed_pdf, "application/pdf"),
+    )

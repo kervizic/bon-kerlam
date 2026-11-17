@@ -120,9 +120,8 @@ import {
   workerEnvoiGroupe,
   workerChauffeurDepart,
   workerLvPdf,
-  workerSignaturePrepare,
-  workerSignatureConfirm,
-  workerSignatureCancel,
+  workerSignatureWarm,
+  workerSignatureSurPlace,
   workerSignatureParMail,
   workerSignatureSync,
   searchAddress,
@@ -2858,7 +2857,7 @@ function onSelectAllChange(checked) {
 // mode (en présentiel = un seul signataire ; par mail = un lot par signataire).
 // prepared : document de signature PRÉPARÉ en anticipation (présentiel) pour le
 // signataire sélectionné. { contactId, lvIds, promise, result, documentId }.
-const signerState = { mode: "sur_place", groups: [], sansContact: [], prepared: null };
+const signerState = { mode: "sur_place", groups: [], sansContact: [], warmed: new Set() };
 
 function contactsById() {
   const map = new Map();
@@ -2873,7 +2872,7 @@ function openSignerChoice() {
   signerState.groups = groups;
   signerState.sansContact = sansContact;
   signerState.mode = "sur_place";
-  cancelPreparedSignature();
+  signerState.warmed = new Set();
   renderSignerChoice();
   const sheet = document.getElementById("signer-choice-sheet");
   if (sheet) sheet.hidden = false;
@@ -2881,40 +2880,21 @@ function openSignerChoice() {
 
 function setSignerMode(mode) {
   signerState.mode = mode;
-  // Par mail n'anticipe pas ; tout changement de mode annule un éventuel brouillon.
-  cancelPreparedSignature();
   renderSignerChoice();
 }
 
-// Annule (supprime côté Documenso) un brouillon préparé mais non utilisé.
-function cancelPreparedSignature() {
-  const prep = signerState.prepared;
-  signerState.prepared = null;
-  if (!prep) return;
-  const kill = (docId) => { if (docId) workerSignatureCancel(docId).catch(() => {}); };
-  if (prep.documentId) kill(prep.documentId);
-  else if (prep.promise) prep.promise.then((r) => kill(r && r.document_id)).catch(() => {});
-}
-
-// Sélection d'un signataire (présentiel) : prépare le document EN ARRIÈRE-PLAN pour
-// qu'au toucher sur « Signer », l'écran de signature s'ouvre immédiatement.
+// Sélection d'un signataire (présentiel) : PRÉCHAUFFE LOCALE du cache PDF en
+// arrière-plan (beta.25 : AUCUN document Documenso, AUCUN mail). Au toucher sur
+// « Signer », la création du document combiné est alors quasi instantanée.
 function onSignerPick() {
   if (signerState.mode !== "sur_place") return;
-  const ids = checkedContactIds();
-  const contactId = ids[0];
+  const contactId = checkedContactIds()[0];
   const group = signerState.groups.find((g) => g.contactId === contactId);
-  if (!group || !group.hasEmail) { cancelPreparedSignature(); return; }
-  if (signerState.prepared && signerState.prepared.contactId === contactId) return; // déjà en prépa
-  cancelPreparedSignature();
-  const prep = { contactId, lvIds: group.lvIds.slice(), promise: null, result: null, documentId: null };
-  prep.promise = workerSignaturePrepare(group.lvIds).then((res) => {
-    // Si la sélection a changé entre-temps, annule ce document devenu inutile.
-    if (signerState.prepared !== prep) { if (res && res.document_id) workerSignatureCancel(res.document_id).catch(() => {}); return res; }
-    prep.result = res;
-    prep.documentId = res && res.document_id;
-    return res;
-  });
-  signerState.prepared = prep;
+  if (!group || !group.hasEmail) return;
+  const key = String(contactId);
+  if (signerState.warmed.has(key)) return; // déjà préchauffé
+  signerState.warmed.add(key);
+  workerSignatureWarm(group.lvIds).catch(() => { signerState.warmed.delete(key); });
 }
 
 function renderSignerChoice() {
@@ -2967,9 +2947,9 @@ function closeSignerChoice() {
   if (sheet) sheet.hidden = true;
 }
 
-// Fermeture SANS signer (bouton fermer ou fond) : annule le brouillon préparé puis masque.
+// Fermeture SANS signer (bouton fermer ou fond) : masque simplement. Plus aucun
+// document Documenso n'a été créé en anticipation, donc rien à annuler.
 function dismissSignerChoice() {
-  cancelPreparedSignature();
   closeSignerChoice();
 }
 
@@ -2987,14 +2967,10 @@ async function confirmSigner() {
   closeSignerChoice();
   if (signerState.mode === "sur_place") {
     const batch = plan.batches[0];
-    // Document déjà préparé en anticipation pour ce signataire ? Sinon, prépare maintenant.
-    let promise;
-    if (signerState.prepared && signerState.prepared.contactId === batch.contactId) {
-      promise = signerState.prepared.promise;
-    } else {
-      promise = workerSignaturePrepare(batch.lvIds);
-    }
-    signerState.prepared = null; // consommé
+    // beta.25 : le document Documenso combiné est créé AU TOUCHER, en UN appel
+    // (document + destinataire + champs, distributionMethod=NONE, aucun mail). Le
+    // cache PDF préchauffé rend cette création quasi instantanée.
+    const promise = workerSignatureSurPlace(batch.lvIds);
     // Spinner « Préparation… » SEULEMENT si l'attente dépasse 300 ms.
     const spinnerTimer = setTimeout(() => showSignPreparing(true), 300);
     let res;
@@ -3012,8 +2988,7 @@ async function confirmSigner() {
       alert("Document préparé mais aucun lien de signature reçu.");
       return;
     }
-    // Marque les lettres du lot « à signer » (confirme l'ouverture de la signature).
-    try { await workerSignatureConfirm(res.document_id, batch.lvIds); } catch (e) { /* non bloquant */ }
+    // sur_place a déjà marqué les lettres « à signer » avec le documenso_id.
     // Les autres lettres (autres signataires) restent sélectionnées.
     for (const id of batch.lvIds) signSelection.delete(id);
     refreshSelectionBar();

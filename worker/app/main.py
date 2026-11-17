@@ -150,41 +150,31 @@ def _assert_user_access(email: str | None, lv_ids: list[int]) -> None:
             raise HTTPException(status_code=403, detail=f"Accès refusé à la lettre {lv_id}.")
 
 
-@router.post("/signature/prepare")
-def signature_prepare(payload: dict, user=Depends(require_user)):
-    """Prépare (en anticipation, sans e-mail) UN document combiné pour le lot et
-    renvoie le token Documenso pour la signature intégrée (iframe /embed/sign/{token}).
-    Ne change PAS le statut des lettres (cf. /signature/confirm)."""
+@router.post("/signature/warm")
+def signature_warm(payload: dict, user=Depends(require_user)):
+    """Préparation LOCALE anticipée (beta.25) : met en cache le PDF de chaque lettre
+    (aucun document Documenso créé, aucun mail). Rend la création au toucher quasi
+    instantanée. Appelée en arrière-plan quand un signataire est sélectionné."""
+    lv_ids = [int(x) for x in (payload or {}).get("lv_ids") or []]
+    if not lv_ids:
+        return {"warmed": 0}
+    _assert_user_access(user.get("email"), lv_ids)
+    return signature.warm_cache(lv_ids)
+
+
+@router.post("/signature/sur-place")
+def signature_sur_place(payload: dict, user=Depends(require_user)):
+    """Signature « sur place » (intégrée), créée AU TOUCHER : UN document combiné,
+    distributionMethod=NONE (AUCUN mail). Renvoie le token pour l'iframe embed."""
     lv_ids = [int(x) for x in (payload or {}).get("lv_ids") or []]
     if not lv_ids:
         raise HTTPException(status_code=400, detail="Aucune lettre sélectionnée.")
     _assert_user_access(user.get("email"), lv_ids)
     try:
-        res = signature.prepare(lv_ids)
+        res = signature.sur_place(lv_ids)
         return {"mode": "sur_place", "documenso_url": settings.documenso_url.rstrip("/"), **res}
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-
-@router.post("/signature/confirm")
-def signature_confirm(payload: dict, user=Depends(require_user)):
-    """Confirme l'ouverture de la signature intégrée : marque les lettres du lot
-    « à signer » avec le documenso_id préparé."""
-    lv_ids = [int(x) for x in (payload or {}).get("lv_ids") or []]
-    document_id = (payload or {}).get("document_id")
-    if not lv_ids or not document_id:
-        raise HTTPException(status_code=400, detail="document_id et lettres requis.")
-    _assert_user_access(user.get("email"), lv_ids)
-    return signature.confirm(int(document_id), lv_ids)
-
-
-@router.post("/signature/cancel")
-def signature_cancel(payload: dict, _user=Depends(require_user)):
-    """Supprime un document préparé mais non utilisé (changement de sélection)."""
-    document_id = (payload or {}).get("document_id")
-    if not document_id:
-        raise HTTPException(status_code=400, detail="document_id requis.")
-    return signature.cancel(int(document_id))
 
 
 @router.post("/signature/par-mail")
@@ -364,11 +354,10 @@ async def _maintenance_loop() -> None:
 
 async def _signature_loop() -> None:
     """Vérifie périodiquement les enveloppes Documenso en attente (retour de
-    signature) et marque/archive les lettres signées. Purge aussi les brouillons
-    de signature préparés mais jamais utilisés (> 30 min). Aucun mail."""
+    signature) : marque/archive les lettres signées et envoie, au nom de KERLAM,
+    le mail du PDF signé au contact (beta.25). Plus aucune purge de brouillons :
+    on ne crée plus de document par anticipation (aucun document à purger)."""
     while True:
         await asyncio.sleep(180)
         with contextlib.suppress(Exception):
             await asyncio.to_thread(signature.poll_pending)
-        with contextlib.suppress(Exception):
-            await asyncio.to_thread(signature.purge_abandoned_drafts)

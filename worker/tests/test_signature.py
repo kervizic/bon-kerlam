@@ -178,6 +178,72 @@ def test_build_combined_pdf_depuis_cache(monkeypatch):
     assert [f["pageNumber"] for f in fields] == [1, 1, 3, 3, 4, 4]
 
 
+def _capture_client(calls):
+    """FakeClient qui mémorise le corps JSON du POST /documents (meta inclus)."""
+    class _C(FakeClient):
+        def post(self, url, **kw):
+            self.calls["post"].append(url)
+            if url.endswith("/documents") and not url.endswith("/fields"):
+                self.calls["body"] = kw.get("json")
+                return FakeResp(200, {"documentId": 1, "uploadUrl": "https://s3/up",
+                                      "recipients": [{"recipientId": 2, "token": "t"}]})
+            if url.endswith("/fields"):
+                self.calls.setdefault("fields", []).append(kw.get("json"))
+            return FakeResp(200, {"message": "ok"})
+    return lambda **kw: _C(calls, **kw)
+
+
+def test_presentiel_coupe_tous_les_mails(monkeypatch):
+    # beta.25 : présentiel -> distributionMethod NONE + TOUS les e-mails coupés.
+    monkeypatch.setattr(settings, "documenso_api_key", "api_test")
+    calls = {"post": [], "put": 0}
+    monkeypatch.setattr(documenso.httpx, "Client", _capture_client(calls))
+    documenso.create_document("T", "J", "j@example.test", b"%PDF-1.4", send_email=False)
+    meta = calls["body"]["meta"]
+    assert meta["distributionMethod"] == "NONE"
+    assert all(v is False for v in meta["emailSettings"].values())
+
+
+def test_par_mail_active_seulement_invitation(monkeypatch):
+    # Par mail -> EMAIL, et SEULE l'invitation à signer (recipientSigningRequest) est active.
+    monkeypatch.setattr(settings, "documenso_api_key", "api_test")
+    calls = {"post": [], "put": 0}
+    monkeypatch.setattr(documenso.httpx, "Client", _capture_client(calls))
+    documenso.create_document("T", "J", "j@example.test", b"%PDF-1.4", send_email=True)
+    es = calls["body"]["meta"]["emailSettings"]
+    assert calls["body"]["meta"]["distributionMethod"] == "EMAIL"
+    assert es["recipientSigningRequest"] is True
+    assert all(v is False for k, v in es.items() if k != "recipientSigningRequest")
+
+
+def test_warm_cache_local_sans_documenso(monkeypatch):
+    # Préchauffe LOCALE : letter_cached par lettre, aucun appel Documenso.
+    vus = []
+    monkeypatch.setattr(signature.pdf, "letter_cached", lambda lv_id: vus.append(lv_id) or (b"%PDF", [], 1))
+    monkeypatch.setattr(signature.documenso, "create_document",
+                        lambda *a, **k: pytest.fail("warm_cache ne doit créer AUCUN document"))
+    assert signature.warm_cache([7, 8, 9]) == {"warmed": 3}
+    assert vus == [7, 8, 9]
+
+
+def test_send_signed_mail_objet_et_copie(monkeypatch):
+    # Après signature : UN mail au contact, objet = plage des numéros, PDF joint.
+    monkeypatch.setattr(signature.db, "query", lambda sql, params=None: [
+        {"numero": "KER-03003", "contact_email": "manu@kervizic.fr"},
+        {"numero": "KER-03007", "contact_email": "manu@kervizic.fr"},
+    ])
+    sent = {}
+    from app import mailer
+    monkeypatch.setattr(mailer, "send_mail",
+                        lambda to, subject, body, attachment=None: sent.update(
+                            to=to, subject=subject, body=body, attachment=attachment) or True)
+    signature._send_signed_mail(99, b"%PDF-signed")
+    assert sent["to"] == "manu@kervizic.fr"
+    assert sent["subject"] == "Lettres de voiture signées : KER-03003 à KER-03007"
+    assert sent["attachment"][1] == b"%PDF-signed"
+    assert sent["attachment"][2] == "application/pdf"
+
+
 def test_create_document_pose_signature_et_nom(monkeypatch):
     # Les champs fournis (SIGNATURE + NAME) sont tous postés avec recipientId.
     monkeypatch.setattr(settings, "documenso_api_key", "api_test")

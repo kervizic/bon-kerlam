@@ -32,6 +32,17 @@ def _base() -> str:
     return settings.documenso_url.rstrip("/") + "/api/v1"
 
 
+# Tous les e-mails AUTOMATIQUES de Documenso coupés (beta.25 : le client ne doit
+# recevoir aucun mail parasite — « Document annulé » à la suppression, etc.). En
+# mode « par mail », seule l'invitation à signer (recipientSigningRequest) est
+# réactivée. Les mails de fin sont envoyés par NOTRE worker, avec le PDF signé.
+EMAIL_ALL_OFF = {
+    "recipientSigningRequest": False, "recipientSigned": False, "recipientRemoved": False,
+    "documentPending": False, "documentCompleted": False, "documentDeleted": False,
+    "ownerDocumentCreated": False, "ownerRecipientExpired": False, "ownerDocumentCompleted": False,
+}
+
+
 def create_document(
     title: str,
     signer_name: str,
@@ -47,15 +58,25 @@ def create_document(
     """Crée un document Documenso, téléverse le PDF, place les champs (signature +
     nom, un par lettre) et l'envoie. Renvoie { document_id, token, signing_url }.
 
-    `fields` : géométrie en % de page (type, pageNumber, pageX/Y/Width/Height),
-    sans recipientId (injecté ici). À défaut, un unique champ SIGNATURE sur
-    `sign_page` (compat)."""
+    E-mails Documenso : TOUS coupés (meta.emailSettings) ; distributionMethod = NONE
+    (présentiel, aucun mail) ou EMAIL (par mail : seule l'invitation à signer part).
+    `fields` : géométrie en % de page (sans recipientId, injecté ici)."""
+    email_settings = dict(EMAIL_ALL_OFF)
+    if send_email:
+        email_settings["recipientSigningRequest"] = True  # seule l'invitation
+    meta = {
+        "distributionMethod": "EMAIL" if send_email else "NONE",
+        "emailSettings": email_settings,
+    }
+    if subject:
+        meta["subject"] = subject
+    if message:
+        meta["message"] = message
     body = {
         "title": title,
         "recipients": [{"name": signer_name or signer_email, "email": signer_email, "role": "SIGNER"}],
+        "meta": meta,
     }
-    if subject or message:
-        body["meta"] = {"subject": subject, "message": message}
 
     # Connexion HTTP réutilisée (keep-alive) pour toutes les étapes -> moins de
     # latence (pas de nouvelle poignée de main TLS par appel).

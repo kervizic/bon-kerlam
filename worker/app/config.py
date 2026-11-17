@@ -47,6 +47,20 @@ class Settings:
     documenso_api_key: str = os.environ.get("DOCUMENSO_API_KEY", "")
     # Bucket d'archivage des PDF signés (API Storage Supabase, privé).
     signed_bucket: str = os.environ.get("SIGNED_BUCKET", "lettres-signees")
+    # SMTP du worker : envoi du PDF signé au contact (beta.25). On réutilise le SMTP
+    # de la pile (GOTRUE_SMTP_*) si WORKER_SMTP_* n'est pas défini. Aucun secret en dur.
+    smtp_host: str = os.environ.get("WORKER_SMTP_HOST") or os.environ.get("GOTRUE_SMTP_HOST", "")
+    smtp_port: int = int(os.environ.get("WORKER_SMTP_PORT") or os.environ.get("GOTRUE_SMTP_PORT") or "587")
+    smtp_user: str = os.environ.get("WORKER_SMTP_USER") or os.environ.get("GOTRUE_SMTP_USER", "")
+    smtp_password: str = os.environ.get("WORKER_SMTP_PASS") or os.environ.get("GOTRUE_SMTP_PASS", "")
+    smtp_from: str = (
+        os.environ.get("WORKER_SMTP_FROM")
+        or os.environ.get("GOTRUE_SMTP_ADMIN_EMAIL")
+        or "bon@kerlam.fr"
+    )
+    smtp_from_name: str = os.environ.get("WORKER_SMTP_FROM_NAME") or os.environ.get("GOTRUE_SMTP_SENDER_NAME", "KERLAM")
+    # Adresse KERLAM mise en copie du mail de lettres signées (si définie).
+    kerlam_contact_email: str = os.environ.get("KERLAM_CONTACT_EMAIL", "")
 
 
 settings = Settings()

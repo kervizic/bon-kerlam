@@ -18,16 +18,28 @@ Mise à jour automatique de la PWA + signature quasi instantanée.
   `index.html` en network-first. **Garde-fou anti page blanche** : si l'appli n'a pas
   démarré sous 8 s, un script inline désenregistre le SW, vide les caches et recharge
   UNE fois (anti-boucle). Corrige le blocage « page blanche » sur Safari Mac.
-- **Signature quasi instantanée** : le PDF rendu de chaque lettre et les positions
-  de ses ancres sont désormais EN CACHE (table `bon.lv_pdf_cache`, clé = hash du
-  contenu). Au moment de signer, on ne refait plus le rendu WeasyPrint (lent :
-  sous-typage de police, ~8 s/lettre) — on fusionne les PDF en cache (quelques ms).
-  Préparation ANTICIPÉE : dès qu'un signataire est choisi dans la feuille « Signer »
-  (présentiel), le document est préparé en arrière-plan ; au toucher sur « Signer »,
-  l'écran intégré s'ouvre immédiatement. Spinner seulement si l'attente dépasse
-  300 ms. Les champs Documenso sont créés EN PARALLÈLE (connexion keep-alive). Un
-  brouillon préparé mais non utilisé est supprimé (changement de sélection, ou
-  automatiquement après 30 min). UN SEUL document par envoi.
+- **Signature quasi instantanée, SANS mail parasite** : le PDF rendu de chaque
+  lettre et les positions de ses ancres sont désormais EN CACHE (table
+  `bon.lv_pdf_cache`, clé = hash du contenu). Au moment de signer, on ne refait plus
+  le rendu WeasyPrint (lent : sous-typage de police, ~8 s/lettre) — on fusionne les
+  PDF en cache (quelques ms). Préparation ANTICIPÉE **purement LOCALE** : dès qu'un
+  signataire est choisi dans la feuille « Signer » (présentiel), seul le cache PDF
+  est préchauffé en arrière-plan — **aucun document Documenso n'est créé par
+  anticipation**. Le document Documenso (combiné, UN par envoi : document +
+  destinataire + champs posés en parallèle, connexion keep-alive) n'est créé qu'au
+  toucher sur « Signer sur ce téléphone » / « Envoyer par mail ». Spinner seulement
+  si l'attente dépasse 300 ms.
+- **Plus aucun mail Documenso parasite** : sur chaque document, TOUS les réglages
+  d'e-mail Documenso sont désactivés via l'API (`meta.emailSettings` : les 9 clés à
+  `false`) et `distributionMethod = NONE`. En présentiel, le document est distribué
+  SANS aucun mail. En mode « par mail », seule l'invitation à signer
+  (`recipientSigningRequest`) est réactivée. Corrige les mails « Document annulé »
+  reçus par le client à la suppression de documents de test.
+- **Mail de lettres signées, au nom de KERLAM** : après signature complète, c'est
+  NOTRE worker qui envoie UN SEUL mail au contact signataire (KERLAM en copie si
+  `KERLAM_CONTACT_EMAIL` est défini) avec le PDF signé (scellé par Documenso) en
+  pièce jointe. Objet : « Lettres de voiture signées : <numéros> ». Réutilise le
+  SMTP de la pile (`GOTRUE_SMTP_*`), aucun secret en dur.
 - Garde-fou : la feuille n'envoie QUE les lettres du signataire choisi.
 
 ### Base de données
