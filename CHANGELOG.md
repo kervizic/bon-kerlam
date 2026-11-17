@@ -4,6 +4,38 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.23] — 2026-11-17
+
+Refonte du PDF (worker) : gabarit « Filet épurée » validé par le patron. Plus
+aucun tableau. Signature. Aucune migration de schéma.
+
+### Changé
+- **Mise en page de la lettre de voiture** : parties sans bordure ; prestations et
+  marchandises en listes à points de conduite (quantité + unité alignées à droite) ;
+  tours sans tableau ni titre « Tour N ». Police Inter embarquée, logo KERLAM
+  (Sarpanch). Gris choisis pour rester lisibles en impression laser N&B.
+- **Parties** : si l'expéditeur et le destinataire sont la même société
+  (destinataire « Identique au client », ou mêmes nom et adresse), une seule
+  colonne « Expéditeur et destinataire » ; sinon trois colonnes.
+- **Tours** : chaque extrémité affiche d'abord le NOM du site (« Société ·
+  adresse », ex. « Cemex · Ivry béton ») puis l'adresse complète en petit gris ;
+  flèche « → » entre chargement et déchargement ; ordre chronologique 1 → N.
+- **Signature** : libellé « Signature », zone vide sans cadre ni lignes, épinglée
+  en bas de la dernière page de CHAQUE lettre, aux ancres Documenso stables
+  (SIGNATURE 17/245 mm 66×15 ; NOM 17/262 mm 66×5 ; label à x≈15 / y≈239 mm).
+- **En-tête** : « Date : JJ/MM/AAAA » sous le numéro (plus de triptyque, de cas
+  « rattrapage » ni de « quantité estimée de la journée »). Plus aucune mention
+  légale en pied de page ; seule la pagination « Page X / Y » est conservée.
+- **Quantités** au format français sans zéros inutiles (« 12 t », « 3,5 t »,
+  « 1 jour »), jamais « 12.000 ». Projet et heures affichés seulement s'ils sont
+  renseignés ; section Prestations masquée si vide.
+- **Documenso** : PDF combiné (un par envoi, une lettre par page de départ) avec
+  placement des champs SIGNATURE et NAME en % de page, sur la dernière page de
+  CHAQUE lettre.
+- **Correctif de rendu** : champs Véhicule / Chauffeur / Projet / Heures en
+  inline-block (et non en flex imbriqué) — le flex imbriqué provoquait un
+  chevauchement avec la version de WeasyPrint du worker (63.1).
+
 ## [0.1.0-beta.22.6] — 2026-11-16
 
 Correctif clavier (front uniquement), signalé sur un vrai iPhone en PWA.

@@ -24,6 +24,59 @@ def _build_pdf(lv_id: int) -> bytes:
     return pdf.render_pdf(pdf.build_context(lv_id))
 
 
+# Ancres Documenso (maquette épurée beta.23). Origine = coin HAUT-GAUCHE de la
+# page A4 (210 × 297 mm). Coordonnées en mm (x, y, largeur, hauteur) ; converties
+# en % de page pour l'API Documenso (pageX/pageY/pageWidth/pageHeight).
+A4_W_MM = 210.0
+A4_H_MM = 297.0
+_ANCHOR_MM = {
+    "SIGNATURE": (17.0, 245.0, 66.0, 15.0),
+    "NAME": (17.0, 262.0, 66.0, 5.0),
+}
+
+
+def _pct_field(field_type: str, page_number: int) -> dict:
+    """Géométrie d'un champ Documenso en % de page, pour une page donnée."""
+    x_mm, y_mm, w_mm, h_mm = _ANCHOR_MM[field_type]
+    return {
+        "type": field_type,
+        "pageNumber": page_number,
+        "pageX": round(x_mm / A4_W_MM * 100, 4),
+        "pageY": round(y_mm / A4_H_MM * 100, 4),
+        "pageWidth": round(w_mm / A4_W_MM * 100, 4),
+        "pageHeight": round(h_mm / A4_H_MM * 100, 4),
+    }
+
+
+def signature_fields(last_pages: list[int]) -> list[dict]:
+    """Champs SIGNATURE + NAME pour chaque lettre, placés sur la DERNIÈRE page de
+    la lettre dans le PDF (combiné ou non). `last_pages` : numéros de page (1-based)
+    de la dernière page de chaque lettre. Géométrie seule (sans recipientId)."""
+    fields: list[dict] = []
+    for page in last_pages:
+        fields.append(_pct_field("SIGNATURE", page))
+        fields.append(_pct_field("NAME", page))
+    return fields
+
+
+def build_combined_pdf(lv_ids: list[int]) -> tuple[bytes, list[int]]:
+    """Fusionne les PDF des lettres (un PDF par envoi, chaque lettre sur de
+    nouvelles pages). Renvoie (pdf_fusionné, dernières_pages) où dernières_pages[k]
+    est le numéro de page (1-based) de la dernière page de la lettre k."""
+    from pypdf import PdfReader, PdfWriter
+
+    writer = PdfWriter()
+    last_pages: list[int] = []
+    for lv_id in lv_ids:
+        reader = PdfReader(io.BytesIO(_build_pdf(lv_id)))
+        for page in reader.pages:
+            writer.add_page(page)
+        last_pages.append(len(writer.pages))  # dernière page de cette lettre
+    buf = io.BytesIO()
+    writer.write(buf)
+    return buf.getvalue(), last_pages
+
+
 def _signer(lv_id: int) -> dict | None:
     return db.query_one(
         """
@@ -51,12 +104,15 @@ def sur_place(lv_ids: list[int]) -> list[dict]:
         signer = _signer(lv_id)
         if not signer or not signer.get("contact_email"):
             raise ValueError(f"Lettre {lv_id} : aucun contact signataire avec e-mail.")
+        # Une seule lettre : signature + nom sur SA dernière page.
+        pdf_bytes, last_pages = build_combined_pdf([lv_id])
         res = documenso.create_document(
             title=f"Lettre de voiture {signer.get('numero') or lv_id}",
             signer_name=signer.get("contact_nom") or "",
             signer_email=signer["contact_email"],
-            pdf_bytes=_build_pdf(lv_id),
+            pdf_bytes=pdf_bytes,
             send_email=False,
+            fields=signature_fields(last_pages),
         )
         db.query(
             "UPDATE bon.lettres_voiture SET documenso_document_id = %s, signature_mode = 'sur_place', "
@@ -79,17 +135,9 @@ def par_mail(lv_ids: list[int]) -> dict:
     if not signer or not signer.get("contact_email"):
         raise ValueError("Contact signataire sans e-mail.")
 
-    from pypdf import PdfReader, PdfWriter
-
-    writer = PdfWriter()
-    for r in rows:
-        reader = PdfReader(io.BytesIO(_build_pdf(r["id"])))
-        for page in reader.pages:
-            writer.add_page(page)
-    buf = io.BytesIO()
-    writer.write(buf)
-    merged = buf.getvalue()
-    last_page = len(writer.pages)
+    # PDF combiné (un par envoi) : chaque lettre sur de nouvelles pages, avec sa
+    # propre signature + nom sur SA dernière page (art. 5 : une signature par lettre).
+    merged, last_pages = build_combined_pdf([r["id"] for r in rows])
 
     numeros = ", ".join(str(r["numero"] or f"brouillon#{r['id']}") for r in rows)
     res = documenso.create_document(
@@ -98,7 +146,7 @@ def par_mail(lv_ids: list[int]) -> dict:
         signer_email=signer["contact_email"],
         pdf_bytes=merged,
         send_email=True,
-        sign_page=last_page,
+        fields=signature_fields(last_pages),
         subject="Lettres de voiture à signer — KERLAM",
         message="Bonjour, merci de signer les lettres de voiture KERLAM ci-jointes.",
     )

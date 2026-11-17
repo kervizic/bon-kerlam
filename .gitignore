@@ -35,3 +35,6 @@ htmlcov/
 !deploy/volumes/
 !deploy/volumes/db/
 !deploy/volumes/db/*.sql
+
+# Police logo copiée à la build depuis front/assets/fonts (source unique)
+worker/app/templates/fonts/sarpanch-900.woff2

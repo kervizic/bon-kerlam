@@ -103,11 +103,46 @@ def format_creneaux(heures) -> str:
     return " · ".join(morceaux)
 
 
+# Le logo KERLAM figure déjà en tête du PDF : l'adresse ne reprend donc PAS le
+# préfixe « KERLAM — » (maquette épurée beta.23). adresse_courte alimente le bloc
+# Transporteur des parties.
 TRANSPORTEUR = {
     "nom": "KERLAM",
-    "adresse": f"KERLAM — {settings.kerlam_adresse}",
+    "adresse": settings.kerlam_adresse,
+    "adresse_courte": settings.kerlam_adresse,
     "siren": _format_siren(settings.kerlam_siren),
 }
+
+# Séparateurs retirés après le préfixe société dans un nom de site (même logique
+# que le front, cf. assets/site-label.js) : tiret demi-cadratin/cadratin, trait
+# d'union, point médian, deux-points, virgule, barre oblique, et espaces autour.
+_LEADING_SEP = "–—·:,/- \t"
+
+
+def strip_societe_prefix(nom: str, societe_nom: str) -> str:
+    """« Veolia – Noisy » (société « Veolia ») -> « Noisy ». Retire le préfixe
+    société PUIS tout séparateur de tête. Rend le nom inchangé si pas de préfixe."""
+    s = "" if nom is None else str(nom)
+    soc = ("" if societe_nom is None else str(societe_nom)).strip()
+    if soc and s.lower().startswith(soc.lower()):
+        rest = s[len(soc):]
+        if rest == "" or rest[0] in _LEADING_SEP:
+            stripped = rest.lstrip(_LEADING_SEP).strip()
+            return stripped or s
+    return s
+
+
+def site_label(site_nom: str, societe_nom: str) -> str:
+    """Libellé court d'un site : « Société · adresse » (ex. « Cemex · Ivry béton »).
+    Sans société : le nom du site tel quel. Chaîne vide si rien."""
+    nom = ("" if site_nom is None else str(site_nom)).strip()
+    soc = ("" if societe_nom is None else str(societe_nom)).strip()
+    if soc:
+        short = strip_societe_prefix(nom, soc)
+        if short and short.lower() != soc.lower():
+            return f"{soc} · {short}"
+        return soc
+    return nom
 
 
 def build_context(lv_id: int) -> dict[str, Any]:
@@ -162,10 +197,20 @@ def build_context(lv_id: int) -> dict[str, Any]:
     else:
         lv["destinataire"] = lv.get("destinataire") or ""
 
+    # beta.23 : si expéditeur et destinataire sont la même société (« Identique
+    # au client », ou mêmes nom + adresse), le PDF n'affiche qu'une seule colonne
+    # « Expéditeur et destinataire ». Comparaison insensible à la casse/espaces.
+    def _norm(s: str) -> str:
+        return " ".join(str(s or "").split()).casefold()
+
+    same_parties = bool(lv["expediteur"]) and _norm(lv["expediteur"]) == _norm(lv["destinataire"])
+
     # Dates au format français JJ/MM/AAAA (le template ne reformate pas). Une
     # seule date « Établie et prise en charge le … » (le jour du transport).
     lv["date_etablissement"] = _fr_date(lv.get("date_etablissement"))
     lv["date_prise_en_charge"] = _fr_date(lv.get("date_prise_en_charge"))
+    # beta.23 (maquette épurée) : ligne de date unique. Pas de cas « rattrapage ».
+    lv["date"] = lv["date_etablissement"]
 
     # Heures en créneaux (0017) : chaîne « 8h00–12h00 · 13h00–17h00 ». Repli sur
     # l'ancien texte libre heures_regie pour les lettres antérieures non migrées.
@@ -175,19 +220,33 @@ def build_context(lv_id: int) -> dict[str, Any]:
     # la lettre de voiture (colonne conservée en base, plus affichée).
     lv["quantite_estimee_aff"] = ""
 
+    # Tours en ordre chronologique (ordre, id). Chaque extrémité porte le NOM du
+    # site et sa société (pour le libellé « Société · adresse », beta.23) en plus
+    # de l'adresse complète.
     tours = db.query(
         """
         SELECT t.id, t.expediteur, t.destinataire,
-               sc.adresse AS chargement_adresse, sd.adresse AS dechargement_adresse
+               sc.nom AS chargement_site, scs.nom AS chargement_societe,
+               sc.adresse AS chargement_adresse,
+               sd.nom AS dechargement_site, sds.nom AS dechargement_societe,
+               sd.adresse AS dechargement_adresse
           FROM bon.tours t
           LEFT JOIN bon.sites sc ON sc.id = t.site_chargement_id
+          LEFT JOIN bon.site_societes scs ON scs.id = sc.societe_id
           LEFT JOIN bon.sites sd ON sd.id = t.site_dechargement_id
+          LEFT JOIN bon.site_societes sds ON sds.id = sd.societe_id
          WHERE t.lv_id = %s AND t.deleted_at IS NULL
          ORDER BY t.ordre, t.id
         """,
         (lv_id,),
     )
     for tour in tours:
+        # Libellé court du site (« Cemex · Ivry béton ») au-dessus de l'adresse.
+        tour["chargement_nom"] = site_label(tour.get("chargement_site"), tour.get("chargement_societe"))
+        tour["dechargement_nom"] = site_label(tour.get("dechargement_site"), tour.get("dechargement_societe"))
+        # Destinataire du tour affiché seulement s'il diffère de l'en-tête (texte libre).
+        dest = (tour.get("destinataire") or "").strip()
+        tour["destinataire_nom"] = dest or None
         tour["lignes"] = db.query(
             """
             SELECT a.nom AS nom, tl.quantite, tl.unite
@@ -200,6 +259,8 @@ def build_context(lv_id: int) -> dict[str, Any]:
         )
         for ligne in tour["lignes"]:
             ligne["unite_aff"] = unite_label(ligne.get("unite"), ligne.get("quantite"))
+            # Quantité au format FR sans zéros inutiles (« 12 », « 3,5 »). Jamais « 12.000 ».
+            ligne["quantite_aff"] = _fmt_qte(ligne.get("quantite"))
 
     # Prestations de la lettre (bloc imprimé avant le récapitulatif des tours).
     # Le commentaire interne des prestations n'est JAMAIS chargé ni imprimé.
@@ -216,6 +277,7 @@ def build_context(lv_id: int) -> dict[str, Any]:
     )
     for presta in prestations:
         presta["unite_aff"] = unite_label(presta.get("unite"), presta.get("quantite"))
+        presta["quantite_aff"] = _fmt_qte(presta.get("quantite"))
 
     # Bandeau « Non signée » tant que la lettre n'est pas au statut signée.
     signee = lv.get("statut") == "signee"
@@ -225,6 +287,7 @@ def build_context(lv_id: int) -> dict[str, Any]:
         "prestations": prestations,
         "transporteur": TRANSPORTEUR,
         "signee": signee,
+        "same_parties": same_parties,
     }
 
 

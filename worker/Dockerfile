@@ -14,9 +14,10 @@ COPY worker/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY worker/app ./app
-# Police du logo KERLAM pour le PDF (mêmes fichiers que le front, pas de doublon
-# versionné : copiée dans le dossier des gabarits, résolue par base_url).
-COPY front/assets/fonts/sarpanch-900.woff2 ./app/templates/sarpanch-900.woff2
+# Police du logo KERLAM pour le PDF (même fichier que le front, pas de doublon
+# versionné : copiée dans templates/fonts/, résolue par base_url). Inter (corps
+# du document, maquette épurée beta.23) est versionné dans worker/app/templates/fonts/.
+COPY front/assets/fonts/sarpanch-900.woff2 ./app/templates/fonts/sarpanch-900.woff2
 COPY VERSION ./VERSION
 
 ARG APP_VERSION=0.0.0-dev

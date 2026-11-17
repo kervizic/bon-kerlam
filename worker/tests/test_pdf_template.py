@@ -9,6 +9,7 @@ def _context():
         "transporteur": pdf.TRANSPORTEUR,
         "lv": {
             "numero": "KER-03000",
+            "date": "11/11/2026",
             "date_etablissement": "2026-11-11",
             "date_prise_en_charge": "2026-11-11",
             "expediteur": "YPREMA Lagny",
@@ -52,20 +53,35 @@ def test_destinataire_identique_recopie():
 
 def test_zone_signature_reservee():
     html = pdf.render_html(_context())
-    assert "sign-box" in html         # emplacement 44 x 22 mm pour Documenso
+    # Maquette épurée (beta.23) : zone vide sans cadre, libellé « Signature »
+    # (tout court), avec les deux ancres Documenso (signature + nom).
+    assert ">Signature<" in html
+    assert "Signature du client" not in html
+    assert 'id="doc-signature"' in html
+    assert 'id="doc-nom"' in html
+    assert "sign-box" not in html     # plus de cadre pointillé
 
 
-def test_mentions_legales_art4():
+def test_aucun_tableau():
+    # Dépouillement maximal : AUCUN tableau nulle part dans le PDF.
     html = pdf.render_html(_context())
-    assert "article 4" in html.lower()
+    for tag in ("<table", "<th", "<td", "<thead", "<tbody"):
+        assert tag not in html
 
 
-def test_libelle_projet_sans_regie():
-    # Le libellé est « Projet » seul (plus « Projet / régie »).
+def test_aucune_mention_legale():
+    # beta.23 (décision Manu) : plus AUCUNE mention légale ni phrase en pied de page.
     html = pdf.render_html(_context())
-    assert "Projet :" in html
+    assert "article 4" not in html.lower()
+    assert "9 novembre 1999" not in html
+    assert "arrêté" not in html.lower()
+
+
+def test_libelle_projet():
+    # Maquette épurée (beta.23) : le champ projet porte le libellé « Projet » seul.
+    html = pdf.render_html(_context())
+    assert ">Projet<" in html
     assert "Projet / régie" not in html
-    assert "9 novembre 1999" in html
     assert "État récapitulatif des tours" in html
 
 
@@ -75,8 +91,7 @@ def test_projet_vide_masque_la_ligne_projet():
     ctx = _context()
     ctx["lv"]["projet"] = None
     html = pdf.render_html(ctx)
-    assert "Projet :" not in html
-    assert "Projet : —" not in html
+    assert ">Projet<" not in html
     assert "YPREMA Lagny" in html  # expéditeur (client) toujours présent
 
 
@@ -126,13 +141,13 @@ def test_unite_label_big_bag_pluriel():
 
 def test_pdf_date_francaise_et_siren():
     ctx = _context()
-    ctx["lv"]["date_etablissement"] = "11/11/2026"  # tel que build_context le produit
-    ctx["transporteur"] = {"nom": "KERLAM", "adresse": "KERLAM — 2 rue des Plantes, 77410 Villevaudé",
-                           "siren": "838 377 331"}
+    ctx["lv"]["date"] = "11/11/2026"  # tel que build_context le produit (date unique)
+    ctx["transporteur"] = {"nom": "KERLAM", "adresse": "2 rue des Plantes, 77410 Villevaudé",
+                           "adresse_courte": "2 rue des Plantes, 77410 Villevaudé", "siren": "838 377 331"}
     html = pdf.render_html(ctx)
-    # Une seule date « Établie et prise en charge le … » (décision beta.15).
-    assert "Établie et prise en charge le 11/11/2026" in html
-    assert "Prise en charge :" not in html
+    # beta.23 : ligne « Date : JJ/MM/AAAA » sous le numéro (plus de « Établie… »).
+    assert "Date : 11/11/2026" in html
+    assert "Établie et prise en charge le" not in html
     assert "838 377 331" in html
     assert "2 rue des Plantes" in html
 
@@ -156,4 +171,7 @@ def test_heures_creneaux_sur_pdf():
         [{"debut": "08:00", "fin": "12:00"}, {"debut": "13:00", "fin": "17:00"}]
     )
     html = pdf.render_html(ctx)
-    assert "Heures 8h00–12h00 · 13h00–17h00" in html
+    # Maquette épurée (beta.23) : libellé « Heures » (seul) + créneaux en valeur.
+    assert ">Heures<" in html
+    assert "Heures de régie" not in html
+    assert "8h00–12h00 · 13h00–17h00" in html

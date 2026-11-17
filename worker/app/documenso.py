@@ -40,9 +40,14 @@ def create_document(
     subject: str = "",
     message: str = "",
     sign_page: int = 1,
+    fields: list[dict] | None = None,
 ) -> dict:
-    """Crée un document Documenso, téléverse le PDF, place un champ signature et
-    l'envoie. Renvoie { document_id, token, signing_url }."""
+    """Crée un document Documenso, téléverse le PDF, place les champs (signature +
+    nom, un par lettre) et l'envoie. Renvoie { document_id, token, signing_url }.
+
+    `fields` : géométrie en % de page (type, pageNumber, pageX/Y/Width/Height),
+    sans recipientId (injecté ici). À défaut, un unique champ SIGNATURE sur
+    `sign_page` (compat)."""
     body = {
         "title": title,
         "recipients": [{"name": signer_name or signer_email, "email": signer_email, "role": "SIGNER"}],
@@ -68,19 +73,18 @@ def create_document(
     if up.status_code >= 300:
         raise DocumensoError(f"téléversement PDF: {up.status_code}")
 
-    # Champ signature (coordonnées en % de page) sur la zone de signature du PDF.
-    field = {
-        "recipientId": recipient_id,
-        "type": "SIGNATURE",
-        "pageNumber": sign_page,
-        "pageX": 8,
-        "pageY": 78,
-        "pageWidth": 36,
-        "pageHeight": 12,
-    }
-    fr = httpx.post(f"{_base()}/documents/{document_id}/fields", headers=_headers(), json=field, timeout=30)
-    if fr.status_code >= 300:
-        raise DocumensoError(f"champ signature: {fr.status_code} {fr.text[:200]}")
+    # Champs (coordonnées en % de page) sur la/les zone(s) de signature du PDF.
+    # Par défaut (compat) : un unique champ SIGNATURE sur `sign_page`.
+    if fields is None:
+        fields = [{
+            "type": "SIGNATURE", "pageNumber": sign_page,
+            "pageX": 8, "pageY": 78, "pageWidth": 36, "pageHeight": 12,
+        }]
+    for geom in fields:
+        field = {"recipientId": recipient_id, **geom}
+        fr = httpx.post(f"{_base()}/documents/{document_id}/fields", headers=_headers(), json=field, timeout=30)
+        if fr.status_code >= 300:
+            raise DocumensoError(f"champ {geom.get('type')}: {fr.status_code} {fr.text[:200]}")
 
     sr = httpx.post(
         f"{_base()}/documents/{document_id}/send",

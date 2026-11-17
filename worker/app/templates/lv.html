@@ -2,115 +2,272 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8">
+<title>Lettre de voiture {{ lv.numero or "" }}</title>
 <style>
-  /* Logo KERLAM : même police que l'appli (Sarpanch 900), résolue via base_url. */
+  /* ============================================================
+     Lettre de voiture KERLAM — mise en page « Filet épurée » (beta.23).
+     Aucun tableau : parties en colonnes sans bordure, listes à points de
+     conduite (quantité + unité à droite), tours sans titre. Pas de mention
+     légale. Gris choisis pour rester lisibles en impression laser N&B
+     (contraste >= 4,5:1, petit texte >= 8 pt). Polices embarquées (aucun CDN),
+     résolues par base_url = dossier des gabarits.
+     ============================================================ */
+
   @font-face {
     font-family: "Sarpanch";
-    src: url("sarpanch-900.woff2") format("woff2");
-    font-weight: 900;
-    font-style: normal;
-    font-display: block;
+    src: url("fonts/sarpanch-900.woff2") format("woff2");
+    font-weight: 900; font-style: normal; font-display: block;
   }
-  @page { size: A4; margin: 14mm 14mm 10mm 14mm; }
+  @font-face {
+    font-family: "Inter";
+    src: url("fonts/Inter.ttf") format("truetype");
+    font-weight: 100 900; font-style: normal;
+  }
+  @font-face {
+    font-family: "Inter";
+    src: url("fonts/Inter-Italic.ttf") format("truetype");
+    font-weight: 100 900; font-style: italic;
+  }
+
+  :root {
+    --ink: #1D1D1B;        /* corps */
+    --ink-soft: #5B5B57;   /* adresses secondaires (contraste ~6,8:1) */
+    --ink-faint: #6B6B6B;  /* étiquettes petites capitales, pagination (~5,3:1) */
+    --dot: #8A8A85;        /* points de conduite (décor, visibles en N&B) */
+    --line-strong: #1D1D1B;
+    --orange: #FD8008; --grey-logo: #808080;
+  }
+
+  @page {
+    size: A4;
+    margin: 15mm 15mm 15mm 15mm;
+    @bottom-center {
+      content: "Page " counter(page) " / " counter(pages);
+      font-family: "Inter", sans-serif; font-size: 8pt; color: #6B6B6B;
+    }
+    @top-left { content: element(runhead); }
+  }
+  @page:first { @top-left { content: none; } }
+
   * { box-sizing: border-box; }
-  body { font-family: "Helvetica Neue", Arial, sans-serif; color: #2B2B2B; font-size: 10.5pt; }
-  .logo { font-family: "Sarpanch", Arial, sans-serif; font-weight: 900; font-size: 24pt; letter-spacing: 0.5pt; }
-  .logo .ker { color: #808080; } .logo .lam { color: #FD8008; }
-  .row { display: flex; justify-content: space-between; align-items: flex-start; }
-  .box { border: 1px solid #808080; padding: 6px 8px; margin-top: 6px; }
-  h1 { font-size: 13pt; margin: 4px 0; }
-  table { width: 100%; border-collapse: collapse; margin-top: 4px; }
-  th, td { border: 1px solid #9a9a9a; padding: 3px 5px; text-align: left; font-variant-numeric: tabular-nums; }
-  th { background: #F4F4F2; }
-  .muted { color: #595959; font-size: 9pt; }
-  .num { text-align: right; }
-  .sign { margin-top: 10px; }
-  /* Zone de signature réservée pour Documenso : 44 x 22 mm. */
-  .sign-box { width: 44mm; height: 22mm; border: 1px dashed #808080; }
-  .legal { margin-top: 10px; font-size: 8pt; color: #595959; }
-  .recap-title { font-size: 11pt; margin: 10px 0 2px; }
+  body {
+    font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink); font-size: 9.5pt; line-height: 1.38;
+    -weasy-font-variant-numeric: tabular-nums;
+  }
+  .ker { color: var(--grey-logo); }
+  .lam { color: var(--orange); }
+
+  /* En-tête allégé répété (pages 2+). */
+  .runhead {
+    position: running(runhead); width: 100%; font-size: 8pt; color: var(--ink-soft);
+    border-bottom: 0.5pt solid var(--ink-faint); padding-bottom: 2pt;
+  }
+  .logo-runhead {
+    font-family: "Sarpanch", sans-serif; font-weight: 900; font-size: 10pt;
+    letter-spacing: 0.3pt; margin-right: 10pt;
+  }
+  .runhead-meta { font-size: 8pt; }
+
+  /* En-tête principal. */
+  .doc-header { display: flex; justify-content: space-between; align-items: flex-start; }
+  .identity { max-width: 60%; }
+  .logo { font-family: "Sarpanch", sans-serif; font-weight: 900; font-size: 30pt; letter-spacing: 0.5pt; line-height: 1; }
+  .identity-lines { margin-top: 5pt; font-size: 8.5pt; color: var(--ink-soft); line-height: 1.45; }
+  .title-block { text-align: right; }
+  .doc-title { font-size: 17pt; font-weight: 700; letter-spacing: 0.2pt; line-height: 1; }
+  .doc-number { margin-top: 3pt; font-size: 12pt; font-weight: 700; color: var(--orange); letter-spacing: 0.3pt; }
+  .doc-date { margin-top: 4pt; font-size: 9pt; font-weight: 600; color: var(--ink); }
+  .header-rule { height: 2pt; background: var(--orange); margin: 7pt 0 0; }
+
+  /* Parties : colonnes espacées, AUCUNE bordure. */
+  .parties { display: flex; gap: 12mm; margin-top: 11pt; }
+  .party { flex: 1; }
+  .party-label { font-size: 8pt; text-transform: uppercase; letter-spacing: 0.5pt; color: var(--ink-faint); margin-bottom: 2.5pt; }
+  .party-body { font-size: 9.5pt; font-weight: 600; line-height: 1.35; white-space: pre-line; }
+
+  /* Transport. Champs en inline-block (et non en flex imbriqué) : le flex
+     imbriqué provoquait un CHEVAUCHEMENT avec WeasyPrint 63.1 (worker prod) ;
+     l'inline-block rend à l'identique en 69 et reste robuste en 63.1. */
+  .transport { margin-top: 11pt; line-height: 1.7; }
+  .field { display: inline-block; margin-right: 26pt; white-space: nowrap; }
+  .field-k { font-size: 8pt; text-transform: uppercase; letter-spacing: 0.4pt; color: var(--ink-faint); margin-right: 6pt; }
+  .field-v { font-weight: 600; font-size: 9.5pt; }
+
+  /* Sections. */
+  .block { margin-top: 14pt; }
+  .section-title { font-size: 10.5pt; font-weight: 700; letter-spacing: 0.3pt; margin: 0 0 6pt; padding-bottom: 3pt; border-bottom: 1pt solid var(--line-strong); }
+  .section-title::before { content: ""; display: inline-block; width: 5pt; height: 5pt; background: var(--orange); margin-right: 6pt; vertical-align: 1pt; }
+
+  /* Lignes à points de conduite (nom à gauche, quantité à droite), AUCUN filet.
+     Technique robuste indépendante de flex (WeasyPrint 63.1 du worker ne faisait
+     pas grandir un élément flex vide) : la quantité flotte à droite, un filet
+     pointillé en arrière-plan (::before) relie les deux, masqué sous les textes
+     par leur fond blanc. */
+  .list { margin-top: 2pt; }
+  .row { position: relative; overflow: hidden; padding: 2pt 0; font-size: 9.5pt; line-height: 1.35; }
+  .row::before {
+    content: ""; position: absolute; left: 0; right: 0; bottom: 4pt;
+    border-bottom: 0.6pt dotted var(--dot);
+  }
+  .row.muted::before { display: none; }
+  .name { position: relative; background: #fff; padding-right: 5pt; }
+  .qty {
+    position: relative; float: right; background: #fff; padding-left: 5pt;
+    font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums;
+  }
+  .muted { color: var(--ink-faint); font-style: italic; }
+
+  /* Tours : pas de titre, chaque extrémité = nom du site (société · adresse)
+     puis l'adresse complète en petit gris ; flèche orange, retour ligne propre. */
+  .tours { margin-top: 2pt; }
+  .tour { break-inside: avoid; margin-bottom: 9pt; }
+  .tour:last-child { margin-bottom: 0; }
+  .route { font-size: 9.5pt; line-height: 1.3; }
+  .place { display: inline-block; vertical-align: top; }
+  .place-name { font-weight: 600; }
+  .place-addr { display: block; font-weight: 400; font-size: 8pt; color: var(--ink-soft); }
+  .route .arrow { color: var(--orange); font-weight: 700; margin: 0 5pt; }
+  .dest-override { color: var(--ink-soft); font-weight: 400; font-size: 8.5pt; }
+  .goods { padding-left: 10mm; margin-top: 2pt; }
+  .goods .name { font-weight: 400; }
+  .goods .qty { font-weight: 600; }
+
+  /* Signature : épinglée au bas de la page (coordonnées stables Documenso).
+     Origine = coin haut-gauche de la zone de contenu (marges 15 mm). Ancres
+     (page A4) : SIGNATURE 17/245 mm 66×15 ; NOM 17/262 mm 66×5. Aucune mention
+     légale ; seule la pagination figure en pied de page. */
+  .end-spacer { height: 40mm; }
+  .signature { position: absolute; left: 0; bottom: 13mm; width: 70mm; height: 30mm; }
+  .sign-title { position: absolute; left: 0; top: 0; font-size: 9pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5pt; }
+  .sign-area { position: absolute; left: 0; bottom: 0; width: 70mm; height: 25mm; }
+  .doc-anchor { position: absolute; display: block; line-height: 0; font-size: 0; }
+  #doc-signature { left: 2mm; top: 1mm; width: 66mm; height: 15mm; }
+  #doc-nom { left: 2mm; top: 18mm; width: 66mm; height: 5mm; }
 </style>
 </head>
 <body>
-  <div class="row">
-    <div>
+
+  {# En-tête répété allégé (pages 2+), masqué page 1 via @page:first. #}
+  <div class="runhead">
+    <span class="logo-runhead"><span class="ker">KER</span><span class="lam">LAM</span></span>
+    <span class="runhead-meta">Lettre de voiture N° {{ lv.numero or "(non attribué)" }}</span>
+  </div>
+
+  {# ===================== EN-TÊTE ===================== #}
+  <header class="doc-header">
+    <div class="identity">
       <div class="logo"><span class="ker">KER</span><span class="lam">LAM</span></div>
-      <div class="muted">{{ transporteur.adresse }}<br>SIREN {{ transporteur.siren or "—" }}</div>
+      <div class="identity-lines">
+        {{ transporteur.adresse }}<br>
+        SIREN {{ transporteur.siren or "—" }}
+      </div>
     </div>
-    <div style="text-align:right">
-      <h1>Lettre de voiture</h1>
-      <div><b>N° {{ lv.numero or "(non attribué)" }}</b></div>
-      <div class="muted">Établie et prise en charge le {{ lv.date_etablissement }}</div>
+    <div class="title-block">
+      <div class="doc-title">Lettre de voiture</div>
+      <div class="doc-number">N° {{ lv.numero or "(non attribué)" }}</div>
+      <div class="doc-date">Date : {{ lv.date or "—" }}</div>
     </div>
-  </div>
+  </header>
+  <div class="header-rule"></div>
 
-  <div class="row">
-    <div class="box" style="width:48%">
-      <b>Expéditeur</b><br>{{ lv.expediteur or "—" }}
+  {# ===================== PARTIES (sans bordures) =====================
+     Si l'expéditeur et le destinataire sont la même société (destinataire
+     « Identique au client », ou mêmes nom et adresse) : une seule colonne. #}
+  <section class="parties">
+    {% if same_parties %}
+    <div class="party">
+      <div class="party-label">Expéditeur et destinataire</div>
+      <div class="party-body">{{ lv.expediteur or "—" }}</div>
     </div>
-    <div class="box" style="width:48%">
-      <b>Destinataire</b><br>{{ lv.destinataire or "—" }}
+    {% else %}
+    <div class="party">
+      <div class="party-label">Expéditeur</div>
+      <div class="party-body">{{ lv.expediteur or "—" }}</div>
     </div>
-  </div>
+    <div class="party">
+      <div class="party-label">Destinataire</div>
+      <div class="party-body">{{ lv.destinataire or "—" }}</div>
+    </div>
+    {% endif %}
+    <div class="party">
+      <div class="party-label">Transporteur</div>
+      <div class="party-body">{{ transporteur.nom }}<br>{{ transporteur.adresse_courte }}</div>
+    </div>
+  </section>
 
-  <div class="box">
-    <div class="row">
-      <div>Véhicule : <b>{{ lv.camion or "—" }}</b></div>
-      <div>Chauffeur : <b>{{ lv.chauffeur or "—" }}</b></div>
-      {% if lv.projet %}<div>Projet : <b>{{ lv.projet }}</b></div>{% endif %}
-    </div>
-    {% if lv.heures_aff %}<div class="muted">Heures {{ lv.heures_aff }}</div>{% endif %}
-  </div>
+  {# ===================== TRANSPORT ===================== #}
+  <section class="transport">
+    <div class="field"><span class="field-k">Véhicule</span><span class="field-v">{{ lv.camion or "—" }}</span></div>
+    <div class="field"><span class="field-k">Chauffeur</span><span class="field-v">{{ lv.chauffeur or "—" }}</span></div>
+    {% if lv.projet %}<div class="field"><span class="field-k">Projet</span><span class="field-v">{{ lv.projet }}</span></div>{% endif %}
+    {% if lv.heures_aff %}<div class="field"><span class="field-k">Heures</span><span class="field-v">{{ lv.heures_aff }}</span></div>{% endif %}
+  </section>
 
+  {# ===================== PRESTATIONS (liste, masquée si vide) ===================== #}
   {% if prestations %}
-  <h2 class="recap-title">Prestations</h2>
-  <table>
-    <thead><tr><th>Prestation</th><th class="num">Quantité</th><th>Unité</th><th>Matériel</th></tr></thead>
-    <tbody>
+  <section class="block">
+    <h2 class="section-title">Prestations</h2>
+    <div class="list">
     {% for p in prestations %}
       {# Seul le libellé de la prestation est imprimé — jamais le commentaire interne. #}
-      <tr><td>{{ p.libelle }}</td><td class="num">{{ p.quantite }}</td><td>{{ p.unite_aff or p.unite }}</td><td>{{ p.materiel or "—" }}</td></tr>
+      <div class="row">
+        <span class="name">{{ p.libelle }}{% if p.materiel and p.materiel != "—" %} — {{ p.materiel }}{% endif %}</span>
+        <span class="qty">{{ p.quantite_aff }} {{ p.unite_aff or p.unite }}</span>
+      </div>
     {% endfor %}
-    </tbody>
-  </table>
+    </div>
+  </section>
   {% endif %}
 
-  <h2 class="recap-title">État récapitulatif des tours</h2>
-  {% for tour in tours %}
-  <div class="box">
-    <b>Tour {{ loop.index }}</b>
-    <div class="row">
-      <div>Chargement : {{ tour.chargement_adresse or "—" }}</div>
-      <div>Déchargement : {{ tour.dechargement_adresse or "—" }}</div>
+  {# ===================== ÉTAT RÉCAPITULATIF DES TOURS ===================== #}
+  <section class="block">
+    <h2 class="section-title">État récapitulatif des tours</h2>
+    <div class="tours">
+    {% for tour in tours %}
+      <div class="tour">
+        <div class="route">
+          <span class="place">
+            <span class="place-name">{{ tour.chargement_nom or tour.chargement_adresse or "—" }}</span>
+            {% if tour.chargement_nom and tour.chargement_adresse %}<span class="place-addr">{{ tour.chargement_adresse }}</span>{% endif %}
+          </span>
+          <span class="arrow">→</span>
+          <span class="place">
+            <span class="place-name">{{ tour.dechargement_nom or tour.dechargement_adresse or "—" }}</span>
+            {% if tour.dechargement_nom and tour.dechargement_adresse %}<span class="place-addr">{{ tour.dechargement_adresse }}</span>{% endif %}
+            {% if tour.destinataire_nom %}<span class="dest-override"> · {{ tour.destinataire_nom }}</span>{% endif %}
+          </span>
+        </div>
+        <div class="goods">
+        {% for ligne in tour.lignes %}
+          {# Seul le NOM de l'article est imprimé — jamais le commentaire interne. #}
+          <div class="row">
+            <span class="name">{{ ligne.nom }}</span>
+            <span class="qty">{{ ligne.quantite_aff }} {{ ligne.unite_aff or ligne.unite }}</span>
+          </div>
+        {% else %}
+          <div class="row muted">Aucune ligne.</div>
+        {% endfor %}
+        </div>
+      </div>
+    {% else %}
+      <div class="muted">Aucun tour enregistré.</div>
+    {% endfor %}
     </div>
-    {% if tour.expediteur or tour.destinataire %}
-    <div class="muted">Exp. : {{ tour.expediteur or lv.expediteur }} · Dest. : {{ tour.destinataire or lv.destinataire }}</div>
-    {% endif %}
-    <table>
-      <thead><tr><th>Nature de la marchandise</th><th class="num">Quantité</th><th>Unité</th></tr></thead>
-      <tbody>
-      {% for ligne in tour.lignes %}
-        {# Seul le NOM de l'article est imprimé — jamais le commentaire interne. #}
-        <tr><td>{{ ligne.nom }}</td><td class="num">{{ ligne.quantite }}</td><td>{{ ligne.unite_aff or ligne.unite }}</td></tr>
-      {% else %}
-        <tr><td colspan="3" class="muted">Aucune ligne.</td></tr>
-      {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% else %}
-  <div class="box muted">Aucun tour enregistré.</div>
-  {% endfor %}
+  </section>
 
-  <div class="sign">
-    <div class="muted">Signature du destinataire :</div>
-    <div class="sign-box"></div>
+  {# ===================== SIGNATURE =====================
+     Épinglée en absolu au bas de la page (coordonnées stables Documenso).
+     L'espace est réservé dans le flux par .end-spacer juste au-dessus. #}
+  <div class="end-spacer"></div>
+  <div class="signature">
+    <div class="sign-title">Signature</div>
+    {# Zone vide : Documenso y pose la signature ET le nom. Deux ancres invisibles. #}
+    <div class="sign-area">
+      <span id="doc-signature" class="doc-anchor"></span>
+      <span id="doc-nom" class="doc-anchor"></span>
+    </div>
   </div>
 
-  <div class="legal">
-    Lettre de voiture établie en application de l'article 4 de l'arrêté du
-    9 novembre 1999 relatif aux documents de transport (mentions obligatoires et
-    état récapitulatif des tours).
-  </div>
 </body>
 </html>
