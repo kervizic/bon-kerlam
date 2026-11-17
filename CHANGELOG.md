@@ -4,6 +4,20 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.23.1] — 2026-11-17
+
+Deux retouches du gabarit PDF (worker uniquement).
+
+### Corrigé
+- **Titre de section** : « État récapitulatif des tours » devient « État
+  récapitulatif des transports ».
+- **Gouttière des parties** : la colonne « Expéditeur et destinataire » touchait
+  « Transporteur » (« …Noisy-le- KERLAM » sur KER-03006). La gouttière (10 mm) est
+  désormais posée par une marge entre colonnes — et non par flex `gap`, ignoré par
+  la version de WeasyPrint du worker (63.1) ; `min-width: 0` + `overflow-wrap`
+  forcent le retour à la ligne au lieu de chevaucher la colonne suivante, y compris
+  à 3 colonnes avec des noms et adresses longs.
+
 ## [0.1.0-beta.23] — 2026-11-17
 
 Refonte du PDF (worker) : gabarit « Filet épurée » validé par le patron. Plus

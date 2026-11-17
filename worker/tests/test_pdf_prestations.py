@@ -1,5 +1,5 @@
 """Bloc « Prestations » du PDF : pluriels d'unité (jour/heure), rendu du tableau
-placé avant le récapitulatif des tours, et absence du bloc si aucune prestation."""
+placé avant le récapitulatif des transports, et absence du bloc si aucune prestation."""
 
 from app import pdf
 
@@ -55,8 +55,8 @@ def test_prestations_bloc_present_et_place_avant_tours():
     assert "Location mini-pelle" in html
     assert "Kubota U17" in html
     assert "jours" in html  # unité accordée au pluriel
-    # Placement : le bloc Prestations précède le récapitulatif des tours.
-    assert html.index("Prestations") < html.index("État récapitulatif des tours")
+    # Placement : le bloc Prestations précède le récapitulatif des transports.
+    assert html.index("Prestations") < html.index("État récapitulatif des transports")
 
 
 def test_prestations_commentaire_interne_absent():
@@ -82,4 +82,4 @@ def test_prestations_vides_pas_de_bloc():
     html = pdf.render_html(_context([]))
     # Sans prestation, le titre « Prestations » ne doit pas apparaître.
     assert "Prestations" not in html
-    assert "État récapitulatif des tours" in html
+    assert "État récapitulatif des transports" in html

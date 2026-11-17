@@ -82,7 +82,7 @@ def test_libelle_projet():
     html = pdf.render_html(_context())
     assert ">Projet<" in html
     assert "Projet / régie" not in html
-    assert "État récapitulatif des tours" in html
+    assert "État récapitulatif des transports" in html
 
 
 def test_projet_vide_masque_la_ligne_projet():
