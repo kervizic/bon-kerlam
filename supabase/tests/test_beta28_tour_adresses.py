@@ -92,7 +92,10 @@ def test_rpc_adresses_chantier(conn, actors):
             "VALUES (%s,'Depart A','Chantier Y')",
             (lv,),
         )
-        cur.execute("SELECT adresse, client_id, nb FROM bon.adresses_chantier(%s) ORDER BY adresse", (actors["client_id"],))
+        cur.execute(
+            "SELECT adresse, client_id, nb FROM bon.adresses_chantier(%s) ORDER BY adresse",
+            (actors["client_id"],),
+        )
         rows = cur.fetchall()
         adresses = {r[0] for r in rows}
         assert "Chantier Y" in adresses and "Depart A" in adresses
