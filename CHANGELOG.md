@@ -4,6 +4,37 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.31] — 2026-11-18
+
+Performance et fraîcheur du PDF (worker + base). Aucun changement visible du PDF.
+
+### Ajouté
+- **PDF toujours prêt** : après la modification d'une lettre NON signée (en-tête,
+  tours, lignes, prestations, projets), son PDF de cache est re-rendu en arrière-plan
+  ~20 s après le dernier changement. Dé-bounce côté SQL (file `bon.lv_pdf_dirty`
+  alimentée par triggers), traitement worker UNE lettre à la fois, basse priorité
+  (ne gêne pas Documenso sur le vCPU unique). Le préchauffage au démarrage (beta.29)
+  reste.
+
+### Changé
+- **Rendu WeasyPrint ~2,5x plus rapide** : les polices Inter (variables, ~1,7 Mo,
+  ~2900 glyphes) sont désormais **sous-ensemblées** aux ~300 caractères latins/
+  français + symboles réellement imprimables (~209 Ko). WeasyPrint instancie la
+  graisse demandée exactement comme avant : **rendu strictement identique au pixel**
+  (delta 0 sur 3 lettres types, accents / « m³ » / « × » inclus), mais ~2,5x plus
+  vite (≈ 7 s → ≈ 2,8 s par lettre, cache froid). Génération reproductible via
+  `worker/tools/build_fonts.py`.
+- **Ménage du cache PDF** : l'entrée de cache d'une lettre est supprimée dès qu'elle
+  est signée (le PDF signé est archivé à part) ; une tâche quotidienne retire aussi
+  les entrées des lettres supprimées et non re-rendues depuis 30 jours. Le cache
+  garde au plus **une entrée par lettre** (clé primaire `lv_id`).
+
+### Base de données (migration `0029`)
+- Table `bon.lv_pdf_dirty` (file de rafraîchissement) + triggers SECURITY DEFINER
+  sur `lettres_voiture`, `tours`, `tour_lignes`, `lv_prestations`, `lv_projets`. Les
+  lettres signées/supprimées ne sont jamais mises en file. Le trigger d'immuabilité
+  des lettres signées (0027) reste inchangé.
+
 ## [0.1.0-beta.30.1] — 2026-11-18
 
 Correctifs d'affichage iPhone à encoche / Dynamic Island (front uniquement).

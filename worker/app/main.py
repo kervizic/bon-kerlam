@@ -31,6 +31,9 @@ async def lifespan(app: FastAPI):
     # beta.29 : préchauffe le cache PDF des lettres signables, une à la fois, en
     # arrière-plan (évite le cache FROID après un déploiement sans saturer le vCPU).
     tasks.append(asyncio.create_task(_warm_cache_loop()))
+    # beta.31 : re-rend en fond le PDF des lettres modifiées (file lv_pdf_dirty),
+    # dé-bounce ~20 s -> « PDF toujours prêt » sans attendre au moment de partager.
+    tasks.append(asyncio.create_task(_refresh_loop()))
     try:
         yield
     finally:
@@ -364,6 +367,9 @@ async def _maintenance_loop() -> None:
         await asyncio.sleep(max((nxt - now).total_seconds(), 60))
         with contextlib.suppress(Exception):
             closing.purge_corbeille()
+        # beta.31 : ménage du cache PDF (lettres signées / supprimées / inactives > 30 j).
+        with contextlib.suppress(Exception):
+            pdf.cleanup_cache(30)
 
 
 async def _signature_loop() -> None:
@@ -378,6 +384,20 @@ async def _signature_loop() -> None:
         await asyncio.sleep(30 if active > 0 else 180)
         with contextlib.suppress(Exception):
             await asyncio.to_thread(signature.poll_pending)
+
+
+async def _refresh_loop() -> None:
+    """beta.31 : « PDF toujours prêt ». Re-rend en arrière-plan le PDF de cache des
+    lettres non signées modifiées (file bon.lv_pdf_dirty, dé-bounce ~20 s côté SQL),
+    UNE lettre à la fois et avec une pause entre chaque, pour rester basse priorité
+    sur le vCPU unique (ne pas gêner Documenso)."""
+    await asyncio.sleep(25)  # après le préchauffage initial du cache
+    while True:
+        did = None
+        with contextlib.suppress(Exception):
+            did = await asyncio.to_thread(pdf.process_dirty_once, 20)
+        # Enchaîne vite s'il restait du travail (petite pause), sinon re-sonde plus lentement.
+        await asyncio.sleep(2 if did else 5)
 
 
 async def _warm_cache_loop() -> None:

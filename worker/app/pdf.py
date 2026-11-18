@@ -396,3 +396,86 @@ def letter_cached(lv_id: int) -> tuple[bytes, list[dict], int]:
         (lv_id, content_hash, pdf_bytes, json.dumps(fields_local), n_pages),
     )
     return pdf_bytes, fields_local, n_pages
+
+
+# --- File de rafraîchissement du cache (beta.31) ------------------------------
+# Les triggers (migration 0029) marquent une lettre non signée « à re-rendre » dans
+# bon.lv_pdf_dirty au moindre changement. Le worker dé-bounce puis rend en fond.
+
+
+def next_dirty_lv(min_age_seconds: int = 20) -> int | None:
+    """lv_id de la plus ancienne lettre en file dont le dernier changement date d'au
+    moins `min_age_seconds` (dé-bounce), encore signable (non signée, non supprimée).
+    Les lettres en file devenues signées/supprimées sont purgées de la file au passage
+    (par process_dirty_once). None si rien n'est prêt."""
+    row = db.query_one(
+        """
+        SELECT d.lv_id
+          FROM bon.lv_pdf_dirty d
+          JOIN bon.lettres_voiture lv ON lv.id = d.lv_id
+         WHERE d.dirty_at <= now() - make_interval(secs => %s)
+           AND lv.deleted_at IS NULL AND lv.statut <> 'signee'
+         ORDER BY d.dirty_at
+         LIMIT 1
+        """,
+        (min_age_seconds,),
+    )
+    return row["lv_id"] if row else None
+
+
+def process_dirty_once(min_age_seconds: int = 20) -> int | None:
+    """Traite UNE lettre de la file : re-rend son PDF de cache (si son contenu a
+    changé) puis la retire de la file. Purge aussi de la file les lettres devenues
+    signées/supprimées (sans les rendre). Renvoie le lv_id traité, ou None si rien."""
+    # D'abord, purger les entrées obsolètes (signées/supprimées) pour ne pas tourner
+    # en boucle dessus.
+    db.query(
+        "DELETE FROM bon.lv_pdf_dirty d USING bon.lettres_voiture lv "
+        "WHERE lv.id = d.lv_id AND (lv.deleted_at IS NOT NULL OR lv.statut = 'signee')"
+    )
+    lv_id = next_dirty_lv(min_age_seconds)
+    if lv_id is None:
+        return None
+    # Mémorise l'horodatage courant : on ne retire de la file que si la lettre n'a pas
+    # été re-modifiée pendant le rendu.
+    stamp = db.query_one("SELECT dirty_at FROM bon.lv_pdf_dirty WHERE lv_id = %s", (lv_id,))
+    letter_cached(lv_id)  # rend + met en cache (no-op si le hash n'a pas changé)
+    if stamp:
+        db.query(
+            "DELETE FROM bon.lv_pdf_dirty WHERE lv_id = %s AND dirty_at <= %s",
+            (lv_id, stamp["dirty_at"]),
+        )
+    return lv_id
+
+
+def drop_cache_for_document(document_id: int) -> int:
+    """Supprime l'entrée de cache des lettres d'un document signé (le PDF signé est
+    archivé à part). Renvoie le nombre d'entrées retirées."""
+    rows = db.query(
+        "DELETE FROM bon.lv_pdf_cache c USING bon.lettres_voiture lv "
+        "WHERE lv.id = c.lv_id AND lv.documenso_document_id = %s RETURNING c.lv_id",
+        (document_id,),
+    )
+    return len(rows)
+
+
+def cleanup_cache(days: int = 30) -> dict:
+    """Ménage périodique : retire du cache les lettres signées (PDF archivé ailleurs)
+    et celles non re-rendues depuis `days` jours. Renvoie le nombre d'entrées et les
+    octets libérés."""
+    row = db.query_one(
+        """
+        WITH gone AS (
+          DELETE FROM bon.lv_pdf_cache c
+           USING bon.lettres_voiture lv
+           WHERE lv.id = c.lv_id
+             AND (lv.statut = 'signee'
+                  OR lv.deleted_at IS NOT NULL
+                  OR c.updated_at < now() - make_interval(days => %s))
+          RETURNING length(c.pdf) AS n
+        )
+        SELECT count(*) AS entries, COALESCE(sum(n), 0) AS bytes FROM gone
+        """,
+        (days,),
+    )
+    return {"entries": row["entries"] if row else 0, "bytes": int(row["bytes"]) if row else 0}

@@ -7,7 +7,7 @@ requires-python = ">=3.12"
 [tool.ruff]
 line-length = 120
 target-version = "py312"
-extend-exclude = ["front/assets/vendor", "**/migrations/*.sql"]
+extend-exclude = ["front/assets/vendor", "**/migrations/*.sql", "worker/tools"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "W"]

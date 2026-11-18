@@ -18,14 +18,18 @@
     src: url("fonts/sarpanch-900.woff2") format("woff2");
     font-weight: 900; font-style: normal; font-display: block;
   }
+  /* beta.31 : polices Inter VARIABLES mais SOUS-ENSEMBLÉES (~300 glyphes latins/FR au
+     lieu de ~2900), générées hors ligne par worker/tools/build_fonts.py. WeasyPrint
+     instancie la graisse demandée EXACTEMENT comme avant (rendu identique au pixel),
+     mais sur un jeu de glyphes réduit -> instanciation ~10x plus rapide par lettre. */
   @font-face {
     font-family: "Inter";
-    src: url("fonts/Inter.ttf") format("truetype");
+    src: url("fonts/Inter-subset.woff2") format("woff2");
     font-weight: 100 900; font-style: normal;
   }
   @font-face {
     font-family: "Inter";
-    src: url("fonts/Inter-Italic.ttf") format("truetype");
+    src: url("fonts/Inter-Italic-subset.woff2") format("woff2");
     font-weight: 100 900; font-style: italic;
   }
 

@@ -12,6 +12,7 @@ Toutes les lettres d'un envoi groupé doivent partager le même contact signatai
 
 from __future__ import annotations
 
+import contextlib
 import io
 import logging
 import time
@@ -274,6 +275,10 @@ def poll_pending(document_id: int | None = None, wait_s: float = 0.0) -> dict:
                 "WHERE documenso_document_id = %s AND deleted_at IS NULL",
                 (path, doc_id),
             )
+            # beta.31 : le PDF signé est archivé à part -> on retire l'entrée de cache
+            # (reconstructible) de ces lettres pour ne pas garder d'octets inutiles.
+            with contextlib.suppress(Exception):
+                pdf.drop_cache_for_document(doc_id)
             # UN SEUL mail KERLAM au contact (KERLAM en copie), avec le PDF signé.
             if signed:
                 _send_signed_mail(doc_id, signed)
