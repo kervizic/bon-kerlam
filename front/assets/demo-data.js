@@ -237,8 +237,10 @@ export const LETTRES_VOITURE = [
 
 const nextTourId = makeCounter(2);
 export const TOURS = [
-  { id: 1, lv_id: 1, ordre: 1, heure_depart: nowIsoAt(7, 45), gps_lat: null, gps_lon: null, site_chargement_id: 1, site_dechargement_id: 3, expediteur: null, destinataire: null, deleted_at: null },
-  { id: 2, lv_id: 2, ordre: 1, heure_depart: nowIsoAt(7, 0), gps_lat: null, gps_lon: null, site_chargement_id: 4, site_dechargement_id: 2, expediteur: null, destinataire: null, deleted_at: null },
+  // beta.28 : le déchargement du 1er tour est une ADRESSE DE CHANTIER libre (pas un
+  // site permanent) -> alimente « Chantiers récents » et illustre la saisie libre.
+  { id: 1, lv_id: 1, ordre: 1, heure_depart: nowIsoAt(7, 45), gps_lat: null, gps_lon: null, site_chargement_id: 1, site_dechargement_id: null, dechargement_adresse: "18 rue du Chantier, 77400 Lagny-sur-Marne", dechargement_lat: 48.8773, dechargement_lon: 2.705, expediteur: null, destinataire: null, deleted_at: null, created_at: nowIsoAt(7, 45) },
+  { id: 2, lv_id: 2, ordre: 1, heure_depart: nowIsoAt(7, 0), gps_lat: null, gps_lon: null, site_chargement_id: 4, site_dechargement_id: 2, expediteur: null, destinataire: null, deleted_at: null, created_at: nowIsoAt(7, 0) },
 ];
 
 const nextLigneId = makeCounter(3);

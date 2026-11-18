@@ -10,8 +10,8 @@
   <!-- Empreinte de version du shell (cf. assets/app-version.js). Bumper `app-rev`
        à chaque déploiement backend devant forcer un refresh (sinon le bump d'un
        `?v=` d'asset suffit). -->
-  <meta name="app-version" content="0.1.0-beta.27">
-  <meta name="app-rev" content="270">
+  <meta name="app-version" content="0.1.0-beta.28">
+  <meta name="app-rev" content="280">
 
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
@@ -31,7 +31,7 @@
        en police système). crossorigin obligatoire : les polices sont toujours
        récupérées en mode CORS, l'attribut évite un double téléchargement. -->
   <link rel="preload" href="/assets/fonts/sarpanch-900.woff2?v=14" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/assets/styles.css?v=270">
+  <link rel="stylesheet" href="/assets/styles.css?v=280">
   <!-- Garde-fou anti page blanche (beta.25) : si l'appli n'a pas démarré sous 8 s
        (flag window.__bonBooted posé en fin de boot d'app.js), on désenregistre le
        SW, on vide les caches et on recharge UNE fois (anti-boucle sessionStorage).
@@ -612,13 +612,18 @@
         <h2 id="site-picker-title">Choisir un site</h2>
         <button type="button" class="icon-btn" id="btn-site-picker-close" aria-label="Fermer"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       </div>
-      <input type="search" id="site-picker-search" class="filter-input" placeholder="Rechercher un site…">
-      <button type="button" id="btn-site-picker-near" class="btn btn-secondary btn-sm is-spaced" aria-pressed="false">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="10" r="3"/><path d="M12 2a8 8 0 0 0-8 8c0 5.5 8 12 8 12s8-6.5 8-12a8 8 0 0 0-8-8Z"/></svg>
-        Près de moi
-      </button>
+      <input type="search" id="site-picker-search" class="filter-input" placeholder="Rechercher ou saisir une adresse…">
+      <div class="site-picker-actions">
+        <button type="button" id="btn-site-picker-here" class="btn btn-secondary btn-sm">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+          Ici
+        </button>
+        <button type="button" id="btn-site-picker-near" class="btn btn-secondary btn-sm" aria-pressed="false">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="10" r="3"/><path d="M12 2a8 8 0 0 0-8 8c0 5.5 8 12 8 12s8-6.5 8-12a8 8 0 0 0-8-8Z"/></svg>
+          Près de moi
+        </button>
+      </div>
       <div id="site-picker-list" class="sheet-list"></div>
-      <button type="button" class="btn btn-secondary btn-block is-spaced" id="btn-site-picker-new">+ Nouveau site</button>
     </div>
   </div>
 
@@ -816,6 +821,12 @@
           <a class="icon-btn nav-link" target="_blank" rel="noopener" aria-label="Ouvrir dans l'app de navigation" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg></a>
         </div>
       </div>
+      <div class="tour-swap-row">
+        <button type="button" class="btn btn-secondary btn-sm btn-swap-tour" aria-label="Inverser chargement et livraison">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v16M7 4 3 8M7 4l4 4M17 20V4M17 20l-4-4M17 20l4-4"/></svg>
+          Inverser
+        </button>
+      </div>
       <div class="field">
         <label data-tt="site_dechargement">Site de déchargement</label>
         <div class="site-row">
@@ -887,6 +898,6 @@
   <!-- ================================================================== Scripts -->
   <script src="/assets/config.js?v=21"></script>
   <script src="/assets/vendor/supabase/supabase.js?v=270"></script>
-  <script type="module" src="/assets/app.js?v=270"></script>
+  <script type="module" src="/assets/app.js?v=280"></script>
 </body>
 </html>

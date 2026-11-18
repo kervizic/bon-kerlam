@@ -923,6 +923,23 @@ export async function rpcSitesPour(chauffeurId, clientId) {
   return live.rpcSitesPour(chauffeurId, clientId);
 }
 
+export async function rpcAdressesChantier(clientId) {
+  if (DEMO) {
+    const tours = (demoDb.tours || []).filter((t) => !t.deleted_at);
+    const lvById = new Map((demoDb.lettres_voiture || []).map((l) => [l.id, l]));
+    const usages = [];
+    for (const t of tours) {
+      const lv = lvById.get(t.lv_id) || {};
+      for (const side of ["chargement", "dechargement"]) {
+        const adr = t[side + "_adresse"];
+        if (adr) usages.push({ adresse: adr, lat: t[side + "_lat"], lon: t[side + "_lon"], client_id: lv.client_id, derniere: t.created_at || new Date().toISOString(), nb: 1 });
+      }
+    }
+    return usages;
+  }
+  return live.rpcAdressesChantier(clientId);
+}
+
 export async function rpcSiteDoublon(lat, lon, rayonM = 100.0) {
   if (DEMO) {
     return demoDb.sites

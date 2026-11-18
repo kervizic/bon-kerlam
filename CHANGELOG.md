@@ -4,6 +4,43 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.28] — 2026-11-18
+
+Adresses de chantier sur les tours (sans saturer la liste des sites), inversion
+chargement/livraison, pré-remplissage.
+
+### Ajouté
+- **Adresse de chantier libre sur un tour** : le chargement/déchargement d'un tour
+  peut être soit un site permanent, soit une **adresse de chantier saisie librement**
+  (texte + GPS), **jamais ajoutée à la liste des sites**. Stockée sur le tour
+  (`tours.chargement_adresse/_lat/_lon`, `dechargement_*`) et reprise telle quelle
+  dans le PDF.
+- **Sélecteur enrichi** (feuille de choix d'un lieu), dans l'ordre : **Chantiers
+  récents du client** (adresses des tours du client sur 30 j, hors sites permanents,
+  dédoublonnées, 5 max — rien à maintenir), puis **Sites** (groupés par société),
+  puis **Nouvelle adresse / Ici**. Pendant la frappe : complétion locale instantanée
+  et tolérante (accents, casse, numéro/rue/ville dans n'importe quel ordre), ordonnée
+  (1) chantiers du même client, (2) autres clients, (3) sites, puis les suggestions
+  **Base Adresse Nationale** (api-adresse.data.gouv.fr) ajoutées ensuite sans faire
+  sauter la liste. Bouton **« Ici »** : position GPS → reverse géocodage BAN. Étoile
+  **« Garder comme site »** : promeut une adresse de chantier en site permanent.
+- **Bouton d'inversion ⇅** chargement/livraison sur chaque tour (comme Google Maps),
+  avec enregistrement automatique.
+- **Pré-remplissage d'un nouveau tour** (serveur, trigger) : chargement = livraison
+  du tour précédent (site **ou** adresse de chantier) ; et si cette livraison était
+  un site permanent, la nouvelle livraison reprend la dernière adresse de chantier du
+  bon (le camion y retourne), sinon laissée vide. Entièrement modifiable, sans message.
+
+### Base de données
+- **0026** : colonnes d'adresse de chantier sur `bon.tours`, vue `api.tours`
+  recréée, trigger `bon.trg_tour_prefill()` étendu, RPC `bon.adresses_chantier`
+  (+ `api.adresses_chantier`). Additive, idempotente, avec down (`supabase/down/0026_down.sql`).
+
+### Modules / tests
+- `front/assets/tour-address.js` (logique pure : complétion ordonnée, chantiers
+  récents, patches inversion/adresse/site) + `tour-address.test.mjs`.
+- `supabase/tests/test_beta28_tour_adresses.py` (colonnes, pré-remplissage, RPC, down).
+
 ## [0.1.0-beta.27] — 2026-11-17
 
 Connexion par passkey (Face ID / Touch ID / clé de sécurité).

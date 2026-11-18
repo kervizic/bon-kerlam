@@ -1543,3 +1543,17 @@ body.qc-lock { position: fixed; left: 0; right: 0; width: 100%; overflow: hidden
 .passkey-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .passkey-name { font-weight: 600; }
 .passkey-date { font-size: 0.85em; }
+
+/* beta.28 : sélecteur d'adresse de chantier sur le tour. */
+.site-picker-actions { display: flex; gap: 8px; margin: 8px 0; }
+.site-picker-actions .btn { flex: 1; }
+.sheet-heading { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); padding: 10px 4px 4px; }
+.sheet-hint { padding: 4px 4px 8px; font-size: 13px; }
+.sheet-item-chantier { display: flex; align-items: stretch; gap: 0; padding: 0; overflow: hidden; }
+.sheet-item-chantier .sheet-item-main { flex: 1; text-align: left; background: none; border: none; padding: 12px; font: inherit; color: inherit; cursor: pointer; }
+.sheet-item-chantier .sheet-item-main span { display: block; color: var(--text-muted); font-size: 12px; }
+.sheet-item-chantier .sheet-item-main:hover { background: var(--bg); }
+.sheet-item-star { flex: 0 0 auto; width: 44px; display: flex; align-items: center; justify-content: center; background: none; border: none; border-left: 1px solid var(--border); color: var(--text-muted); cursor: pointer; }
+.sheet-item-star:hover { color: var(--c-orange); background: var(--bg); }
+.tour-swap-row { display: flex; justify-content: center; margin: 2px 0 6px; }
+.tour-swap-row .btn-swap-tour { gap: 6px; }

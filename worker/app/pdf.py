@@ -229,9 +229,12 @@ def build_context(lv_id: int) -> dict[str, Any]:
         """
         SELECT t.id, t.expediteur, t.destinataire,
                sc.nom AS chargement_site, scs.nom AS chargement_societe,
-               sc.adresse AS chargement_adresse,
+               -- beta.28 : adresse de chantier libre portée par le tour, sinon
+               -- adresse du site permanent. Le site label (chargement_nom) reste
+               -- vide pour une adresse libre -> le template affiche l'adresse seule.
+               COALESCE(t.chargement_adresse, sc.adresse) AS chargement_adresse,
                sd.nom AS dechargement_site, sds.nom AS dechargement_societe,
-               sd.adresse AS dechargement_adresse
+               COALESCE(t.dechargement_adresse, sd.adresse) AS dechargement_adresse
           FROM bon.tours t
           LEFT JOIN bon.sites sc ON sc.id = t.site_chargement_id
           LEFT JOIN bon.site_societes scs ON scs.id = sc.societe_id

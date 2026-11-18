@@ -826,6 +826,14 @@ export async function rpcSitesPour(chauffeurId, clientId) {
   return data || [];
 }
 
+// beta.28 : adresses de chantier déjà utilisées (texte) pour un client, triées
+// même client d'abord puis dernière utilisation. La RLS limite au périmètre visible.
+export async function rpcAdressesChantier(clientId) {
+  const { data, error } = await requireClient().rpc("adresses_chantier", { p_client_id: clientId ?? null });
+  if (error) throw error;
+  return data || [];
+}
+
 export async function rpcSiteDoublon(lat, lon, rayonM = 100.0) {
   const { data, error } = await requireClient().rpc("site_doublon", { p_lat: lat, p_lon: lon, p_rayon_m: rayonM });
   if (error) throw error;

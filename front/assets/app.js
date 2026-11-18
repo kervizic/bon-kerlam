@@ -133,6 +133,7 @@ import {
   reverseAddress,
   rpcPrefill,
   rpcSitesPour,
+  rpcAdressesChantier,
   rpcLvUndo,
   rpcSetDerniereUnite,
   rpcDernieresHeures,
@@ -157,6 +158,10 @@ import { PdfCache, shouldCachePdf, formatGeneratedAt } from "./pdf-cache.js?v=13
 import { statutLabel, lvBadge } from "./status-labels.js?v=21";
 import { groupBySignataire, signatureBatches } from "./signature-group.js?v=232";
 import { swipeActionsFor, attachSwipe, closeOpenSwipe } from "./swipe-actions.js?v=21";
+import {
+  recentChantiers, buildCompletion, swapPatch, addressPatch, sitePatch,
+  endpointLabel, endpointLatLon,
+} from "./tour-address.js?v=280";
 // pdf-viewer.js (et pdf.js) chargés en import DYNAMIQUE à la 1re ouverture (g).
 import { enhanceSelect, refreshCombobox, ensureOption } from "./combobox.js?v=17";
 import { initTooltips } from "./tooltips.js?v=22";
@@ -2085,31 +2090,12 @@ async function renderTourCard(entry) {
 
   const chargementSel = node.querySelector(".f-site-chargement");
   const dechargementSel = node.querySelector(".f-site-dechargement");
-  const navLinks = node.querySelectorAll(".nav-link");
-  const chargementNav = navLinks[0];
-  const dechargementNav = navLinks[1];
-
   const siteOptions = state.refs.sites || [];
   populateSelect(chargementSel, siteOptions, (s) => s.id, (s) => s.nom, "Choisir un site…");
   populateSelect(dechargementSel, siteOptions, (s) => s.id, (s) => s.nom, "Choisir un site…");
-  chargementSel.value = tour.site_chargement_id != null ? String(tour.site_chargement_id) : "";
-  dechargementSel.value = tour.site_dechargement_id != null ? String(tour.site_dechargement_id) : "";
-  updateNavLink(chargementNav, findSiteById(chargementSel.value));
-  updateNavLink(dechargementNav, findSiteById(dechargementSel.value));
 
-  chargementSel.addEventListener("change", () => updateNavLink(chargementNav, findSiteById(chargementSel.value)));
-  dechargementSel.addEventListener("change", () => updateNavLink(dechargementNav, findSiteById(dechargementSel.value)));
-
-  wireAutosaveField(chargementSel, { table: "tours", id: tour.id, field: "site_chargement_id", transform: toIntOrNull });
-  wireAutosaveField(dechargementSel, { table: "tours", id: tour.id, field: "site_dechargement_id", transform: toIntOrNull });
-
-  const pickerBtns = node.querySelectorAll(".btn-site-picker");
-  pickerBtns[0].addEventListener("click", () => openSitePicker(chargementSel));
-  pickerBtns[1].addEventListener("click", () => openSitePicker(dechargementSel));
-
-  // beta.22.1 : sélecteur hiérarchique (sociétés -> adresses) au lieu d'une liste à plat.
-  setupSiteDisplay(chargementSel);
-  setupSiteDisplay(dechargementSel);
+  // beta.28 : extrémités = site permanent OU adresse de chantier libre ; inversion.
+  wireTourEndpoints(node, { tour });
 
   node.querySelector(".btn-delete-tour").addEventListener("click", () => handleDeleteTour(entry, node));
   node.querySelector(".btn-add-ligne").addEventListener("click", () => handleAddLigne(entry, node));
@@ -2118,9 +2104,9 @@ async function renderTourCard(entry) {
   const collapseBtn = node.querySelector(".tour-collapse");
   const summaryEl = node.querySelector(".tour-summary");
   const buildSummary = () => {
-    const chg = findSiteById(chargementSel.value);
-    const dch = findSiteById(dechargementSel.value);
-    const trajet = [chg ? siteGroupedLabel(chg) : null, dch ? siteGroupedLabel(dch) : null]
+    const chg = endpointLabel(tour, "chargement", siteLabelById, "");
+    const dch = endpointLabel(tour, "dechargement", siteLabelById, "");
+    const trajet = [chg || null, dch || null]
       .filter(Boolean).join(" → ") || "Tour vide";
     const q = (entry.lignes || []).reduce((s, l) => s + (parseFloat(String(l.quantite).replace(",", ".")) || 0), 0);
     const unite = (entry.lignes && entry.lignes[0] && entry.lignes[0].unite) || "t";
@@ -2289,25 +2275,9 @@ async function renderDraftTour() {
     }
   };
 
-  const onPickSite = (cssSel) => function () {
-    const v = this.value;
-    if (!v) return;
-    materialize(async (entry, realNode) => {
-      const sel = realNode.querySelector(cssSel);
-      ensureOption(sel, v, (findSiteById(v) || {}).nom || v);
-      sel.value = v;
-      sel.dispatchEvent(new Event("change", { bubbles: true }));
-    });
-  };
-  chargementSel.addEventListener("change", onPickSite(".f-site-chargement"));
-  dechargementSel.addEventListener("change", onPickSite(".f-site-dechargement"));
-
-  // beta.22.1 : sélecteur hiérarchique (sociétés -> adresses).
-  const pickerBtns = node.querySelectorAll(".btn-site-picker");
-  pickerBtns[0].addEventListener("click", () => openSitePicker(chargementSel));
-  pickerBtns[1].addEventListener("click", () => openSitePicker(dechargementSel));
-  setupSiteDisplay(chargementSel);
-  setupSiteDisplay(dechargementSel);
+  // beta.28 : la saisie (site ou adresse de chantier) matérialise le tour au 1er
+  // choix (le brouillon n'est pas persisté tant qu'on n'a rien choisi).
+  wireTourEndpoints(node, { tour: null, materialize });
 
   node.querySelector(".btn-delete-tour").addEventListener("click", () => node.remove());
   node.querySelector(".btn-add-ligne").addEventListener("click", () =>
@@ -4797,49 +4767,156 @@ function siteGroupedLabel(site) {
   return soc ? `${soc.nom} · ${siteAdrLabel(site)}` : (site.nom || "");
 }
 
-// Champ site = bouton d'affichage qui ouvre la feuille hiérarchique (plus de liste
-// à plat). Le <select> (caché) conserve la valeur pour l'autosave et la navigation.
-function setupSiteDisplay(sel) {
-  if (!sel) return;
-  sel.classList.add("is-picker-hidden");
-  let disp = sel.parentNode.querySelector(".site-display");
-  if (!disp) {
-    disp = document.createElement("button");
-    disp.type = "button";
-    disp.className = "site-display";
-    sel.parentNode.insertBefore(disp, sel);
-  }
-  const refresh = () => {
-    const s = findSiteById(sel.value);
-    disp.textContent = s ? siteGroupedLabel(s) : "Choisir un site…";
-    disp.classList.toggle("is-placeholder", !s);
-  };
-  refresh();
-  sel.addEventListener("change", refresh);
-  disp.addEventListener("click", () => openSitePicker(sel));
-}
 
-function pickSite(site) {
-  const target = state.sitePicker && state.sitePicker.target;
-  if (target && site) {
-    ensureOption(target, String(site.id), site.nom);
-    target.value = String(site.id);
-    target.dispatchEvent(new Event("change", { bubbles: true }));
+// ---------------------------------------- beta.28 : adresse de chantier / tour --
+// Cache des adresses de chantier déjà utilisées (RPC adresses_chantier), par client.
+let chantierUsagesCache = null;
+function invalidateChantierCache() { chantierUsagesCache = null; }
+async function loadChantierUsages() {
+  if (chantierUsagesCache) return chantierUsagesCache;
+  try { chantierUsagesCache = await rpcAdressesChantier(currentClientId()); }
+  catch (e) { chantierUsagesCache = []; }
+  return chantierUsagesCache;
+}
+function currentClientId() {
+  const lv = state.lv || {};
+  if (lv.client_id != null) return lv.client_id;
+  if (state.prefillData && state.prefillData.client_id != null) return state.prefillData.client_id;
+  return null;
+}
+function siteLabelById(id) {
+  const s = findSiteById(id);
+  return s ? siteGroupedLabel(s) : null;
+}
+function endpointSelectorFor(which) {
+  return which === "chargement" ? ".f-site-chargement" : ".f-site-dechargement";
+}
+// Garde le <select> caché cohérent (résumé replié, compat) avec la valeur du tour.
+function syncHiddenSelect(node, tour, which) {
+  const sel = node.querySelector(endpointSelectorFor(which));
+  if (!sel) return;
+  const sid = which === "chargement" ? tour.site_chargement_id : tour.site_dechargement_id;
+  if (sid != null) { ensureOption(sel, String(sid), (findSiteById(sid) || {}).nom || String(sid)); sel.value = String(sid); }
+  else sel.value = "";
+}
+// Rafraîchit le bouton d'affichage + le lien de navigation d'une extrémité.
+function refreshEndpoint(node, tour, which) {
+  const sel = node.querySelector(endpointSelectorFor(which));
+  const disp = sel && sel.parentNode.querySelector(".site-display");
+  const navs = node.querySelectorAll(".nav-link");
+  const nav = which === "chargement" ? navs[0] : navs[1];
+  if (disp) {
+    const lbl = endpointLabel(tour, which, siteLabelById, "Choisir…");
+    disp.textContent = lbl;
+    disp.classList.toggle("is-placeholder", lbl === "Choisir…");
   }
+  if (nav) {
+    const ll = endpointLatLon(tour, which, (id) => findSiteById(id));
+    if (ll && ll.lat != null && ll.lon != null) { nav.href = buildNavUrl(ll.lat, ll.lon); nav.hidden = false; }
+    else { nav.hidden = true; nav.removeAttribute("href"); }
+  }
+}
+// Applique un patch (site OU adresse) à une extrémité de tour réel et persiste.
+async function applyTourPatch(node, tour, which, patch) {
+  try { await patchRemote("tours", tour.id, patch); }
+  catch (err) { alert("Enregistrement impossible : " + (err.message || err)); return; }
+  Object.assign(tour, patch);
+  syncHiddenSelect(node, tour, which);
+  refreshEndpoint(node, tour, which);
+  invalidateChantierCache();
   closeSitePicker();
 }
-
-function openSitePicker(targetSelect) {
-  state.sitePicker = { target: targetSelect, level: "societes", societeId: null };
+// Ouvre la feuille de choix pour une extrémité de tour (réel ou brouillon).
+async function openTourPicker({ node, tour, which, materialize }) {
+  const apply = async (patch) => {
+    if (tour && tour.id) { await applyTourPatch(node, tour, which, patch); return; }
+    if (materialize) await materialize(async (entry, realNode) => applyTourPatch(realNode, entry.tour, which, patch));
+  };
+  state.sitePicker = { which, clientId: currentClientId(), apply };
   const sheet = document.getElementById("site-picker-sheet");
   sheet.hidden = false;
-  document.getElementById("site-picker-search").value = "";
+  const search = document.getElementById("site-picker-search");
+  search.value = "";
   const nearBtn = document.getElementById("btn-site-picker-near");
-  if (nearBtn) {
-    nearBtn.setAttribute("aria-pressed", state.nearPos ? "true" : "false");
-    nearBtn.onclick = toggleNearMe;
-  }
+  if (nearBtn) { nearBtn.setAttribute("aria-pressed", state.nearPos ? "true" : "false"); nearBtn.onclick = toggleNearMe; }
+  const hereBtn = document.getElementById("btn-site-picker-here");
+  if (hereBtn) hereBtn.onclick = pickHere;
+  await loadChantierUsages();
   renderSitePickerList("");
+  try { search.focus(); } catch (e) { /* ignore */ }
+}
+// Choix d'un site permanent -> efface l'adresse de chantier de ce côté.
+function pickSiteForTour(site) {
+  const sp = state.sitePicker;
+  if (sp && sp.apply && site) sp.apply(sitePatch(sp.which, site.id));
+}
+// Choix d'une adresse de chantier (chantier récent, complétion locale ou BAN).
+function pickChantierAddress(addr) {
+  const sp = state.sitePicker;
+  if (sp && sp.apply && addr && addr.adresse) sp.apply(addressPatch(sp.which, addr));
+}
+// Bouton « Ici » : position GPS -> reverse géocodage BAN -> adresse de chantier.
+function pickHere() {
+  if (!navigator.geolocation) { showToast("Géolocalisation indisponible sur cet appareil."); return; }
+  const btn = document.getElementById("btn-site-picker-here");
+  if (btn) btn.disabled = true;
+  navigator.geolocation.getCurrentPosition(
+    async (pos) => {
+      try {
+        const r = await reverseAddress(pos.coords.latitude, pos.coords.longitude);
+        if (r && r.label) pickChantierAddress({ adresse: r.label, lat: r.lat, lon: r.lon });
+        else showToast("Adresse introuvable à cette position.");
+      } catch (e) { showToast("Adresse introuvable à cette position."); }
+      finally { if (btn) btn.disabled = false; }
+    },
+    () => { if (btn) btn.disabled = false; showToast("Position non autorisée."); },
+    { enableHighAccuracy: true, timeout: 10000 },
+  );
+}
+// Étoile « Garder comme site » : promeut une adresse de chantier en site permanent.
+async function keepAsSite(adresse, lat, lon) {
+  const clientId = currentClientId();
+  try {
+    await createSite(clientId != null
+      ? { nom: adresse, adresse, lat, lon, portee: "chantier", client_id: clientId, statut: "actif" }
+      : { nom: adresse, adresse, lat, lon, portee: "commun", statut: "actif" });
+    await loadRefs();
+    showToast("Adresse gardée comme site.");
+    renderSitePickerList(document.getElementById("site-picker-search").value || "");
+  } catch (err) {
+    alert("Impossible de garder comme site : " + (err.message || err));
+  }
+}
+// Inversion chargement <-> livraison (tour réel ou brouillon), avec autosave.
+async function handleSwapTour(node, tour, materialize) {
+  const doSwap = async (realNode, realTour) => {
+    const patch = swapPatch(realTour);
+    try { await patchRemote("tours", realTour.id, patch); }
+    catch (e) { alert("Inversion impossible : " + (e.message || e)); return; }
+    Object.assign(realTour, patch);
+    for (const w of ["chargement", "dechargement"]) { syncHiddenSelect(realNode, realTour, w); refreshEndpoint(realNode, realTour, w); }
+    invalidateChantierCache();
+  };
+  if (tour && tour.id) await doSwap(node, tour);
+  else if (materialize) await materialize(async (entry, realNode) => doSwap(realNode, entry.tour));
+}
+// Câble les deux extrémités + le bouton d'inversion d'une carte de tour.
+function wireTourEndpoints(node, { tour, materialize }) {
+  for (const which of ["chargement", "dechargement"]) {
+    const sel = node.querySelector(endpointSelectorFor(which));
+    if (!sel) continue;
+    sel.classList.add("is-picker-hidden");
+    let disp = sel.parentNode.querySelector(".site-display");
+    if (!disp) { disp = document.createElement("button"); disp.type = "button"; disp.className = "site-display"; sel.parentNode.insertBefore(disp, sel); }
+    const open = () => openTourPicker({ node, tour, which, materialize });
+    disp.onclick = open;
+    const pickerBtn = node.querySelectorAll(".btn-site-picker")[which === "chargement" ? 0 : 1];
+    if (pickerBtn) pickerBtn.onclick = open;
+    if (tour) refreshEndpoint(node, tour, which);
+    else { disp.textContent = "Choisir…"; disp.classList.add("is-placeholder"); }
+  }
+  const swapBtn = node.querySelector(".btn-swap-tour");
+  if (swapBtn) swapBtn.onclick = () => handleSwapTour(node, tour, materialize);
 }
 // « Près de moi » : tri par distance via la géolocalisation, seulement avec
 // permission. Sans permission, l'appli fonctionne normalement.
@@ -4882,6 +4959,8 @@ function sortSiteAdresses(arr) {
   return out;
 }
 
+const STAR_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14l-5-4.87 6.91-1.01L12 2z"/></svg>';
+
 function siteSheetItem(site, { grouped }) {
   const btn = document.createElement("button");
   btn.type = "button";
@@ -4889,52 +4968,56 @@ function siteSheetItem(site, { grouped }) {
   const primary = grouped ? siteGroupedLabel(site) : siteAdrLabel(site);
   const dist = (site._dist != null && isFinite(site._dist)) ? ` · ${formatDistance(site._dist)}` : "";
   btn.innerHTML = `${escapeHtml(primary)}<span>${escapeHtml(site.adresse || "")}${escapeHtml(dist)}</span>`;
-  btn.addEventListener("click", () => pickSite(site));
+  btn.addEventListener("click", () => pickSiteForTour(site));
   return btn;
 }
 
-async function renderSitePickerList(query) {
-  const listEl = document.getElementById("site-picker-list");
-  const titleEl = document.getElementById("site-picker-title");
-  const sp = state.sitePicker || { level: "societes", societeId: null };
-  const needle = (query || "").trim().toLowerCase();
+function sheetHeading(text) {
+  const h = document.createElement("div");
+  h.className = "sheet-heading";
+  h.textContent = text;
+  return h;
+}
+
+// Ligne d'adresse de chantier : touche = choisir ; étoile = garder comme site.
+function chantierItem(adresse, lat, lon, { star = true, sub = "" } = {}) {
+  const row = document.createElement("div");
+  row.className = "sheet-item sheet-item-chantier";
+  const main = document.createElement("button");
+  main.type = "button";
+  main.className = "sheet-item-main";
+  main.innerHTML = `${escapeHtml(adresse)}${sub ? `<span>${escapeHtml(sub)}</span>` : ""}`;
+  main.addEventListener("click", () => pickChantierAddress({ adresse, lat, lon }));
+  row.appendChild(main);
+  if (star) {
+    const s = document.createElement("button");
+    s.type = "button";
+    s.className = "sheet-item-star";
+    s.setAttribute("aria-label", "Garder comme site");
+    s.innerHTML = STAR_SVG;
+    s.addEventListener("click", (e) => { e.stopPropagation(); keepAsSite(adresse, lat, lon); });
+    row.appendChild(s);
+  }
+  return row;
+}
+
+// Sites permanents groupés par société (comportement d'origine, inchangé).
+function renderSitesGroupedInto(listEl) {
+  const sp = state.sitePicker || {};
   const societes = (state.refs.siteSocietes || []).filter((s) => s.actif !== false);
   const sites = (state.refs.sites || []).filter((s) => s.statut !== "termine" && !s.merged_into_id);
-  listEl.innerHTML = "";
-
-  // --- Recherche : à plat sur sociétés ET adresses ---
-  if (needle) {
-    titleEl.textContent = "Choisir un site";
-    const matches = sites.filter((s) => {
-      const soc = siteSocieteOf(s);
-      return `${soc ? soc.nom + " " : ""}${s.nom} ${s.adresse || ""}`.toLowerCase().includes(needle);
-    });
-    for (const s of sortSiteAdresses(matches)) listEl.appendChild(siteSheetItem(s, { grouped: true }));
-    if (!matches.length) listEl.innerHTML = '<p class="entity-empty">Aucun site trouvé.</p>';
-    return;
-  }
-
-  // --- Niveau ADRESSES d'une société ---
-  if (sp.level === "adresses" && sp.societeId != null) {
-    const soc = societes.find((s) => String(s.id) === String(sp.societeId));
-    titleEl.textContent = soc ? soc.nom : "Adresses";
+  if (sp.socId != null) {
+    const soc = societes.find((s) => String(s.id) === String(sp.socId));
     const back = document.createElement("button");
     back.type = "button";
     back.className = "sheet-item sheet-back";
     back.textContent = "‹ Sociétés";
-    back.addEventListener("click", () => {
-      sp.level = "societes"; sp.societeId = null;
-      document.getElementById("site-picker-search").value = "";
-      renderSitePickerList("");
-    });
+    back.addEventListener("click", () => { sp.socId = null; renderSitePickerList(""); });
     listEl.appendChild(back);
-    const adr = sortSiteAdresses(sites.filter((s) => String(s.societe_id) === String(sp.societeId)));
+    const adr = sortSiteAdresses(sites.filter((s) => String(s.societe_id) === String(sp.socId)));
     for (const s of adr) listEl.appendChild(siteSheetItem(s, { grouped: false }));
     return;
   }
-
-  // --- Niveau SOCIÉTÉS (défaut) ---
-  titleEl.textContent = "Choisir un site";
   const bySoc = new Map();
   for (const s of sites) {
     const k = s.societe_id != null ? String(s.societe_id) : null;
@@ -4945,30 +5028,89 @@ async function renderSitePickerList(query) {
     .filter((soc) => (bySoc.get(String(soc.id)) || []).length > 0)
     .map((soc) => ({ soc, items: bySoc.get(String(soc.id)) }))
     .sort((a, b) => a.soc.nom.localeCompare(b.soc.nom, "fr"));
-
+  if (socEntries.length || (bySoc.get(null) || []).length) listEl.appendChild(sheetHeading("Sites"));
   for (const { soc, items } of socEntries) {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "sheet-item";
     if (items.length === 1) {
       btn.innerHTML = `${escapeHtml(soc.nom)}<span>${escapeHtml(items[0].adresse || siteAdrLabel(items[0]))}</span>`;
-      btn.addEventListener("click", () => pickSite(items[0]));
+      btn.addEventListener("click", () => pickSiteForTour(items[0]));
     } else {
       btn.classList.add("sheet-item-group");
-      btn.innerHTML = `${escapeHtml(soc.nom)}<span>${items.length} adresses</span>`
-        + `<span class="sheet-chevron" aria-hidden="true">›</span>`;
-      btn.addEventListener("click", () => {
-        sp.level = "adresses"; sp.societeId = soc.id;
-        renderSitePickerList("");
-      });
+      btn.innerHTML = `${escapeHtml(soc.nom)}<span>${items.length} adresses</span><span class="sheet-chevron" aria-hidden="true">›</span>`;
+      btn.addEventListener("click", () => { sp.socId = soc.id; renderSitePickerList(""); });
     }
     listEl.appendChild(btn);
   }
-  // Sites autonomes (sans société) : choix direct.
-  for (const s of sortSiteAdresses(bySoc.get(null) || [])) {
-    listEl.appendChild(siteSheetItem(s, { grouped: false }));
+  for (const s of sortSiteAdresses(bySoc.get(null) || [])) listEl.appendChild(siteSheetItem(s, { grouped: false }));
+}
+
+// Débounce des suggestions BAN (ne font jamais sauter la liste : ajoutées en fin).
+let banTimer = null;
+function requestBanSuggestions(query, cb) {
+  if (banTimer) clearTimeout(banTimer);
+  banTimer = setTimeout(async () => {
+    try { const r = await searchAddress(query); cb(r || []); }
+    catch (e) { /* réseau indispo : complétion locale suffit */ }
+  }, 300);
+}
+
+async function renderSitePickerList(query) {
+  const listEl = document.getElementById("site-picker-list");
+  const titleEl = document.getElementById("site-picker-title");
+  const sp = state.sitePicker || {};
+  const needle = (query || "").trim();
+  const sites = (state.refs.sites || []).filter((s) => s.statut !== "termine" && !s.merged_into_id);
+  const usages = chantierUsagesCache || [];
+  listEl.innerHTML = "";
+  titleEl.textContent = sp.which === "dechargement" ? "Lieu de déchargement" : "Lieu de chargement";
+
+  // --- Frappe : complétion locale instantanée, BAN ajoutée ensuite ---
+  if (needle) {
+    // Toujours pouvoir valider le texte saisi tel quel (adresse de chantier libre).
+    listEl.appendChild(chantierItem(needle, null, null, { star: false, sub: "Utiliser cette adresse" }));
+    const items = buildCompletion({ query: needle, usages, clientId: sp.clientId, sites, siteLabel: siteGroupedLabel, banResults: [] });
+    renderCompletionItems(listEl, items);
+    requestBanSuggestions(needle, (ban) => {
+      const search = document.getElementById("site-picker-search");
+      if (!search || (search.value || "").trim() !== needle) return; // requête périmée
+      const withBan = buildCompletion({ query: needle, usages, clientId: sp.clientId, sites, siteLabel: siteGroupedLabel, banResults: ban });
+      const already = new Set(items.map((it) => it.kind === "site" ? "site:" + it.site.id : "adr:" + it.adresse.toLowerCase()));
+      const newBan = withBan.filter((it) => it.kind === "ban" && !already.has("adr:" + it.adresse.toLowerCase()));
+      if (newBan.length) { listEl.appendChild(sheetHeading("Adresses")); for (const it of newBan) listEl.appendChild(chantierItem(it.adresse, it.lat, it.lon, { star: true })); }
+    });
+    return;
   }
-  if (!listEl.children.length) listEl.innerHTML = '<p class="entity-empty">Aucun site.</p>';
+
+  // --- Sans frappe : chantiers récents du client, puis sites, puis nouvelle adresse ---
+  const recents = recentChantiers(usages, sp.clientId, Date.now(), { days: 30, max: 5 });
+  if (recents.length) {
+    listEl.appendChild(sheetHeading("Chantiers récents"));
+    for (const u of recents) listEl.appendChild(chantierItem(u.adresse, u.lat, u.lon, { star: true }));
+  }
+  renderSitesGroupedInto(listEl);
+  if (sp.socId == null) {
+    listEl.appendChild(sheetHeading("Nouvelle adresse"));
+    const hint = document.createElement("p");
+    hint.className = "muted sheet-hint";
+    hint.textContent = "Tapez une adresse ci-dessus, ou touchez « Ici » pour votre position.";
+    listEl.appendChild(hint);
+  }
+  if (!listEl.children.length) listEl.innerHTML = '<p class="entity-empty">Tapez une adresse ou touchez « Ici ».</p>';
+}
+
+function renderCompletionItems(listEl, items) {
+  const chantiers = items.filter((it) => it.type === "chantier");
+  const siteItems = items.filter((it) => it.kind === "site");
+  if (chantiers.length) {
+    listEl.appendChild(sheetHeading("Chantiers"));
+    for (const it of chantiers) listEl.appendChild(chantierItem(it.adresse, it.lat, it.lon, { star: true }));
+  }
+  if (siteItems.length) {
+    listEl.appendChild(sheetHeading("Sites"));
+    for (const it of siteItems) listEl.appendChild(siteSheetItem(it.site, { grouped: true }));
+  }
 }
 
 /* ================================================================ Prestations == */
@@ -5266,20 +5408,6 @@ function wireStaticUI() {
     if (e.target.id === "site-picker-sheet") closeSitePicker();
   });
   wireFilterInput(document.getElementById("site-picker-search"), (q) => renderSitePickerList(q));
-  document.getElementById("btn-site-picker-new").addEventListener("click", async () => {
-    try {
-      const site = await createSite({ nom: "Nouveau site", portee: "commun", statut: "actif" });
-      state.refs.sites.push(site);
-      if (state.sitePickerTarget) {
-        state.sitePickerTarget.value = String(site.id);
-        state.sitePickerTarget.dispatchEvent(new Event("change"));
-      }
-      closeSitePicker();
-      navigate("sites");
-    } catch (e) {
-      alert("Création impossible : " + (e.message || e));
-    }
-  });
 
   // --------------------------------------------------------------- Planning : envoi
   document.getElementById("btn-envoi-groupe").addEventListener("click", async () => {
@@ -5701,8 +5829,9 @@ async function openDemoScreen(name) {
   }
   if (name === "site-picker") {
     await navigate("today");
-    const firstPicker = document.querySelector("#tours-list .f-site-chargement");
-    openSitePicker(firstPicker || document.getElementById("f-camion"));
+    // Ouvre le nouveau sélecteur (chargement du 1er tour affiché) pour la capture.
+    const disp = document.querySelector("#tours-list .tour-card .site-display");
+    if (disp) disp.click();
     return;
   }
   await navigate(map[name] || name);
