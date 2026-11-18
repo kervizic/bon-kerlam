@@ -160,8 +160,8 @@ import { groupBySignataire, signatureBatches } from "./signature-group.js?v=232"
 import { swipeActionsFor, attachSwipe, closeOpenSwipe } from "./swipe-actions.js?v=21";
 import {
   recentChantiers, buildCompletion, swapPatch, addressPatch, sitePatch,
-  endpointLabel, endpointLatLon,
-} from "./tour-address.js?v=280";
+  endpointLabel, endpointLatLon, coordsForText,
+} from "./tour-address.js?v=291";
 // pdf-viewer.js (et pdf.js) chargés en import DYNAMIQUE à la 1re ouverture (g).
 import { enhanceSelect, refreshCombobox, ensureOption } from "./combobox.js?v=17";
 import { initTooltips } from "./tooltips.js?v=22";
@@ -1188,17 +1188,16 @@ function isValidEmail(s) {
  * garde son max-height 85vh). */
 let _qcScrollY = 0;
 
-function attachQuickCreateViewport(sheet) {
-  // Verrou de défilement de la PAGE : mémorise la position puis fige le body, pour
-  // qu'iOS ne fasse plus défiler la lettre derrière la fiche au focus d'un champ.
+// beta.29.1 : generic — une feuille plein écran qui occupe EXACTEMENT la fenêtre
+// visuelle (visualViewport), au-dessus du clavier iOS, avec verrou de défilement de
+// la page. Réutilisé par la fiche rapide ET la feuille de choix d'adresse/site.
+function attachViewportSheet(sheet) {
+  if (!sheet || sheet._vvApply) return;
   _qcScrollY = window.scrollY || window.pageYOffset || 0;
   document.body.style.top = `-${_qcScrollY}px`;
   document.body.classList.add("qc-lock");
-
   const vv = window.visualViewport;
   const apply = () => {
-    // La fiche occupe EXACTEMENT la fenêtre visuelle (sous la barre d'état, au-dessus
-    // du clavier) : top = offsetTop, height = height, suivis sur resize/scroll.
     sheet.style.position = "fixed";
     sheet.style.left = "0";
     sheet.style.width = "100%";
@@ -1212,28 +1211,51 @@ function attachQuickCreateViewport(sheet) {
     }
   };
   apply();
-  sheet._qcVvApply = apply;
+  sheet._vvApply = apply;
   if (vv) {
     vv.addEventListener("resize", apply);
     vv.addEventListener("scroll", apply);
   }
 }
 
-function detachQuickCreateViewport(sheet) {
+function detachViewportSheet(sheet) {
+  if (!sheet) return;
   const vv = window.visualViewport;
-  if (vv && sheet._qcVvApply) {
-    vv.removeEventListener("resize", sheet._qcVvApply);
-    vv.removeEventListener("scroll", sheet._qcVvApply);
+  if (vv && sheet._vvApply) {
+    vv.removeEventListener("resize", sheet._vvApply);
+    vv.removeEventListener("scroll", sheet._vvApply);
   }
-  sheet._qcVvApply = null;
-  // Réinitialise les styles inline posés par apply().
+  sheet._vvApply = null;
   for (const p of ["position", "left", "width", "top", "height", "bottom"]) sheet.style[p] = "";
-  // Libère le verrou de défilement et restaure la position de la page (idempotent).
   if (document.body.classList.contains("qc-lock")) {
     document.body.classList.remove("qc-lock");
     document.body.style.top = "";
     window.scrollTo(0, _qcScrollY);
   }
+}
+
+// La fiche rapide délègue au helper générique.
+function attachQuickCreateViewport(sheet) { attachViewportSheet(sheet); }
+function detachQuickCreateViewport(sheet) { detachViewportSheet(sheet); }
+
+// beta.29.1 (règle générale mobile) : au focus d'un champ de la lettre, on l'amène
+// EN HAUT de la zone visible (au-dessus du clavier) via visualViewport. Les feuilles
+// plein écran (choix de lieu, fiche rapide) gèrent elles-mêmes leur disposition.
+function wireActiveFieldIntoView() {
+  if (!window.visualViewport) return;
+  const bring = (el) => setTimeout(() => {
+    try {
+      const vv = window.visualViewport;
+      const dy = el.getBoundingClientRect().top - (vv.offsetTop + 8);
+      if (Math.abs(dy) > 24) window.scrollBy({ top: dy, behavior: "smooth" });
+    } catch (e) { /* ignore */ }
+  }, 280);
+  document.addEventListener("focusin", (e) => {
+    const el = e.target;
+    if (!el || (el.closest && el.closest(".sheet-overlay-fs, #quick-create-sheet"))) return;
+    const tag = el.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || (el.classList && el.classList.contains("cb-input"))) bring(el);
+  });
 }
 
 function refreshProjetContactOptions() {
@@ -4885,28 +4907,51 @@ async function openTourPicker({ node, tour, which, materialize }) {
     if (tour && tour.id) { await applyTourPatch(node, tour, which, patch); return; }
     if (materialize) await materialize(async (entry, realNode) => applyTourPatch(realNode, entry.tour, which, patch));
   };
-  state.sitePicker = { which, clientId: currentClientId(), apply };
+  // beta.29.1 : sources de coordonnées (GPS « Ici », BAN, adresse déjà posée) pour
+  // conserver le GPS d'une adresse éditée tant que c'est le même lieu.
+  const coordSources = [];
+  const curAddr = tour ? (which === "chargement" ? tour.chargement_adresse : tour.dechargement_adresse) : null;
+  const curLat = tour ? (which === "chargement" ? tour.chargement_lat : tour.dechargement_lat) : null;
+  const curLon = tour ? (which === "chargement" ? tour.chargement_lon : tour.dechargement_lon) : null;
+  if (curAddr && curLat != null && curLon != null) coordSources.push({ adresse: curAddr, lat: curLat, lon: curLon });
+  state.sitePicker = { which, clientId: currentClientId(), apply, coordSources };
   const sheet = document.getElementById("site-picker-sheet");
   sheet.hidden = false;
+  attachViewportSheet(sheet.querySelector(".sheet-panel") || sheet); // plein écran clavier-aware (B2)
   const search = document.getElementById("site-picker-search");
-  search.value = "";
+  // Adresse de chantier déjà posée -> pré-remplie et MODIFIABLE (curseur en fin).
+  search.value = curAddr || "";
   const nearBtn = document.getElementById("btn-site-picker-near");
   if (nearBtn) { nearBtn.setAttribute("aria-pressed", state.nearPos ? "true" : "false"); nearBtn.onclick = toggleNearMe; }
   const hereBtn = document.getElementById("btn-site-picker-here");
   if (hereBtn) hereBtn.onclick = pickHere;
   await loadChantierUsages();
-  renderSitePickerList("");
-  try { search.focus(); } catch (e) { /* ignore */ }
+  // Sources de coordonnées = adresses de chantier déjà utilisées (avec GPS).
+  for (const u of chantierUsagesCache || []) {
+    if (u.adresse && u.lat != null && u.lon != null) coordSources.push({ adresse: u.adresse, lat: u.lat, lon: u.lon });
+  }
+  renderSitePickerList(search.value);
+  // Focus SANS forcer le clavier à la réouverture d'une adresse existante : on
+  // place le curseur en fin pour permettre l'édition.
+  try { search.focus(); const n = search.value.length; search.setSelectionRange(n, n); } catch (e) { /* ignore */ }
+  updateSearchClearBtn();
 }
 // Choix d'un site permanent -> efface l'adresse de chantier de ce côté.
 function pickSiteForTour(site) {
   const sp = state.sitePicker;
   if (sp && sp.apply && site) sp.apply(sitePatch(sp.which, site.id));
 }
-// Choix d'une adresse de chantier (chantier récent, complétion locale ou BAN).
+// Choix d'une adresse de chantier. Si les coordonnées ne sont pas fournies (texte
+// saisi/édité), on tente de récupérer le GPS d'une source connue au même lieu.
 function pickChantierAddress(addr) {
   const sp = state.sitePicker;
-  if (sp && sp.apply && addr && addr.adresse) sp.apply(addressPatch(sp.which, addr));
+  if (!sp || !sp.apply || !addr || !addr.adresse) return;
+  let { lat, lon } = addr;
+  if (lat == null || lon == null) {
+    const c = coordsForText(addr.adresse, sp.coordSources || []);
+    if (c) { lat = c.lat; lon = c.lon; }
+  }
+  sp.apply(addressPatch(sp.which, { adresse: addr.adresse, lat, lon }));
 }
 // Bouton « Ici » : position GPS -> reverse géocodage BAN -> adresse de chantier.
 function pickHere() {
@@ -4917,8 +4962,22 @@ function pickHere() {
     async (pos) => {
       try {
         const r = await reverseAddress(pos.coords.latitude, pos.coords.longitude);
-        if (r && r.label) pickChantierAddress({ adresse: r.label, lat: r.lat, lon: r.lon });
-        else showToast("Adresse introuvable à cette position.");
+        if (r && r.label) {
+          // beta.29.1 : « Ici » MET l'adresse trouvée dans le champ (modifiable),
+          // SANS valider. Les coordonnées sont mémorisées (source) pour être
+          // conservées si l'utilisateur ne change pas de lieu.
+          const sp = state.sitePicker;
+          if (sp) (sp.coordSources = sp.coordSources || []).push({ adresse: r.label, lat: r.lat, lon: r.lon });
+          const search = document.getElementById("site-picker-search");
+          if (search) {
+            search.value = r.label;
+            renderSitePickerList(search.value);
+            updateSearchClearBtn();
+            try { search.focus(); const n = search.value.length; search.setSelectionRange(n, n); } catch (e) { /* ignore */ }
+          }
+        } else {
+          showToast("Adresse introuvable à cette position.");
+        }
       } catch (e) { showToast("Adresse introuvable à cette position."); }
       finally { if (btn) btn.disabled = false; }
     },
@@ -4989,8 +5048,19 @@ async function toggleNearMe() {
   );
 }
 function closeSitePicker() {
-  document.getElementById("site-picker-sheet").hidden = true;
+  const sheet = document.getElementById("site-picker-sheet");
+  const search = document.getElementById("site-picker-search");
+  if (search) { try { search.blur(); } catch (e) { /* ignore */ } }
+  detachViewportSheet(sheet.querySelector(".sheet-panel") || sheet);
+  sheet.hidden = true;
   state.sitePicker = null;
+}
+
+// Affiche la croix ⓧ d'effacement seulement s'il y a du texte dans la recherche.
+function updateSearchClearBtn() {
+  const btn = document.getElementById("btn-site-picker-clear");
+  const search = document.getElementById("site-picker-search");
+  if (btn && search) btn.hidden = !search.value;
 }
 // Tri d'adresses : « Près de moi » si géoloc, sinon alphabétique ; la dernière
 // adresse utilisée remonte en tête.
@@ -5131,7 +5201,14 @@ async function renderSitePickerList(query) {
       const withBan = buildCompletion({ query: needle, usages, clientId: sp.clientId, sites, siteLabel: siteGroupedLabel, banResults: ban });
       const already = new Set(items.map((it) => it.kind === "site" ? "site:" + it.site.id : "adr:" + it.adresse.toLowerCase()));
       const newBan = withBan.filter((it) => it.kind === "ban" && !already.has("adr:" + it.adresse.toLowerCase()));
-      if (newBan.length) { listEl.appendChild(sheetHeading("Adresses")); for (const it of newBan) listEl.appendChild(chantierItem(it.adresse, it.lat, it.lon, { star: true })); }
+      if (newBan.length) {
+        listEl.appendChild(sheetHeading("Adresses"));
+        const spv = state.sitePicker;
+        for (const it of newBan) {
+          if (spv && it.lat != null && it.lon != null) (spv.coordSources = spv.coordSources || []).push({ adresse: it.adresse, lat: it.lat, lon: it.lon });
+          listEl.appendChild(chantierItem(it.adresse, it.lat, it.lon, { star: true }));
+        }
+      }
     });
     return;
   }
@@ -5465,12 +5542,36 @@ function wireStaticUI() {
     if (e.target.id === "quick-create-sheet") closeQuickCreate();
   });
 
-  // -------------------------------------------------------- Feuille « choix de site »
-  document.getElementById("btn-site-picker-close").addEventListener("click", closeSitePicker);
+  // ----------------------------------- Feuille « choix de lieu » (beta.29.1, mobile)
+  // Flèche ‹ à gauche = ferme la feuille + le clavier SANS rien changer (Google Maps).
+  document.getElementById("btn-site-picker-back").addEventListener("click", closeSitePicker);
   document.getElementById("site-picker-sheet").addEventListener("click", (e) => {
     if (e.target.id === "site-picker-sheet") closeSitePicker();
   });
-  wireFilterInput(document.getElementById("site-picker-search"), (q) => renderSitePickerList(q));
+  const spSearch = document.getElementById("site-picker-search");
+  wireFilterInput(spSearch, (q) => { renderSitePickerList(q); updateSearchClearBtn(); });
+  spSearch.addEventListener("input", updateSearchClearBtn);
+  // Touche OK / Entrée = ferme seulement le clavier (la feuille et la liste restent).
+  spSearch.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); spSearch.blur(); } });
+  // Croix ⓧ dans le champ = efface la recherche ; liste et clavier restent.
+  document.getElementById("btn-site-picker-clear").addEventListener("click", () => {
+    spSearch.value = "";
+    renderSitePickerList("");
+    updateSearchClearBtn();
+    try { spSearch.focus(); } catch (e) { /* ignore */ }
+  });
+  // Faire défiler la liste = ferme seulement le clavier (toucher le champ le rouvre).
+  let spBlurredOnScroll = false;
+  const spList = document.getElementById("site-picker-list");
+  spList.addEventListener("touchmove", () => {
+    if (!spBlurredOnScroll && document.activeElement === spSearch) { spSearch.blur(); spBlurredOnScroll = true; }
+  }, { passive: true });
+  spList.addEventListener("scroll", () => {
+    if (!spBlurredOnScroll && document.activeElement === spSearch) { spSearch.blur(); spBlurredOnScroll = true; }
+  }, { passive: true });
+  spSearch.addEventListener("focus", () => { spBlurredOnScroll = false; });
+
+  wireActiveFieldIntoView();
 
   // --------------------------------------------------------------- Planning : envoi
   document.getElementById("btn-envoi-groupe").addEventListener("click", async () => {

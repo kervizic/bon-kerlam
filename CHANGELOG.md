@@ -4,6 +4,33 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.29.1] — 2026-11-18
+
+Adresses de chantier modifiables et sélecteur de lieu plein écran clavier-aware
+(front uniquement).
+
+### Changé
+- **« Ici » met l'adresse dans le champ, modifiable** : le bouton « Ici » (GPS +
+  reverse BAN) remplit désormais le champ de recherche avec l'adresse trouvée, curseur
+  en fin, **sans valider** — on peut la corriger avant de choisir. Une adresse de
+  chantier déjà posée sur un tour est **pré-remplie et modifiable** en rouvrant le
+  sélecteur. Le GPS est conservé si l'édition reste le même lieu (même numéro + code
+  postal ou texte identique), **effacé** si on vise une autre rue/ville.
+- **Sélecteur de lieu plein écran, clavier-aware (mobile)** : feuille plein écran, barre
+  de recherche épinglée en haut (liste qui défile dessous), hauteur calée sur
+  `visualViewport` (suivi resize/scroll, au-dessus du clavier iOS), `overscroll-behavior:
+  contain`, barres de navigation masquées. Commandes façon Google Maps : flèche ‹ à
+  gauche = ferme feuille + clavier sans rien changer ; croix ⓧ dans le champ (visible
+  seulement s'il y a du texte) = efface la recherche (liste + clavier restent) ; défiler
+  la liste ou touche OK = ferme seulement le clavier ; choisir un élément = ferme tout.
+- **Règle générale mobile** : au focus d'un champ de la lettre, il est amené au-dessus
+  du clavier (`visualViewport`) ; `meta viewport interactive-widget=resizes-content`
+  (Android Chrome). Jamais de champ caché derrière le clavier.
+
+### Modules / tests
+- `tour-address.js` : `coordsForText` (conservation/effacement du GPS après édition)
+  + tests. Helper `attachViewportSheet` généralisé (partagé fiche rapide / sélecteur).
+
 ## [0.1.0-beta.29] — 2026-11-18
 
 Fiabilité de la signature : rafraîchissement, archivage, anti-renvoi, nom imprimé,

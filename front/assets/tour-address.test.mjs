@@ -3,8 +3,24 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   normAddr, matchesTokens, recentChantiers, buildCompletion,
-  swapPatch, addressPatch, sitePatch, endpointLabel, endpointLatLon,
+  swapPatch, addressPatch, sitePatch, endpointLabel, endpointLatLon, coordsForText,
 } from "./tour-address.js";
+
+test("coordsForText : garde le GPS si identique ou modif mineure, l'efface sinon", () => {
+  const sources = [{ adresse: "18 rue du Chantier, 77400 Lagny-sur-Marne", lat: 48.87, lon: 2.70 }];
+  // identique (casse/espaces) -> garde
+  assert.deepEqual(coordsForText("18 Rue du Chantier, 77400 Lagny-sur-Marne", sources), { lat: 48.87, lon: 2.70 });
+  // modif mineure (même numéro + code postal, rue corrigée) -> garde
+  assert.deepEqual(coordsForText("18 rue des Chantiers 77400 Lagny", sources), { lat: 48.87, lon: 2.70 });
+  // autre numéro -> efface
+  assert.equal(coordsForText("42 rue du Chantier, 77400 Lagny", sources), null);
+  // autre ville (code postal différent) -> efface
+  assert.equal(coordsForText("18 rue du Chantier, 75011 Paris", sources), null);
+  // texte vide -> null
+  assert.equal(coordsForText("", sources), null);
+  // source sans coords -> null
+  assert.equal(coordsForText("x", [{ adresse: "x" }]), null);
+});
 
 test("normAddr : accents, casse, ponctuation", () => {
   assert.equal(normAddr("12 Rue de l'Église, 77400 Lagny"), "12 rue de l eglise 77400 lagny");

@@ -1559,3 +1559,23 @@ body.qc-lock { position: fixed; left: 0; right: 0; width: 100%; overflow: hidden
 .sheet-item-star:hover { color: var(--c-orange); background: var(--bg); }
 .tour-swap-row { display: flex; justify-content: center; margin: 2px 0 6px; }
 .tour-swap-row .btn-swap-tour { gap: 6px; }
+
+/* beta.29.1 : feuille de choix de lieu PLEIN ÉCRAN, clavier-aware (mobile). La
+   hauteur est pilotée par visualViewport (app.js attachViewportSheet). */
+.sheet-overlay-fs { align-items: stretch; background: var(--surface); }
+.sheet-overlay-fs .sheet-panel {
+  max-width: none; max-height: none; width: 100%;
+  border-radius: 0; padding: 0; padding-bottom: 0;
+  display: flex; flex-direction: column;
+}
+.site-picker-searchbar { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--border); flex: 0 0 auto; }
+.site-picker-back { flex: 0 0 auto; }
+.site-picker-field { position: relative; flex: 1 1 auto; display: flex; align-items: center; min-width: 0; }
+.site-picker-field .filter-input { width: 100%; padding-right: 38px; margin: 0; }
+.site-picker-clear { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-muted); padding: 5px; cursor: pointer; display: flex; }
+.site-picker-clear[hidden] { display: none; }
+.site-picker-ctx { font-size: 13px; color: var(--text-muted); font-weight: 600; margin: 8px 12px 0; }
+.sheet-overlay-fs .site-picker-actions { padding: 8px 12px 0; margin: 0; }
+.sheet-overlay-fs #site-picker-list { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 8px 12px calc(12px + env(safe-area-inset-bottom)); }
+/* Pendant une feuille plein écran (verrou qc-lock), masquer les barres de navigation. */
+body.qc-lock .bottom-bar, body.qc-lock .selection-bar { display: none !important; }

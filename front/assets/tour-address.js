@@ -139,6 +139,39 @@ export function endpointLabel(tour, which, siteLabelById, placeholder) {
   return placeholder || "Choisir…";
 }
 
+// beta.29.1 : première valeur numérique = numéro de voirie (1 à 4 chiffres).
+function firstNumber(s) {
+  const m = normAddr(s).match(/\b(\d{1,4})\b/);
+  return m ? m[1] : null;
+}
+// Code postal français (5 chiffres).
+function postcode(s) {
+  const m = normAddr(s).match(/\b(\d{5})\b/);
+  return m ? m[1] : null;
+}
+
+// Coordonnées GPS à conserver pour un texte d'adresse ÉDITÉ, à partir des sources
+// connues (GPS « Ici », suggestions BAN, adresse déjà posée). On garde les
+// coordonnées si le texte correspond exactement à une source (après normalisation)
+// OU s'il s'agit d'une modification MINEURE (même numéro de voirie + même code
+// postal). Si le texte vise une autre rue/ville -> null (lat/lon effacés).
+export function coordsForText(text, sources) {
+  const nt = normAddr(text);
+  if (!nt) return null;
+  const withCoords = (sources || []).filter((s) => s && s.lat != null && s.lon != null);
+  for (const s of withCoords) {
+    if (normAddr(s.adresse) === nt) return { lat: s.lat, lon: s.lon };
+  }
+  const n = firstNumber(text);
+  const pc = postcode(text);
+  if (n && pc) {
+    for (const s of withCoords) {
+      if (firstNumber(s.adresse) === n && postcode(s.adresse) === pc) return { lat: s.lat, lon: s.lon };
+    }
+  }
+  return null;
+}
+
 // Coordonnées de navigation d'une extrémité (adresse de chantier ou site).
 export function endpointLatLon(tour, which, siteById) {
   const t = tour || {};

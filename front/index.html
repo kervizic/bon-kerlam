@@ -2,7 +2,7 @@
 <html lang="fr" data-theme="auto">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
   <title>bon.kerlam.fr — Lettres de voiture</title>
   <meta name="description" content="Lettres de voiture dématérialisées KERLAM : saisie chauffeur, contrôle bureau, signature.">
   <meta name="robots" content="noindex, nofollow">
@@ -10,8 +10,8 @@
   <!-- Empreinte de version du shell (cf. assets/app-version.js). Bumper `app-rev`
        à chaque déploiement backend devant forcer un refresh (sinon le bump d'un
        `?v=` d'asset suffit). -->
-  <meta name="app-version" content="0.1.0-beta.29">
-  <meta name="app-rev" content="290">
+  <meta name="app-version" content="0.1.0-beta.29.1">
+  <meta name="app-rev" content="291">
 
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
@@ -31,7 +31,7 @@
        en police système). crossorigin obligatoire : les polices sont toujours
        récupérées en mode CORS, l'attribut évite un double téléchargement. -->
   <link rel="preload" href="/assets/fonts/sarpanch-900.woff2?v=14" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/assets/styles.css?v=290">
+  <link rel="stylesheet" href="/assets/styles.css?v=291">
   <!-- Garde-fou anti page blanche (beta.25) : si l'appli n'a pas démarré sous 8 s
        (flag window.__bonBooted posé en fin de boot d'app.js), on désenregistre le
        SW, on vide les caches et on recharge UNE fois (anti-boucle sessionStorage).
@@ -606,13 +606,16 @@
   </div>
 
   <!-- ================================================== Feuille « choix de site » -->
-  <div id="site-picker-sheet" class="sheet-overlay" hidden>
+  <div id="site-picker-sheet" class="sheet-overlay sheet-overlay-fs" hidden>
     <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="site-picker-title">
-      <div class="sheet-header">
-        <h2 id="site-picker-title">Choisir un site</h2>
-        <button type="button" class="icon-btn" id="btn-site-picker-close" aria-label="Fermer"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      <div class="site-picker-searchbar">
+        <button type="button" class="icon-btn site-picker-back" id="btn-site-picker-back" aria-label="Fermer sans changer"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg></button>
+        <div class="site-picker-field">
+          <input type="search" id="site-picker-search" class="filter-input" enterkeyhint="done" autocomplete="off" placeholder="Rechercher ou saisir une adresse…">
+          <button type="button" class="site-picker-clear" id="btn-site-picker-clear" aria-label="Effacer la recherche" hidden><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg></button>
+        </div>
       </div>
-      <input type="search" id="site-picker-search" class="filter-input" placeholder="Rechercher ou saisir une adresse…">
+      <h2 id="site-picker-title" class="site-picker-ctx">Choisir un lieu</h2>
       <div class="site-picker-actions">
         <button type="button" id="btn-site-picker-here" class="btn btn-secondary btn-sm">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
@@ -913,6 +916,6 @@
   <!-- ================================================================== Scripts -->
   <script src="/assets/config.js?v=21"></script>
   <script src="/assets/vendor/supabase/supabase.js?v=270"></script>
-  <script type="module" src="/assets/app.js?v=290"></script>
+  <script type="module" src="/assets/app.js?v=291"></script>
 </body>
 </html>
