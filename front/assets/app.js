@@ -164,7 +164,7 @@ import { swipeActionsFor, attachSwipe, closeOpenSwipe } from "./swipe-actions.js
 import {
   recentChantiers, buildCompletion, swapPatch, addressPatch, sitePatch,
   endpointLabel, endpointLatLon, coordsForText,
-} from "./tour-address.js?v=300";
+} from "./tour-address.js?v=301";
 // pdf-viewer.js (et pdf.js) chargés en import DYNAMIQUE à la 1re ouverture (g).
 import { enhanceSelect, refreshCombobox, ensureOption, normalizeText as cbNormalizeText } from "./combobox.js?v=17";
 import { initTooltips } from "./tooltips.js?v=22";

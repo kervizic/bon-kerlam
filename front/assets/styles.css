@@ -1568,7 +1568,11 @@ body.qc-lock { position: fixed; left: 0; right: 0; width: 100%; overflow: hidden
   border-radius: 0; padding: 0; padding-bottom: 0;
   display: flex; flex-direction: column;
 }
-.site-picker-searchbar { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--border); flex: 0 0 auto; }
+/* beta.30.1 : la barre de recherche d'une feuille plein écran est le haut de la
+   feuille, qui occupe aussi la zone sous la barre d'état (iPhone à encoche). On
+   ajoute la safe-area haute et un fond opaque pour que flèche + champ ne passent
+   jamais sous l'heure/la batterie. */
+.site-picker-searchbar { display: flex; align-items: center; gap: 6px; padding: calc(8px + env(safe-area-inset-top)) 10px 8px; border-bottom: 1px solid var(--border); flex: 0 0 auto; background: var(--surface); }
 .site-picker-back { flex: 0 0 auto; }
 .site-picker-field { position: relative; flex: 1 1 auto; display: flex; align-items: center; min-width: 0; }
 .site-picker-field .filter-input { width: 100%; padding-right: 38px; margin: 0; }
@@ -1576,7 +1580,10 @@ body.qc-lock { position: fixed; left: 0; right: 0; width: 100%; overflow: hidden
 .site-picker-clear[hidden] { display: none; }
 .site-picker-ctx { font-size: 13px; color: var(--text-muted); font-weight: 600; margin: 8px 12px 0; }
 .sheet-overlay-fs .site-picker-actions { padding: 8px 12px 0; margin: 0; }
-.sheet-overlay-fs #site-picker-list { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 8px 12px calc(12px + env(safe-area-inset-bottom)); }
+/* beta.30.1 : s'applique aux DEUX feuilles plein écran (site-picker ET projets).
+   La liste occupe toute la hauteur restante et réserve la safe-area basse : plus
+   de bande grise sous la liste, dernier élément au-dessus de la barre d'accueil. */
+.sheet-overlay-fs .sheet-list { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 8px 12px calc(12px + env(safe-area-inset-bottom)); background: var(--surface); }
 /* Pendant une feuille plein écran (verrou qc-lock), masquer les barres de navigation. */
 body.qc-lock .bottom-bar, body.qc-lock .selection-bar { display: none !important; }
 

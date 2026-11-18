@@ -4,6 +4,23 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.30.1] — 2026-11-18
+
+Correctifs d'affichage iPhone à encoche / Dynamic Island (front uniquement).
+
+### Corrigé
+- **Feuilles plein écran (sélecteurs d'adresse beta.29.1 et feuille « Projets du
+  bon » beta.30)** : la barre de recherche (flèche ‹ + champ) ne passe plus sous la
+  barre d'état (heure/batterie). La barre de recherche réserve la `safe-area` haute
+  et a un fond opaque. La liste réserve la `safe-area` basse (plus de bande grise
+  sous la liste, dernier élément au-dessus de la barre d'accueil). Correctif appliqué
+  aux DEUX feuilles (la règle de bas de liste était limitée au seul sélecteur
+  d'adresse).
+- **Logo KERLAM de l'en-tête** : passage de la barre d'état iOS de
+  `black-translucent` à `default`. Le voile/vibrance système blanc qui délavait le
+  haut du logo disparaît ; les glyphes de la barre d'état restent lisibles sur
+  l'en-tête clair et l'en-tête peint toujours un fond uni sous la barre d'état.
+
 ## [0.1.0-beta.30] — 2026-11-18
 
 Projets MULTIPLES par lettre. Les projets restent **facultatifs** (une lettre sans
