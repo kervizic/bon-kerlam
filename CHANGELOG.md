@@ -4,6 +4,45 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.29] — 2026-11-18
+
+Fiabilité de la signature : rafraîchissement, archivage, anti-renvoi, nom imprimé,
+vitesse.
+
+### Corrigé
+- **Archivage du PDF signé** : le worker postait sur `/storage/v1/object/...` alors
+  que le service Storage expose ses routes sans le préfixe `/storage/v1` (ajouté par
+  la passerelle) -> **404 silencieux**, `signed_pdf_path` restait NULL. Corrigé
+  (`/object/...`) et les échecs d'archivage sont désormais **journalisés** (plus
+  d'exception avalée). Les 5 lettres du document signé 57 ont été rattrapées sans
+  renvoi de mail.
+- **Statut non rafraîchi après signature** : la signature met quelques secondes à se
+  propager côté Documenso. Désormais, après la signature intégrée : overlay
+  « Signature enregistrée, finalisation… », le worker `/signature/sync` **attend
+  (borné) que le document passe COMPLETED**, puis le front **repoll toutes les 2 s
+  (max ~60 s)** jusqu'au statut « signée ». Liste rafraîchie au retour sur l'appli
+  (visibilitychange/focus). Boucle de fond resserrée à **30 s** tant qu'il reste des
+  signatures actives (sinon 180 s).
+- **Renvoi d'une lettre déjà signée** : interdit à trois niveaux — front (« Signer »
+  masqué / non sélectionnable pour une lettre signée ou en signature active), worker
+  (**409**), et base (trigger : une lettre `signee` ne change plus de statut ni de
+  référence Documenso). Le renvoi accidentel (document 58) a été annulé : lettres
+  rétablies sur le document 57 d'origine, document 58 supprimé **sans mail**
+  (`Send Document Deleted Emails` inchangé), aucun autre document touché.
+
+### Changé
+- **Nom du signataire imprimé EN DUR** dans le PDF (contact choisi), à la place de
+  l'ancien champ NAME Documenso. Un **seul champ SIGNATURE** par lettre.
+- **Vitesse** : (a) les champs Documenso sont posés en **un seul appel** (l'API 2.21
+  accepte un tableau) au lieu de N appels ; (b) overlay de chargement propre pendant
+  l'ouverture de l'iframe de signature (plus d'écran blanc) ; (c) **préchauffe du
+  cache PDF** des lettres signables au démarrage du worker (une à la fois, basse
+  priorité) pour éviter le cache froid après déploiement.
+
+### Base de données
+- **0027** : trigger `bon.trg_lv_signee_immuable` (immutabilité des lettres signées).
+  Avec down + test SQL.
+
 ## [0.1.0-beta.28] — 2026-11-18
 
 Adresses de chantier sur les tours (sans saturer la liste des sites), inversion

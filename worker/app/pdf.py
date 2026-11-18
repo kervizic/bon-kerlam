@@ -162,11 +162,15 @@ def build_context(lv_id: int) -> dict[str, Any]:
                -- repli sur l'adresse de la fiche client (mono-adresse / ancien modèle).
                COALESCE(ca.adresse, cl.adresse) AS client_adresse,
                dc.raison_sociale AS dest_nom,
-               COALESCE(da.adresse, dc.adresse) AS dest_adresse
+               COALESCE(da.adresse, dc.adresse) AS dest_adresse,
+               -- beta.29 : nom du contact signataire, imprimé EN DUR sous la
+               -- signature (plus de champ NAME côté Documenso).
+               ct.nom AS signataire_nom
           FROM bon.lettres_voiture lv
           LEFT JOIN bon.camions c     ON c.id = lv.camion_id
           LEFT JOIN bon.chauffeurs ch ON ch.id = lv.chauffeur_id
           LEFT JOIN bon.projets p     ON p.id = lv.projet_id
+          LEFT JOIN bon.contacts ct   ON ct.id = lv.contact_id
           -- Client référencé directement sur la lettre (projet facultatif) ;
           -- repli sur le client du projet pour les lettres non reprises.
           LEFT JOIN bon.clients cl    ON cl.id = COALESCE(lv.client_id, p.client_id)
@@ -316,7 +320,9 @@ def render_pdf(context: dict[str, Any]) -> bytes:
 
 
 # --- Champs Documenso mesurés sur le rendu WeasyPrint (page.anchors) ----------
-_ANCHORS = (("SIGNATURE", "doc-signature"), ("NAME", "doc-nom"))
+# beta.29 : un SEUL champ par lettre (SIGNATURE). Le nom du signataire est imprimé
+# en dur dans le PDF (plus de champ NAME Documenso) -> moins d'appels API, plus rapide.
+_ANCHORS = (("SIGNATURE", "doc-signature"),)
 
 
 def anchor_field(field_type: str, page_number: int, box, page_w: float, page_h: float) -> dict:

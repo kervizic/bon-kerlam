@@ -87,6 +87,30 @@ def test_par_mail_refuse_contact_absent(monkeypatch):
         signature.par_mail([1])
 
 
+def test_refuse_renvoi_lettre_signee(monkeypatch):
+    # beta.29 : une lettre déjà signée ne peut pas être renvoyée en signature (409).
+    monkeypatch.setattr(signature, "_rows", lambda ids: [
+        {"id": 7, "numero": "KER-03003", "contact_id": 2, "statut": "signee", "documenso_document_id": 57},
+    ])
+    with pytest.raises(signature.SignatureConflict, match="signée"):
+        signature.sur_place([7])
+
+
+def test_refuse_renvoi_signature_active(monkeypatch):
+    # Lettre en signature active (a_signer + document attaché) : refusée (409).
+    monkeypatch.setattr(signature, "_rows", lambda ids: [
+        {"id": 7, "numero": "KER-03003", "contact_id": 2, "statut": "a_signer", "documenso_document_id": 60},
+    ])
+    with pytest.raises(signature.SignatureConflict, match="en cours"):
+        signature.par_mail([7])
+
+
+def test_autorise_lettre_en_cours(monkeypatch):
+    # Une lettre en_cours sans document attaché reste signable (pas de conflit).
+    rows = [{"id": 7, "numero": "KER-03003", "contact_id": 2, "statut": "en_cours", "documenso_document_id": None}]
+    signature._assert_signable(rows)  # ne lève pas
+
+
 def test_sur_place_exige_contact_email(monkeypatch):
     monkeypatch.setattr(signature, "_rows",
                         lambda ids: [{"id": 1, "numero": "KER-1", "contact_id": 10, "statut": "en_cours"}])
@@ -154,15 +178,15 @@ def test_anchor_field_conversion_pct():
 
 def test_build_combined_pdf_depuis_cache(monkeypatch):
     # beta.25 : build_combined_pdf fusionne les PDF EN CACHE par lettre (pas de
-    # rendu). Lettres de 1, 2 et 1 pages -> dernières pages 1, 3, 4 ; 1 paire
-    # SIGNATURE/NAME par lettre, sur la dernière page de chaque lettre (page-locale).
+    # rendu). Lettres de 1, 2 et 1 pages -> dernières pages 1, 3, 4 ; beta.29 : UN
+    # SEUL champ SIGNATURE par lettre, sur la dernière page (page-locale), le nom
+    # étant imprimé en dur dans le PDF.
     pages_par_lv = {7: 1, 8: 2, 9: 1}
 
     def fake_cached(lv_id):
         n = pages_par_lv[lv_id]
         local = [
             {"type": "SIGNATURE", "pageNumber": n, "pageX": 9, "pageY": 43, "pageWidth": 31, "pageHeight": 5},
-            {"type": "NAME", "pageNumber": n, "pageX": 9, "pageY": 49, "pageWidth": 31, "pageHeight": 2},
         ]
         return _blank_pdf(n), local, n
 
@@ -173,9 +197,9 @@ def test_build_combined_pdf_depuis_cache(monkeypatch):
 
     from pypdf import PdfReader
     assert len(PdfReader(io.BytesIO(merged)).pages) == 4
-    # Champs décalés en pages absolues : lettre 7 -> p1, lettre 8 -> p3, lettre 9 -> p4.
-    assert [f["type"] for f in fields] == ["SIGNATURE", "NAME", "SIGNATURE", "NAME", "SIGNATURE", "NAME"]
-    assert [f["pageNumber"] for f in fields] == [1, 1, 3, 3, 4, 4]
+    # Un SIGNATURE par lettre, décalé en pages absolues : 7 -> p1, 8 -> p3, 9 -> p4.
+    assert [f["type"] for f in fields] == ["SIGNATURE", "SIGNATURE", "SIGNATURE"]
+    assert [f["pageNumber"] for f in fields] == [1, 3, 4]
 
 
 def _capture_client(calls):
@@ -244,16 +268,17 @@ def test_send_signed_mail_objet_et_copie(monkeypatch):
     assert sent["attachment"][2] == "application/pdf"
 
 
-def test_create_document_pose_signature_et_nom(monkeypatch):
-    # Les champs fournis (SIGNATURE + NAME) sont tous postés avec recipientId.
+def test_create_document_pose_champs_en_un_appel(monkeypatch):
+    # beta.29 : TOUS les champs sont postés en UN SEUL appel /fields (tableau),
+    # chacun avec recipientId. Ici 2 champs (sur une même page) -> 1 seul POST.
     monkeypatch.setattr(settings, "documenso_api_key", "api_test")
     monkeypatch.setattr(settings, "documenso_url", "https://sign.kerlam.fr")
     calls = {"post": [], "put": 0}
 
     class _C(FakeClient):
         def post(self, url, **kw):
+            self.calls["post"].append(url)
             if url.endswith("/documents"):
-                self.calls["post"].append(url)
                 return FakeResp(200, {"documentId": 9, "uploadUrl": "https://s3/up",
                                       "recipients": [{"recipientId": 3, "token": "tok"}]})
             if url.endswith("/fields"):
@@ -263,10 +288,16 @@ def test_create_document_pose_signature_et_nom(monkeypatch):
     monkeypatch.setattr(documenso.httpx, "Client", lambda **kw: _C(calls, **kw))
     fields = [
         pdf.anchor_field("SIGNATURE", 2, (72, 411, 321, 468), 793.7, 1122.5),
-        pdf.anchor_field("NAME", 2, (72, 476, 321, 495), 793.7, 1122.5),
+        pdf.anchor_field("SIGNATURE", 3, (72, 476, 321, 495), 793.7, 1122.5),
     ]
     documenso.create_document("T", "Jean", "j@example.test", b"%PDF-1.4", send_email=False, fields=fields)
-    posted = calls.get("fields", [])
-    assert {f["type"] for f in posted} == {"SIGNATURE", "NAME"}
+    # Un seul appel /fields, dont le corps est un TABLEAU de champs.
+    bodies = calls.get("fields", [])
+    assert len(bodies) == 1, "les champs doivent être posés en un seul appel"
+    posted = bodies[0]
+    assert isinstance(posted, list) and len(posted) == 2
+    assert all(f["type"] == "SIGNATURE" for f in posted)
     assert all(f["recipientId"] == 3 for f in posted)
-    assert all(f["pageNumber"] == 2 for f in posted)
+    # L'ordre champs -> send est respecté : /fields avant /send.
+    order = [u.rsplit("/", 1)[-1] for u in calls["post"]]
+    assert order.index("fields") < order.index("send")

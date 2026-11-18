@@ -152,7 +152,7 @@
   .sign-area { position: relative; width: 70mm; height: 25mm; }
   .doc-anchor { position: absolute; display: block; line-height: 0; font-size: 0; }
   #doc-signature { left: 2mm; top: 1mm; width: 66mm; height: 15mm; }
-  #doc-nom { left: 2mm; top: 18mm; width: 66mm; height: 5mm; }
+  .sign-nom { position: absolute; left: 2mm; top: 18mm; width: 66mm; font-size: 9pt; }
 </style>
 </head>
 <body>
@@ -271,10 +271,11 @@
      worker lit leur position réelle (page + x/y) dans le rendu. #}
   <div class="signature">
     <div class="sign-title">Signature</div>
-    {# Zone vide : Documenso y pose la signature ET le nom. Deux ancres invisibles. #}
+    {# beta.29 : Documenso ne pose plus que la SIGNATURE (ancre invisible). Le NOM
+       du signataire est imprimé EN DUR sous la zone de signature. #}
     <div class="sign-area">
       <span id="doc-signature" class="doc-anchor"></span>
-      <span id="doc-nom" class="doc-anchor"></span>
+      {% if lv.signataire_nom %}<div class="sign-nom">{{ lv.signataire_nom }}</div>{% endif %}
     </div>
   </div>
 

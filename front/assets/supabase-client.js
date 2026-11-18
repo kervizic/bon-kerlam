@@ -735,8 +735,9 @@ export async function workerSignatureSurPlace(lvIds) {
 export async function workerSignatureParMail(lvIds) {
   return callWorker("/signature/par-mail", { method: "POST", body: { lv_ids: lvIds } });
 }
-export async function workerSignatureSync() {
-  return callWorker("/signature/sync", { method: "POST", body: {} });
+export async function workerSignatureSync(documentId) {
+  const body = documentId != null ? { document_id: documentId } : {};
+  return callWorker("/signature/sync", { method: "POST", body });
 }
 export async function workerSignatureWarm(lvIds) {
   return callWorker("/signature/warm", { method: "POST", body: { lv_ids: lvIds } });

@@ -1528,7 +1528,9 @@ body.qc-lock { position: fixed; left: 0; right: 0; width: 100%; overflow: hidden
 .embed-sign-logo { font-size: 18px; line-height: 1; }
 .embed-sign-title { flex: 1; min-width: 0; font-weight: 600; font-size: 14px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .embed-sign-close { margin-left: auto; }
+.embed-sign-body { flex: 1; position: relative; display: flex; }
 .embed-sign-frame { flex: 1; width: 100%; border: 0; background: var(--surface); }
+.embed-sign-loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 12px; background: var(--surface); color: var(--text); font-weight: 600; }
 
 /* Indicateur « Préparation du document… » */
 .sign-preparing { position: fixed; inset: 0; z-index: 2100; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.35); }

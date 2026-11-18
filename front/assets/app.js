@@ -2652,9 +2652,12 @@ async function logout() {
 const signSelection = new Map();
 
 function isSignable(lv) {
-  // Une lettre « en attente de signature » (envoyee) est déjà partie : on ne la
-  // re-sélectionne pas. Sélectionnables : brouillon / en cours / à signer.
-  return lv.statut !== "signee" && lv.statut !== "envoyee";
+  // beta.29 : ne JAMAIS re-sélectionner une lettre déjà signée, envoyée (par mail),
+  // ni en signature intégrée ACTIVE (a_signer avec un document Documenso déjà
+  // attaché). Sélectionnables : brouillon / en cours / à signer non encore engagée.
+  if (lv.statut === "signee" || lv.statut === "envoyee") return false;
+  if (lv.statut === "a_signer" && lv.documenso_document_id != null) return false;
+  return true;
 }
 
 function refreshSelectionBar() {
@@ -2964,7 +2967,15 @@ async function confirmSigner() {
     } catch (err) {
       clearTimeout(spinnerTimer);
       showSignPreparing(false);
-      alert("Échec de la préparation du document : " + (err.message || err));
+      const msg = err.message || String(err);
+      if (/\b409\b/.test(msg)) {
+        // beta.29 : lettre déjà signée ou déjà en signature active -> on refuse et
+        // on rafraîchit la liste (l'état en mémoire était périmé).
+        alert(msg.replace(/^bon-worker 409 — ?/, "") || "Lettre déjà signée.");
+        await loadMesLv();
+      } else {
+        alert("Échec de la préparation du document : " + msg);
+      }
       return;
     }
     clearTimeout(spinnerTimer);
@@ -2989,7 +3000,13 @@ async function confirmSigner() {
       for (const id of batch.lvIds) signSelection.delete(id);
       done.push(`${batch.email} (${plur(batch.lvIds.length, "lettre", "lettres")})`);
     } catch (err) {
-      alert(`Échec de l'envoi à ${batch.email} : ${err.message || err}`);
+      const msg = err.message || String(err);
+      if (/\b409\b/.test(msg)) {
+        alert(msg.replace(/^bon-worker 409 — ?/, "") || "Lettre déjà signée.");
+        await loadMesLv();
+      } else {
+        alert(`Échec de l'envoi à ${batch.email} : ${msg}`);
+      }
     }
   }
   refreshSelectionBar();
@@ -3059,8 +3076,36 @@ function openEmbeddedSigning(res) {
     }
   };
   window.addEventListener("message", embedMessageHandler);
+  // beta.29 (F5b) : overlay de chargement tant que l'iframe (~4,5 Mo) n'est pas
+  // prête -> pas d'écran blanc. Masqué au 'load' de l'iframe.
+  const loading = document.getElementById("embed-sign-loading");
+  if (loading) loading.hidden = false;
+  frame.onload = () => { if (loading) loading.hidden = true; };
   frame.src = `${base}/embed/sign/${res.token}#${frag}`;
   sheet.hidden = false;
+}
+
+function showSignFinalizing(on) {
+  const el = document.getElementById("sign-finalizing");
+  if (el) el.hidden = !on;
+}
+
+// Attend (borné) que toutes les lettres du lot passent « signée », en relançant la
+// synchro de fond toutes les 2 s (max ~60 s). Renvoie true si tout est signé.
+async function waitLettresSignees(lvIds, { ticks = 30, everyMs = 2000 } = {}) {
+  const ids = (lvIds || []).map((x) => String(x));
+  for (let i = 0; i < ticks; i++) {
+    let letters = [];
+    try { letters = await listLettresVoiture(); } catch (e) { /* réseau : on retente */ }
+    const done = ids.every((id) => {
+      const lv = (letters || []).find((l) => String(l.id) === id);
+      return lv && lv.statut === "signee";
+    });
+    if (done) return true;
+    await new Promise((r) => setTimeout(r, everyMs));
+    try { await workerSignatureSync(); } catch (e) { /* le polling de fond rattrapera */ }
+  }
+  return false;
 }
 
 function closeEmbeddedSigning() {
@@ -3076,10 +3121,18 @@ function closeEmbeddedSigning() {
 
 async function onEmbeddedSigned(res) {
   closeEmbeddedSigning();
-  // Finalise côté worker (passe les lettres du lot à « signée », archive le PDF).
-  try { await workerSignatureSync(); } catch (e) { /* le polling de fond rattrapera */ }
+  const lvIds = (res.lv_ids || []).slice();
+  // beta.29 (F2) : finalisation robuste. 1er sync : le worker ATTEND (borné) que
+  // le document passe COMPLETED côté Documenso (quelques secondes de latence), puis
+  // archive et marque « signée ». On repoll ensuite toutes les 2 s jusqu'à « signée ».
+  showSignFinalizing(true);
+  try { await workerSignatureSync(res.document_id); } catch (e) { /* le polling de fond rattrapera */ }
+  const ok = await waitLettresSignees(lvIds, { ticks: 30, everyMs: 2000 });
+  showSignFinalizing(false);
   await loadMesLv();
-  showToast(`${plur((res.lv_ids || []).length, "lettre signée", "lettres signées")}.`);
+  showToast(ok
+    ? `${plur(lvIds.length, "lettre signée", "lettres signées")}.`
+    : "Signature en cours de finalisation…");
 }
 
 /* ---- Actions de la sélection : corbeille groupée + PDF (beta.21) ------------ */
@@ -5299,6 +5352,16 @@ function wireStaticUI() {
   if (modeParMail) modeParMail.addEventListener("click", () => setSignerMode("par_mail"));
   const btnSignerConfirm = document.getElementById("btn-signer-confirm");
   if (btnSignerConfirm) btnSignerConfirm.addEventListener("click", confirmSigner);
+
+  // beta.29 (F2) : rafraîchit « Mes lettres » au retour sur l'appli (une signature
+  // a pu se finaliser pendant l'absence) -> statut à jour sans action manuelle.
+  const refreshMesLv = () => {
+    if (state.route === "mes-lv" && document.visibilityState === "visible") {
+      loadMesLv().catch(() => {});
+    }
+  };
+  document.addEventListener("visibilitychange", refreshMesLv);
+  window.addEventListener("focus", refreshMesLv);
 
   // Barre de sélection (beta.21) : corbeille groupée + PDF (si 1 cochée).
   const btnSelDelete = document.getElementById("btn-selection-delete");

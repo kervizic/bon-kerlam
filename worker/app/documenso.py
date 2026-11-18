@@ -11,8 +11,6 @@ L'URL de signature « sur place » = {documenso_url}/sign/{token}.
 
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
-
 import httpx
 
 from .config import settings
@@ -98,19 +96,13 @@ def create_document(
             fields = [{"type": "SIGNATURE", "pageNumber": sign_page,
                        "pageX": 8, "pageY": 78, "pageWidth": 36, "pageHeight": 12}]
 
-        # Création EN PARALLÈLE (1 appel par champ, mais simultanés) : 10 champs en
-        # ~1 aller-retour au lieu de 10.
-        def _post_field(geom: dict):
-            fr = client.post(f"{_base()}/documents/{document_id}/fields", json={"recipientId": recipient_id, **geom})
-            if fr.status_code >= 300:
-                raise DocumensoError(f"champ {geom.get('type')}: {fr.status_code} {fr.text[:150]}")
-
-        if len(fields) > 1:
-            with ThreadPoolExecutor(max_workers=min(10, len(fields))) as pool:
-                for _ in pool.map(_post_field, fields):
-                    pass
-        else:
-            _post_field(fields[0])
+        # beta.29 : TOUS les champs en UN SEUL appel. L'API v1 2.21 accepte un
+        # tableau sur POST /documents/{id}/fields (oneOf object|array) -> un aller-
+        # retour au lieu de N. Les champs sont posés AVANT /send.
+        field_bodies = [{"recipientId": recipient_id, **geom} for geom in fields]
+        fr = client.post(f"{_base()}/documents/{document_id}/fields", json=field_bodies)
+        if fr.status_code >= 300:
+            raise DocumensoError(f"champs: {fr.status_code} {fr.text[:200]}")
 
         sr = client.post(f"{_base()}/documents/{document_id}/send", json={"sendEmail": bool(send_email)})
         if sr.status_code >= 300:

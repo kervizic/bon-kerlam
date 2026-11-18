@@ -19,6 +19,7 @@ def _context():
             "chauffeur": "Jean",
             "projet": "Régie Franciliane",
             "heures_regie": "7h-12h",
+            "signataire_nom": "Claire Fontaine",
         },
         "tours": [
             {
@@ -53,12 +54,14 @@ def test_destinataire_identique_recopie():
 
 def test_zone_signature_reservee():
     html = pdf.render_html(_context())
-    # Maquette épurée (beta.23) : zone vide sans cadre, libellé « Signature »
-    # (tout court), avec les deux ancres Documenso (signature + nom).
+    # Maquette épurée (beta.23) : zone vide sans cadre, libellé « Signature ».
+    # beta.29 : une SEULE ancre Documenso (signature) ; le nom est imprimé EN DUR.
     assert ">Signature<" in html
     assert "Signature du client" not in html
     assert 'id="doc-signature"' in html
-    assert 'id="doc-nom"' in html
+    assert 'id="doc-nom"' not in html            # plus de champ NAME Documenso
+    assert "Claire Fontaine" in html             # nom du signataire imprimé en dur
+    assert "sign-nom" in html
     assert "sign-box" not in html     # plus de cadre pointillé
 
 

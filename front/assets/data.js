@@ -835,9 +835,9 @@ export async function workerSignatureParMail(lvIds) {
   }
   return live.workerSignatureParMail(lvIds);
 }
-export async function workerSignatureSync() {
+export async function workerSignatureSync(documentId) {
   if (DEMO) return { verifiees: 0, signees: 0 };
-  return live.workerSignatureSync();
+  return live.workerSignatureSync(documentId);
 }
 export async function workerLvPdf(lvId) {
   if (DEMO) {

@@ -28,6 +28,9 @@ async def lifespan(app: FastAPI):
     tasks = [asyncio.create_task(_maintenance_loop())]
     if settings.documenso_api_key:
         tasks.append(asyncio.create_task(_signature_loop()))
+    # beta.29 : préchauffe le cache PDF des lettres signables, une à la fois, en
+    # arrière-plan (évite le cache FROID après un déploiement sans saturer le vCPU).
+    tasks.append(asyncio.create_task(_warm_cache_loop()))
     try:
         yield
     finally:
@@ -173,6 +176,8 @@ def signature_sur_place(payload: dict, user=Depends(require_user)):
     try:
         res = signature.sur_place(lv_ids)
         return {"mode": "sur_place", "documenso_url": settings.documenso_url.rstrip("/"), **res}
+    except signature.SignatureConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -186,6 +191,8 @@ def signature_par_mail(payload: dict, user=Depends(require_user)):
     _assert_user_access(user.get("email"), lv_ids)
     try:
         return {"mode": "par_mail", **signature.par_mail(lv_ids)}
+    except signature.SignatureConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -197,11 +204,18 @@ def signature_poll(_=Depends(require_token("write"))):
 
 
 @router.post("/signature/sync")
-def signature_sync(user=Depends(require_user)):
+def signature_sync(payload: dict | None = None, user=Depends(require_user)):
     """Synchronisation immédiate après signature intégrée : vérifie les enveloppes
     terminées côté Documenso et passe les lettres à « signée » (archivage inclus).
-    Déclenché par le front à la fin de la signature embarquée."""
-    return signature.poll_pending()
+    beta.29 : si le front fournit `document_id`, on attend (borné, ~12 s) que CE
+    document passe COMPLETED côté Documenso avant de traiter — la signature met
+    quelques secondes à se propager."""
+    doc_id = None
+    try:
+        doc_id = int((payload or {}).get("document_id")) if (payload or {}).get("document_id") is not None else None
+    except (TypeError, ValueError):
+        doc_id = None
+    return signature.poll_pending(document_id=doc_id, wait_s=12.0 if doc_id else 0.0)
 
 
 @router.post("/chauffeur/{chauffeur_id}/depart")
@@ -355,9 +369,27 @@ async def _maintenance_loop() -> None:
 async def _signature_loop() -> None:
     """Vérifie périodiquement les enveloppes Documenso en attente (retour de
     signature) : marque/archive les lettres signées et envoie, au nom de KERLAM,
-    le mail du PDF signé au contact (beta.25). Plus aucune purge de brouillons :
-    on ne crée plus de document par anticipation (aucun document à purger)."""
+    le mail du PDF signé au contact (beta.25). beta.29 : cadence resserrée à 30 s
+    tant qu'il reste des lettres en signature active, sinon 180 s."""
     while True:
-        await asyncio.sleep(180)
+        active = 0
+        with contextlib.suppress(Exception):
+            active = await asyncio.to_thread(signature.active_signature_count)
+        await asyncio.sleep(30 if active > 0 else 180)
         with contextlib.suppress(Exception):
             await asyncio.to_thread(signature.poll_pending)
+
+
+async def _warm_cache_loop() -> None:
+    """Préchauffe le cache PDF (bon.lv_pdf_cache) des lettres signables, UNE à la
+    fois et avec une pause entre chaque, pour lisser la charge sur le vCPU. Tourne
+    une fois au démarrage puis s'arrête."""
+    await asyncio.sleep(20)  # laisse le worker finir son démarrage
+    try:
+        lv_ids = await asyncio.to_thread(signature.signable_lv_ids)
+    except Exception:  # noqa: BLE001
+        return
+    for lv_id in lv_ids:
+        with contextlib.suppress(Exception):
+            await asyncio.to_thread(signature.warm_cache, [lv_id])
+        await asyncio.sleep(3)  # basse priorité : on ne sature pas le vCPU
