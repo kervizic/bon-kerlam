@@ -52,9 +52,10 @@ export function recentChantiers(usages, clientId, nowMs, { days = 30, max = 5 } 
 }
 
 // Liste de complétion pendant la frappe, ordonnée et dédoublonnée :
-// (1) chantiers du même client, (2) chantiers des autres clients, (3) sites
-// permanents, (4) résultats BAN. `siteLabel(site)` -> libellé affiché du site.
-export function buildCompletion({ query, usages, clientId, sites, siteLabel, banResults }) {
+// (0) projets du client AVEC adresse, (1) chantiers du même client, (2) chantiers
+// des autres clients, (3) sites permanents, (4) résultats BAN. beta.30 : les projets
+// du client avec adresse priment (juste après les projets de la lettre, rendus à part).
+export function buildCompletion({ query, usages, clientId, sites, siteLabel, banResults, projets }) {
   const q = query || "";
   const seen = new Set();
   const out = [];
@@ -67,6 +68,16 @@ export function buildCompletion({ query, usages, clientId, sites, siteLabel, ban
     seen.add(k);
     out.push({ kind, type: "chantier", adresse: u.adresse, lat: u.lat, lon: u.lon, client_id: u.client_id });
   };
+
+  // (0) Projets du client avec adresse.
+  for (const p of projets || []) {
+    if (!p || !p.adresse) continue;
+    if (!matchesTokens(`${p.nom || ""} ${p.adresse}`, q)) continue;
+    const k = normAddr(p.adresse);
+    if (!k || seen.has(k)) continue;
+    seen.add(k);
+    out.push({ kind: "projet", type: "projet", projet: p, adresse: p.adresse, lat: p.lat, lon: p.lon, label: p.nom || p.adresse });
+  }
 
   const all = (usages || []).filter((u) => u && u.adresse);
   for (const u of byRecent(all.filter((u) => sameId(u.client_id, clientId)))) {

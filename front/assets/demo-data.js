@@ -69,7 +69,7 @@ export const CONTACTS = [
 /* --------------------------------------------------------------------- Projets */
 const nextProjetId = makeCounter(3);
 export const PROJETS = [
-  { id: 1, client_id: 1, nom: "Réfection voirie Chantereine", ref_contrat: "CTR-2026-014", ref_ordre_mission: "OM-014-A", ligne_regie: "Régie terrassement", tarif: 480.0, contact_id: 1, date_debut: addDays(-120), date_fin: addDays(60), statut: "actif" },
+  { id: 1, client_id: 1, nom: "Réfection voirie Chantereine", adresse: "Avenue des Peupliers, 77400 Lagny-sur-Marne", lat: 48.8773, lon: 2.705, ref_contrat: "CTR-2026-014", ref_ordre_mission: "OM-014-A", ligne_regie: "Régie terrassement", tarif: 480.0, contact_id: 1, date_debut: addDays(-120), date_fin: addDays(60), statut: "actif" },
   { id: 2, client_id: 2, nom: "Évacuation déchets site Nord", ref_contrat: "CTR-2026-021", ref_ordre_mission: "OM-021-B", ligne_regie: "Régie évacuation", tarif: 520.0, contact_id: 2, date_debut: addDays(-30), date_fin: addDays(150), statut: "actif" },
   { id: 3, client_id: 3, nom: "Livraison centrale à béton", ref_contrat: "CTR-2025-098", ref_ordre_mission: "OM-098-C", ligne_regie: "Régie livraison", tarif: 410.0, contact_id: 3, date_debut: addDays(-400), date_fin: addDays(-10), statut: "termine" },
 ];

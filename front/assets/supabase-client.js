@@ -299,6 +299,21 @@ const crudProjets = makeCrud("projets");
 export const createProjet = crudProjets.create;
 export const updateProjet = crudProjets.update;
 
+// beta.30 : liaison N-N lettre <-> projets (api.lv_projets). Lecture + (dé)liaison.
+export async function listLvProjets(lvId) {
+  const { data, error } = await requireClient().from("lv_projets").select("projet_id").eq("lv_id", lvId);
+  if (error) throw error;
+  return (data || []).map((r) => r.projet_id);
+}
+export async function linkLvProjet(lvId, projetId) {
+  const { error } = await requireClient().from("lv_projets").upsert({ lv_id: lvId, projet_id: projetId }, { onConflict: "lv_id,projet_id" });
+  if (error) throw error;
+}
+export async function unlinkLvProjet(lvId, projetId) {
+  const { error } = await requireClient().from("lv_projets").delete().eq("lv_id", lvId).eq("projet_id", projetId);
+  if (error) throw error;
+}
+
 const crudClients = makeCrud("clients");
 export const createClient = crudClients.create;
 export const updateClient = crudClients.update;

@@ -77,6 +77,9 @@ import {
   listPlanningLv,
   createProjet,
   updateProjet,
+  listLvProjets,
+  linkLvProjet,
+  unlinkLvProjet,
   createClient,
   updateClient,
   createContact,
@@ -161,9 +164,9 @@ import { swipeActionsFor, attachSwipe, closeOpenSwipe } from "./swipe-actions.js
 import {
   recentChantiers, buildCompletion, swapPatch, addressPatch, sitePatch,
   endpointLabel, endpointLatLon, coordsForText,
-} from "./tour-address.js?v=291";
+} from "./tour-address.js?v=300";
 // pdf-viewer.js (et pdf.js) chargés en import DYNAMIQUE à la 1re ouverture (g).
-import { enhanceSelect, refreshCombobox, ensureOption } from "./combobox.js?v=17";
+import { enhanceSelect, refreshCombobox, ensureOption, normalizeText as cbNormalizeText } from "./combobox.js?v=17";
 import { initTooltips } from "./tooltips.js?v=22";
 import { stripSocietePrefix } from "./site-label.js?v=225";
 import { lvCompleteness, entityMissingFields } from "./completeness.js?v=211";
@@ -877,13 +880,8 @@ function enhanceHeaderComboboxes() {
     onEdit: (value) => openQuickCreate("client", "", value),
     canEdit: () => true,
   });
-  enhanceSelect(document.getElementById("f-projet"), {
-    entity: "projet", driverId: di, placeholder: "Facultatif — choisir ou taper…",
-    createLabel: "un projet",
-    onCreate: (text) => openQuickCreate("projet", text),
-    onEdit: (value) => openQuickCreate("projet", "", value),
-    canEdit: () => true,
-  });
+  // beta.30 : l'ancien combobox mono-projet est remplacé par les puces « Projets »
+  // (sélection multiple via la feuille plein écran). #f-projet reste caché, non câblé.
   enhanceSelect(document.getElementById("f-contact"), {
     entity: "contact", driverId: di, placeholder: "Choisir ou taper…",
     createLabel: "un contact signataire",
@@ -927,12 +925,18 @@ const QC_SPECS = {
   projet: {
     title: "projet",
     needsClient: true,
-    fields: [{ key: "nom", label: "Nom du projet", required: true, fromText: true, reqMsg: "Nom manquant" }],
-    create: (v) => createProjet({ client_id: v._client_id, nom: v.nom }),
-    update: (id, v) => updateProjet(id, { nom: v.nom }),
+    // beta.30 : nom ET/OU adresse (au moins l'un des deux). atLeastOne liste les
+    // clés dont une au moins doit être renseignée.
+    atLeastOne: ["nom", "adresse"],
+    fields: [
+      { key: "nom", label: "Nom du projet (facultatif si adresse)", fromText: true },
+      { key: "adresse", label: "Adresse, CP et ville (facultatif si nom)", autocomplete: "street-address", autocapitalize: "words" },
+    ],
+    create: (v) => createProjet({ client_id: v._client_id, nom: v.nom || null, adresse: v.adresse || null }),
+    update: (id, v) => updateProjet(id, { nom: v.nom || null, adresse: v.adresse || null }),
     store: "projets",
-    toItem: (r) => ({ value: r.id, label: r.nom || `Projet #${r.id}`, alias: "" }),
-    fill: (r) => ({ nom: r.nom }),
+    toItem: (r) => ({ value: r.id, label: r.nom || r.adresse || `Projet #${r.id}`, alias: r.adresse || "" }),
+    fill: (r) => ({ nom: r.nom, adresse: r.adresse }),
   },
   contact: {
     title: "contact signataire",
@@ -1034,10 +1038,13 @@ function qcGatherValues(st) {
 async function qcDoSave(st) {
   if (!st || qcState !== st) return;
   const values = qcGatherValues(st);
-  const primaryKey = st.spec.fields[0].key;
-  // Création impossible tant que le champ primaire (NOT NULL) est vide, ou qu'un
-  // client est requis mais absent : on attend la prochaine saisie.
-  if (!st.created && !values[primaryKey]) { qcSetStatus(""); return; }
+  // Création impossible tant que le champ primaire (NOT NULL) est vide — ou, pour
+  // une fiche « au moins l'un de » (beta.30 : projet nom OU adresse), tant qu'aucun
+  // de ces champs n'est renseigné. Idem si un client requis est absent.
+  const hasPrimary = st.spec.atLeastOne
+    ? st.spec.atLeastOne.some((k) => values[k])
+    : !!values[st.spec.fields[0].key];
+  if (!st.created && !hasPrimary) { qcSetStatus(""); return; }
   if (st.needsClient && values._client_id == null) { qcSetStatus(""); return; }
   qcSetStatus("Enregistrement…");
   try {
@@ -1260,10 +1267,131 @@ function wireActiveFieldIntoView() {
 
 function refreshProjetContactOptions() {
   const clientId = document.getElementById("f-client").value;
-  const projets = clientId ? state.refs.projets.filter((p) => String(p.client_id) === clientId) : state.refs.projets;
   const contacts = clientId ? state.refs.contacts.filter((c) => String(c.client_id) === clientId) : state.refs.contacts;
-  populateSelect(document.getElementById("f-projet"), projets, (p) => p.id, (p) => p.nom || p.ref_contrat || `Projet #${p.id}`, "Facultatif — choisir ou taper…");
   populateSelect(document.getElementById("f-contact"), contacts, (c) => c.id, (c) => c.nom, "Choisir ou taper…");
+}
+
+/* ===================== beta.30 : projets MULTIPLES par lettre ===================== */
+// Libellé d'un projet : nom, ou adresse si « adresse seule ».
+function projetLabel(p) { return (p && (p.nom || p.adresse)) || `Projet #${(p || {}).id}`; }
+function headerClientId() { return toIntOrNull(document.getElementById("f-client").value); }
+function projetById(id) { return (state.refs.projets || []).find((p) => String(p.id) === String(id)) || null; }
+// Projets DURABLES du client (ayant un nom) pour la liste de sélection.
+function clientProjetsDurables(clientId) {
+  return (state.refs.projets || []).filter((p) => p.nom && (!clientId || String(p.client_id) === String(clientId)));
+}
+// Projets de la lettre (objets), triés par libellé.
+function lvProjetsObjects() {
+  return (state.lvProjetIds || []).map(projetById).filter(Boolean)
+    .sort((a, b) => projetLabel(a).localeCompare(projetLabel(b), "fr"));
+}
+
+async function loadLvProjets() {
+  state.lvProjetIds = [];
+  const lvId = state.lv && state.lv.id;
+  if (!lvId) return;
+  try { state.lvProjetIds = await listLvProjets(lvId); } catch (e) { state.lvProjetIds = []; }
+}
+
+// Récap en puces dans l'en-tête de la lettre.
+function renderLvProjetsHeader() {
+  const box = document.getElementById("lv-projets-chips");
+  if (!box) return;
+  box.innerHTML = "";
+  const objs = lvProjetsObjects();
+  if (!objs.length) {
+    const empty = document.createElement("span");
+    empty.className = "muted lv-projets-empty";
+    empty.textContent = "Aucun projet (facultatif)";
+    box.appendChild(empty);
+    return;
+  }
+  for (const p of objs) {
+    const chip = document.createElement("span");
+    chip.className = "lv-projet-chip";
+    chip.textContent = projetLabel(p);
+    box.appendChild(chip);
+  }
+}
+
+// Lie/délie un projet à la lettre (persisté). Un bon sans projet reste complet.
+async function toggleLvProjet(projetId, on) {
+  const lvId = await ensureLv();
+  state.lvProjetIds = state.lvProjetIds || [];
+  try {
+    if (on) { await linkLvProjet(lvId, projetId); if (!state.lvProjetIds.includes(projetId)) state.lvProjetIds.push(projetId); }
+    else { await unlinkLvProjet(lvId, projetId); state.lvProjetIds = state.lvProjetIds.filter((x) => String(x) !== String(projetId)); }
+  } catch (err) {
+    const msg = err.message || String(err);
+    if (/\b40[39]\b/.test(msg)) { alert("Lettre signée : projets non modifiables."); await loadLvProjets(); }
+    else alert("Modification impossible : " + msg);
+  }
+  renderLvProjetsHeader();
+}
+
+// S'assure qu'un projet (choisi dans un tour) est bien rattaché à la lettre (le récap
+// inclut automatiquement les projets choisis dans les tours).
+async function ensureLvProjetLinked(projetId) {
+  state.lvProjetIds = state.lvProjetIds || [];
+  if (state.lvProjetIds.some((x) => String(x) === String(projetId))) return;
+  await toggleLvProjet(projetId, true);
+}
+
+function openProjetsSheet() {
+  const clientId = headerClientId();
+  if (!clientId) { alert("Choisissez d'abord un client."); return; }
+  const sheet = document.getElementById("projets-sheet");
+  sheet.hidden = false;
+  attachViewportSheet(sheet.querySelector(".sheet-panel") || sheet);
+  const search = document.getElementById("projets-search");
+  search.value = "";
+  document.getElementById("btn-projets-clear").hidden = true;
+  renderProjetsSheet("");
+  try { search.focus(); } catch (e) { /* ignore */ }
+}
+function closeProjetsSheet() {
+  const sheet = document.getElementById("projets-sheet");
+  const s = document.getElementById("projets-search");
+  if (s) { try { s.blur(); } catch (e) { /* ignore */ } }
+  detachViewportSheet(sheet.querySelector(".sheet-panel") || sheet);
+  sheet.hidden = true;
+}
+function renderProjetsSheet(query) {
+  const listEl = document.getElementById("projets-list");
+  const needle = normalizeTextSafe(query);
+  const clientId = headerClientId();
+  listEl.innerHTML = "";
+  // Création rapide (nom et/ou adresse) — même fiche plein écran.
+  const add = document.createElement("button");
+  add.type = "button";
+  add.className = "sheet-item sheet-item-add";
+  add.textContent = needle ? `+ Nouveau projet « ${query.trim()} »` : "+ Nouveau projet";
+  add.addEventListener("click", async () => {
+    closeProjetsSheet();
+    const created = await openQuickCreate("projet", needle ? query.trim() : "");
+    if (created && created.value) { await ensureLvProjetLinked(created.value); }
+  });
+  listEl.appendChild(add);
+  const projets = clientProjetsDurables(clientId)
+    .filter((p) => !needle || normalizeTextSafe(`${p.nom || ""} ${p.adresse || ""}`).includes(needle));
+  if (!projets.length) { const e = document.createElement("p"); e.className = "entity-empty"; e.textContent = "Aucun projet pour ce client."; listEl.appendChild(e); return; }
+  for (const p of projets) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "sheet-item";
+    const on = (state.lvProjetIds || []).some((x) => String(x) === String(p.id));
+    row.setAttribute("aria-pressed", on ? "true" : "false");
+    if (on) row.classList.add("is-selected");
+    const check = on ? '<svg class="sheet-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>' : "";
+    row.innerHTML = `<span>${check}${escapeHtml(projetLabel(p))}</span>${p.adresse && p.nom ? `<span class="muted">${escapeHtml(p.adresse)}</span>` : ""}`;
+    row.addEventListener("click", async () => { await toggleLvProjet(p.id, !on); renderProjetsSheet(document.getElementById("projets-search").value); });
+    listEl.appendChild(row);
+  }
+}
+
+// normalizeText du combobox (accents/casse) — repli simple si indisponible.
+function normalizeTextSafe(s) {
+  try { return cbNormalizeText(String(s || "")); } catch (e) { return String(s || "").trim().toLowerCase(); }
 }
 
 // Changement de client : on refiltre Projet/Contact et on purge les valeurs qui
@@ -1282,8 +1410,8 @@ function onClientChange() {
     if (contact && String(contact.client_id) !== clientId) contactSel.value = "";
   }
   refreshProjetContactOptions();
-  if (projetSel.value !== prevProjet) projetSel.dispatchEvent(new Event("change", { bubbles: true }));
   if (contactSel.value !== prevContact) contactSel.dispatchEvent(new Event("change", { bubbles: true }));
+  renderLvProjetsHeader(); // beta.30 : re-rend les puces (les projets dispo changent)
   refreshAdressePicker({ selectId: "f-client-adresse", wrapId: "field-client-adresse-wrap",
     clientId: toIntOrNull(clientId), saveField: "client_adresse_id" });
 }
@@ -1426,9 +1554,9 @@ function fillHeaderForm(data) {
   document.getElementById("f-client").value = clientId != null ? String(clientId) : "";
   refreshProjetContactOptions();
 
-  document.getElementById("f-projet").value = d.projet_id != null ? String(d.projet_id) : "";
+  // beta.30 : projets gérés en puces (lv_projets), plus via #f-projet.
   document.getElementById("f-contact").value = d.contact_id != null ? String(d.contact_id) : "";
-  ["f-client", "f-projet", "f-contact", "f-camion"].forEach((idf) => refreshCombobox(document.getElementById(idf)));
+  ["f-client", "f-contact", "f-camion"].forEach((idf) => refreshCombobox(document.getElementById(idf)));
   refreshAdressePicker({ selectId: "f-client-adresse", wrapId: "field-client-adresse-wrap",
     clientId, saveField: "client_adresse_id", selectedId: d.client_adresse_id });
 
@@ -1694,7 +1822,7 @@ async function ensureLv() {
 function wireHeaderAutosave() {
   wireAutosaveField(document.getElementById("f-date"), { table: "lettres_voiture", ensureId: ensureLv, field: "date_etablissement" });
   wireAutosaveField(document.getElementById("f-camion"), { table: "lettres_voiture", ensureId: ensureLv, field: "camion_id", transform: toIntOrNull });
-  wireAutosaveField(document.getElementById("f-projet"), { table: "lettres_voiture", ensureId: ensureLv, field: "projet_id", transform: toIntOrNull });
+  // beta.30 : projet_id (mono) remplacé par la liaison N-N lv_projets (puces).
   wireAutosaveField(document.getElementById("f-contact"), { table: "lettres_voiture", ensureId: ensureLv, field: "contact_id", transform: toIntOrNull });
   // beta.22 : adresse choisie de la société (expéditeur + destinataire).
   wireAutosaveField(document.getElementById("f-client-adresse"), { table: "lettres_voiture", ensureId: ensureLv, field: "client_adresse_id", transform: toIntOrNull });
@@ -2066,6 +2194,8 @@ async function loadToday() {
   fillHeaderForm(lv || state.prefillData);
   renderLvNumero();
   refreshDeleteButton();
+  await loadLvProjets();
+  renderLvProjetsHeader();
   await loadPrestationsFor(lv);
   await loadToursFor(lv);
   scheduleLvCompleteness();
@@ -3439,6 +3569,11 @@ function renderProjetCard(p, startOpen = false) {
       const nomInput = makeTextInput("text", p.nom);
       wireAutosaveField(nomInput, { table: "projets", id: p.id, field: "nom" });
       grid.appendChild(fieldBlock("Nom du projet", nomInput));
+
+      // beta.30 : adresse du projet (facultative ; un projet « adresse seule » est permis).
+      const adresseInput = makeTextInput("text", p.adresse);
+      wireAutosaveField(adresseInput, { table: "projets", id: p.id, field: "adresse" });
+      grid.appendChild(fieldBlock("Adresse", adresseInput));
 
       const clientSel = makeSelectInput(state.refs.clients.map((c) => ({ value: c.id, label: c.raison_sociale })), p.client_id, "Client…");
       wireAutosaveField(clientSel, { table: "projets", id: p.id, field: "client_id", transform: toIntOrNull });
@@ -4914,7 +5049,14 @@ async function openTourPicker({ node, tour, which, materialize }) {
   const curLat = tour ? (which === "chargement" ? tour.chargement_lat : tour.dechargement_lat) : null;
   const curLon = tour ? (which === "chargement" ? tour.chargement_lon : tour.dechargement_lon) : null;
   if (curAddr && curLat != null && curLon != null) coordSources.push({ adresse: curAddr, lat: curLat, lon: curLon });
-  state.sitePicker = { which, clientId: currentClientId(), apply, coordSources };
+  // beta.30 : projets de la lettre (avec adresse) en tête + projets du client dans
+  // la complétion. Choisir un projet remplit l'adresse ET rattache le tour au projet.
+  const cid = currentClientId();
+  const lettreProjets = lvProjetsObjects().filter((p) => p.adresse);
+  const lettreIds = new Set(lettreProjets.map((p) => String(p.id)));
+  const clientProjets = (state.refs.projets || []).filter((p) => p.adresse && (cid == null || String(p.client_id) === String(cid)) && !lettreIds.has(String(p.id)));
+  for (const p of [...lettreProjets, ...clientProjets]) coordSources.push({ adresse: p.adresse, lat: p.lat, lon: p.lon });
+  state.sitePicker = { which, clientId: cid, apply, coordSources, lettreProjets, clientProjets };
   const sheet = document.getElementById("site-picker-sheet");
   sheet.hidden = false;
   attachViewportSheet(sheet.querySelector(".sheet-panel") || sheet); // plein écran clavier-aware (B2)
@@ -4940,6 +5082,25 @@ async function openTourPicker({ node, tour, which, materialize }) {
 function pickSiteForTour(site) {
   const sp = state.sitePicker;
   if (sp && sp.apply && site) sp.apply(sitePatch(sp.which, site.id));
+}
+// beta.30 : choix d'un PROJET -> remplit l'adresse de l'extrémité + rattache le
+// tour au projet (projet_id) + garantit que le projet est dans le récap de la lettre.
+function pickProjet(projet) {
+  const sp = state.sitePicker;
+  if (!sp || !sp.apply || !projet || !projet.adresse) return;
+  const patch = { ...addressPatch(sp.which, { adresse: projet.adresse, lat: projet.lat, lon: projet.lon }), projet_id: projet.id };
+  sp.apply(patch);
+  ensureLvProjetLinked(projet.id);
+}
+// Ligne « projet » dans la feuille (touche = choisir).
+function projetItem(projet) {
+  const row = document.createElement("button");
+  row.type = "button";
+  row.className = "sheet-item";
+  const sub = projet.nom && projet.adresse ? `<span>${escapeHtml(projet.adresse)}</span>` : "";
+  row.innerHTML = `${escapeHtml(projet.nom || projet.adresse)}${sub}`;
+  row.addEventListener("click", () => pickProjet(projet));
+  return row;
 }
 // Choix d'une adresse de chantier. Si les coordonnées ne sont pas fournies (texte
 // saisi/édité), on tente de récupérer le GPS d'une source connue au même lieu.
@@ -5186,19 +5347,28 @@ async function renderSitePickerList(query) {
   const needle = (query || "").trim();
   const sites = (state.refs.sites || []).filter((s) => s.statut !== "termine" && !s.merged_into_id);
   const usages = chantierUsagesCache || [];
+  const projets = sp.clientProjets || [];
   listEl.innerHTML = "";
   titleEl.textContent = sp.which === "dechargement" ? "Lieu de déchargement" : "Lieu de chargement";
+
+  // beta.30 : projets de la lettre (avec adresse) TOUJOURS en tête.
+  const lettreProjets = (sp.lettreProjets || []).filter((p) =>
+    !needle || cbNormalizeText(`${p.nom || ""} ${p.adresse || ""}`).includes(cbNormalizeText(needle)));
+  if (lettreProjets.length) {
+    listEl.appendChild(sheetHeading("Projets de la lettre"));
+    for (const p of lettreProjets) listEl.appendChild(projetItem(p));
+  }
 
   // --- Frappe : complétion locale instantanée, BAN ajoutée ensuite ---
   if (needle) {
     // Toujours pouvoir valider le texte saisi tel quel (adresse de chantier libre).
     listEl.appendChild(chantierItem(needle, null, null, { star: false, sub: "Utiliser cette adresse" }));
-    const items = buildCompletion({ query: needle, usages, clientId: sp.clientId, sites, siteLabel: siteGroupedLabel, banResults: [] });
+    const items = buildCompletion({ query: needle, usages, clientId: sp.clientId, sites, siteLabel: siteGroupedLabel, banResults: [], projets });
     renderCompletionItems(listEl, items);
     requestBanSuggestions(needle, (ban) => {
       const search = document.getElementById("site-picker-search");
       if (!search || (search.value || "").trim() !== needle) return; // requête périmée
-      const withBan = buildCompletion({ query: needle, usages, clientId: sp.clientId, sites, siteLabel: siteGroupedLabel, banResults: ban });
+      const withBan = buildCompletion({ query: needle, usages, clientId: sp.clientId, sites, siteLabel: siteGroupedLabel, banResults: ban, projets });
       const already = new Set(items.map((it) => it.kind === "site" ? "site:" + it.site.id : "adr:" + it.adresse.toLowerCase()));
       const newBan = withBan.filter((it) => it.kind === "ban" && !already.has("adr:" + it.adresse.toLowerCase()));
       if (newBan.length) {
@@ -5231,8 +5401,13 @@ async function renderSitePickerList(query) {
 }
 
 function renderCompletionItems(listEl, items) {
+  const projetItems = items.filter((it) => it.kind === "projet");
   const chantiers = items.filter((it) => it.type === "chantier");
   const siteItems = items.filter((it) => it.kind === "site");
+  if (projetItems.length) {
+    listEl.appendChild(sheetHeading("Projets du client"));
+    for (const it of projetItems) listEl.appendChild(projetItem(it.projet));
+  }
   if (chantiers.length) {
     listEl.appendChild(sheetHeading("Chantiers"));
     for (const it of chantiers) listEl.appendChild(chantierItem(it.adresse, it.lat, it.lon, { star: true }));
@@ -5572,6 +5747,17 @@ function wireStaticUI() {
   spSearch.addEventListener("focus", () => { spBlurredOnScroll = false; });
 
   wireActiveFieldIntoView();
+
+  // ------------------------------------------- beta.30 : feuille « Projets du bon »
+  const btnLvProjets = document.getElementById("btn-lv-projets");
+  if (btnLvProjets) btnLvProjets.addEventListener("click", openProjetsSheet);
+  document.getElementById("btn-projets-back").addEventListener("click", closeProjetsSheet);
+  document.getElementById("projets-sheet").addEventListener("click", (e) => { if (e.target.id === "projets-sheet") closeProjetsSheet(); });
+  const prSearch = document.getElementById("projets-search");
+  wireFilterInput(prSearch, (q) => { renderProjetsSheet(q); document.getElementById("btn-projets-clear").hidden = !prSearch.value; });
+  prSearch.addEventListener("input", () => { document.getElementById("btn-projets-clear").hidden = !prSearch.value; });
+  prSearch.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); prSearch.blur(); } });
+  document.getElementById("btn-projets-clear").addEventListener("click", () => { prSearch.value = ""; renderProjetsSheet(""); document.getElementById("btn-projets-clear").hidden = true; try { prSearch.focus(); } catch (e) { /* ignore */ } });
 
   // --------------------------------------------------------------- Planning : envoi
   document.getElementById("btn-envoi-groupe").addEventListener("click", async () => {

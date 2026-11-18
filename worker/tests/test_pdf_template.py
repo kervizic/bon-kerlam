@@ -17,7 +17,7 @@ def _context():
             "dest_identique": True,
             "camion": "GV-398-JH",
             "chauffeur": "Jean",
-            "projet": "Régie Franciliane",
+            "projets_aff": "Régie Franciliane",
             "heures_regie": "7h-12h",
             "signataire_nom": "Claire Fontaine",
         },
@@ -81,20 +81,29 @@ def test_aucune_mention_legale():
 
 
 def test_libelle_projet():
-    # Maquette épurée (beta.23) : le champ projet porte le libellé « Projet » seul.
+    # beta.30 : un seul projet -> libellé « Projet » (singulier).
     html = pdf.render_html(_context())
     assert ">Projet<" in html
-    assert "Projet / régie" not in html
+    assert "Régie Franciliane" in html
     assert "État récapitulatif des transports" in html
 
 
-def test_projet_vide_masque_la_ligne_projet():
-    # Projet facultatif (beta.17) : sans projet, aucune ligne « Projet » imprimée
-    # (ni « Projet : — »). L'expéditeur reste le client de la lettre.
+def test_libelle_projets_multiples():
+    # beta.30 : plusieurs projets -> libellé « Projets » (pluriel) + liste.
     ctx = _context()
-    ctx["lv"]["projet"] = None
+    ctx["lv"]["projets_aff"] = "Régie Franciliane, Chantier Lagny"
+    html = pdf.render_html(ctx)
+    assert ">Projets<" in html
+    assert "Régie Franciliane, Chantier Lagny" in html
+
+
+def test_projet_vide_masque_la_ligne_projet():
+    # Projet facultatif (beta.17/30) : sans projet, aucune ligne « Projet » imprimée.
+    ctx = _context()
+    ctx["lv"]["projets_aff"] = ""
     html = pdf.render_html(ctx)
     assert ">Projet<" not in html
+    assert ">Projets<" not in html
     assert "YPREMA Lagny" in html  # expéditeur (client) toujours présent
 
 

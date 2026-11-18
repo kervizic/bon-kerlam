@@ -4,6 +4,41 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.30] — 2026-11-18
+
+Projets MULTIPLES par lettre. Les projets restent **facultatifs** (une lettre sans
+projet est complète, aucun champ rouge, aucun blocage, aucune ligne « Projets » sur
+le PDF).
+
+### Ajouté
+- **Plusieurs projets par lettre** : nouveau récap « Projets » en en-tête (puces). Un
+  bouton « Projets du bon… » ouvre une feuille plein écran pour **sélectionner
+  plusieurs projets** du client (multi-sélection) et **en créer** rapidement (nom
+  et/ou adresse, saisie BAN/« Ici », même feuille plein écran qu'en beta.29.1). Le
+  récap inclut automatiquement les projets choisis dans les tours.
+- **Projet défini par un nom ET/OU une adresse** (au moins l'un des deux, jamais vide ;
+  un projet « adresse seule » est possible). Écran Bureau : les projets ont désormais
+  un champ **Adresse**.
+- **Sélection d'un projet comme adresse de tour** : dans le sélecteur d'adresse d'un
+  tour, une section « Projets de la lettre » apparaît en tête (puis Chantiers récents,
+  Sites, Nouvelle adresse / « Ici »). Choisir un projet **remplit l'adresse** du tour,
+  **rattache** le tour au projet et garantit sa présence dans le récap. Les projets du
+  client ayant une adresse apparaissent aussi dans la complétion, juste après les
+  projets de la lettre.
+- **Projets « adresse seule »** : non listés dans la liste durable, mais visibles via
+  « Chantiers récents » (30 j). L'étoile « Garder » permet de leur donner un nom pour
+  en faire un projet durable.
+
+### Changé
+- **PDF** : ligne « Projet(s) : A, B » en en-tête (masquée si aucun projet). Quand une
+  lettre porte **plusieurs** projets, chaque tour indique le sien.
+- **Base de données** (migration `0028`) : table de liaison N-N `bon.lv_projets`,
+  colonne facultative `projet_id` sur `bon.tours` (FK, `ON DELETE SET NULL`), colonnes
+  `adresse`/`lat`/`lon` sur `bon.projets` avec `nom` rendu nullable et contrainte
+  « nom OU adresse non nuls ». Reprise automatique de l'ancien `lettres_voiture.projet_id`
+  vers la table de liaison. Aucune lettre réelle modifiée hors cette reprise. Le trigger
+  d'immuabilité des lettres signées (beta.29) reste en place et n'est pas touché.
+
 ## [0.1.0-beta.29.1] — 2026-11-18
 
 Adresses de chantier modifiables et sélecteur de lieu plein écran clavier-aware

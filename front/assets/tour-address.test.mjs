@@ -67,6 +67,22 @@ test("buildCompletion : ordre client -> autres -> sites -> BAN, dédoublonné", 
   assert.equal(r[3].adresse, "Chantier D, Lyon");
 });
 
+test("buildCompletion : projets du client avec adresse en tête (beta.30)", () => {
+  const projets = [
+    { id: 1, nom: "Chantier Mairie", adresse: "Place de la Mairie, 77400 Lagny", lat: 1, lon: 2 },
+    { id: 2, nom: "Projet sans adresse", adresse: null },
+  ];
+  const r = buildCompletion({
+    query: "mairie", usages: USAGES, clientId: 10, sites: [], siteLabel: (s) => s.nom,
+    banResults: [], projets,
+  });
+  assert.equal(r[0].kind, "projet");
+  assert.equal(r[0].projet.id, 1);
+  assert.equal(r[0].adresse, "Place de la Mairie, 77400 Lagny");
+  // le projet sans adresse n'apparaît pas dans la complétion d'adresse
+  assert.ok(!r.some((x) => x.kind === "projet" && x.projet && x.projet.id === 2));
+});
+
 test("buildCompletion : les sites matchent et ne doublonnent pas la BAN", () => {
   const sites = [{ id: 1, nom: "Cemex Ivry", adresse: "Quai Ivry" }];
   const ban = [{ label: "Quai Ivry", lat: 4, lon: 4 }]; // même libellé qu'un site

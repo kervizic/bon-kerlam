@@ -156,7 +156,13 @@ def build_context(lv_id: int) -> dict[str, Any]:
                lv.destinataire_client_id, lv.heures_regie,
                lv.heures, lv.statut,
                lv.quantite_estimee, lv.quantite_estimee_unite,
-               c.immatriculation AS camion, ch.nom AS chauffeur, p.nom AS projet,
+               c.immatriculation AS camion, ch.nom AS chauffeur,
+               -- beta.30 : projets MULTIPLES par lettre (liaison N-N). Libellé =
+               -- nom, ou adresse si le projet n'a pas de nom (« adresse seule »).
+               (SELECT array_agg(COALESCE(pr.nom, pr.adresse) ORDER BY lp.created_at, lp.projet_id)
+                  FROM bon.lv_projets lp
+                  JOIN bon.projets pr ON pr.id = lp.projet_id
+                 WHERE lp.lv_id = lv.id) AS projets,
                cl.raison_sociale AS client_nom,
                -- beta.22 : adresse CHOISIE de la société (société -> adresses),
                -- repli sur l'adresse de la fiche client (mono-adresse / ancien modèle).
@@ -185,6 +191,13 @@ def build_context(lv_id: int) -> dict[str, Any]:
     )
     if lv is None:
         raise ValueError(f"LV introuvable: {lv_id}")
+
+    # beta.30 : récap des projets de la lettre (facultatif). Ligne « Projets : A, B »
+    # masquée s'il n'y en a aucun. Le compte sert à n'afficher le projet PAR TOUR que
+    # s'il y a plusieurs projets sur la lettre.
+    projets_list = [x for x in (lv.get("projets") or []) if x]
+    lv["projets_aff"] = ", ".join(projets_list)
+    _nb_projets = len(projets_list)
 
     # Expéditeur (D) : dérivé du CLIENT (raison sociale + adresse), jamais saisi
     # dans l'appli. Repli sur la valeur stockée (lettres anciennes) si pas de client.
@@ -238,12 +251,15 @@ def build_context(lv_id: int) -> dict[str, Any]:
                -- vide pour une adresse libre -> le template affiche l'adresse seule.
                COALESCE(t.chargement_adresse, sc.adresse) AS chargement_adresse,
                sd.nom AS dechargement_site, sds.nom AS dechargement_societe,
-               COALESCE(t.dechargement_adresse, sd.adresse) AS dechargement_adresse
+               COALESCE(t.dechargement_adresse, sd.adresse) AS dechargement_adresse,
+               -- beta.30 : projet facultatif rattaché au tour (nom ou adresse).
+               COALESCE(pt.nom, pt.adresse) AS tour_projet
           FROM bon.tours t
           LEFT JOIN bon.sites sc ON sc.id = t.site_chargement_id
           LEFT JOIN bon.site_societes scs ON scs.id = sc.societe_id
           LEFT JOIN bon.sites sd ON sd.id = t.site_dechargement_id
           LEFT JOIN bon.site_societes sds ON sds.id = sd.societe_id
+          LEFT JOIN bon.projets pt ON pt.id = t.projet_id
          WHERE t.lv_id = %s AND t.deleted_at IS NULL
          ORDER BY t.ordre, t.id
         """,
@@ -256,6 +272,8 @@ def build_context(lv_id: int) -> dict[str, Any]:
         # Destinataire du tour affiché seulement s'il diffère de l'en-tête (texte libre).
         dest = (tour.get("destinataire") or "").strip()
         tour["destinataire_nom"] = dest or None
+        # beta.30 : le projet du tour n'est imprimé que si la lettre a PLUSIEURS projets.
+        tour["projet_nom"] = tour.get("tour_projet") if _nb_projets > 1 else None
         tour["lignes"] = db.query(
             """
             SELECT a.nom AS nom, tl.quantite, tl.unite

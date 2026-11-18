@@ -15,7 +15,7 @@ def _ctx():
             "destinataire": "Veolia\n2 rue de la Plaine, 93160 Noisy-le-Grand",
             "camion": "GV-398-JH",
             "chauffeur": "Marc Dubreuil",
-            "projet": "Régie Franciliane",
+            "projets_aff": "Régie Franciliane",
             "heures_aff": "7h00–16h00",
         },
         "prestations": [],
@@ -94,7 +94,7 @@ def test_pas_de_quantite_estimee_ni_rattrapage():
 
 def test_projet_absent_si_vide():
     ctx = _ctx()
-    ctx["lv"]["projet"] = ""
+    ctx["lv"]["projets_aff"] = ""
     html = pdf.render_html(ctx)
     assert ">Projet<" not in html
     # Mais présent (libellé « Projet » seul) s'il est renseigné.

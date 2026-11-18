@@ -1579,3 +1579,11 @@ body.qc-lock { position: fixed; left: 0; right: 0; width: 100%; overflow: hidden
 .sheet-overlay-fs #site-picker-list { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 8px 12px calc(12px + env(safe-area-inset-bottom)); }
 /* Pendant une feuille plein écran (verrou qc-lock), masquer les barres de navigation. */
 body.qc-lock .bottom-bar, body.qc-lock .selection-bar { display: none !important; }
+
+/* beta.30 : projets multiples — puces dans l'en-tête + feuille de sélection. */
+.lv-projets-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.lv-projet-chip { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; background: var(--c-orange-soft, rgba(253,128,8,.14)); color: var(--text); font-size: 13px; font-weight: 600; }
+.lv-projets-empty { font-size: 13px; }
+.sheet-item-add { font-weight: 600; color: var(--c-orange); }
+.sheet-item .sheet-check { vertical-align: -2px; margin-right: 6px; color: var(--c-orange); }
+.sheet-item.is-selected { border-color: var(--c-orange); }

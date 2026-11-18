@@ -450,6 +450,19 @@ export async function listProjets(clientId) {
   if (DEMO) return demoDb.projets.filter((p) => !clientId || String(p.client_id) === String(clientId));
   return live.listProjets(clientId);
 }
+// beta.30 : liaison N-N lettre <-> projets.
+export async function listLvProjets(lvId) {
+  if (DEMO) { demoDb.lv_projets = demoDb.lv_projets || []; return demoDb.lv_projets.filter((r) => String(r.lv_id) === String(lvId)).map((r) => r.projet_id); }
+  return live.listLvProjets(lvId);
+}
+export async function linkLvProjet(lvId, projetId) {
+  if (DEMO) { demoDb.lv_projets = demoDb.lv_projets || []; if (!demoDb.lv_projets.some((r) => String(r.lv_id) === String(lvId) && String(r.projet_id) === String(projetId))) demoDb.lv_projets.push({ lv_id: lvId, projet_id: projetId }); return; }
+  return live.linkLvProjet(lvId, projetId);
+}
+export async function unlinkLvProjet(lvId, projetId) {
+  if (DEMO) { demoDb.lv_projets = (demoDb.lv_projets || []).filter((r) => !(String(r.lv_id) === String(lvId) && String(r.projet_id) === String(projetId))); return; }
+  return live.unlinkLvProjet(lvId, projetId);
+}
 export async function listContacts(clientId) {
   if (DEMO) return demoDb.contacts.filter((c) => !clientId || String(c.client_id) === String(clientId));
   return live.listContacts(clientId);
