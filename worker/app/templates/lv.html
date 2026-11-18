@@ -135,7 +135,6 @@
   .route { font-size: 9.5pt; line-height: 1.3; }
   .place { display: inline-block; vertical-align: top; }
   .place-name { font-weight: 600; }
-  .tour-projet { font-size: 8pt; color: #555; margin-bottom: 2pt; }
   .place-addr { display: block; font-weight: 400; font-size: 8pt; color: var(--ink-soft); }
   .route .arrow { color: var(--orange); font-weight: 700; margin: 0 5pt; }
   .dest-override { color: var(--ink-soft); font-weight: 400; font-size: 8.5pt; }
@@ -240,7 +239,6 @@
     <div class="tours">
     {% for tour in tours %}
       <div class="tour">
-        {% if tour.projet_nom %}<div class="tour-projet">Projet : {{ tour.projet_nom }}</div>{% endif %}
         <div class="route">
           <span class="place">
             <span class="place-name">{{ tour.chargement_nom or tour.chargement_adresse or "—" }}</span>

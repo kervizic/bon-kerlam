@@ -97,6 +97,19 @@ def test_libelle_projets_multiples():
     assert "Régie Franciliane, Chantier Lagny" in html
 
 
+def test_aucun_projet_par_tour():
+    # beta.31.1 : même avec plusieurs projets sur la lettre ET un projet rattaché à
+    # un tour, AUCUN nom de projet n'est imprimé sur les tours (seul le récap d'en-tête
+    # « Projets : A, B » subsiste).
+    ctx = _context()
+    ctx["lv"]["projets_aff"] = "Régie Franciliane, Chantier Lagny"
+    ctx["tours"][0]["projet_nom"] = "Chantier Lagny"  # ignoré par le gabarit
+    html = pdf.render_html(ctx)
+    assert "tour-projet" not in html
+    assert "Projet :" not in html  # plus de libellé « Projet : … » par tour
+    assert ">Projets<" in html  # mais le récap d'en-tête reste
+
+
 def test_projet_vide_masque_la_ligne_projet():
     # Projet facultatif (beta.17/30) : sans projet, aucune ligne « Projet » imprimée.
     ctx = _context()

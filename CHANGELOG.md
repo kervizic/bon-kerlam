@@ -4,6 +4,16 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.31.1] — 2026-11-18
+
+### Retiré
+- **Plus de rappel du projet sur les tours** (PDF) : même quand la lettre porte
+  plusieurs projets, aucun nom de projet n'est imprimé sur les lignes de tour. Seul
+  subsiste le récap « Projets : A, B » en en-tête (masqué si aucun projet). Le
+  rattachement technique tour→projet (`projet_id`) reste en base (il alimente le récap
+  d'en-tête) mais n'est plus lu ni affiché. L'écran de la lettre n'affichait déjà
+  aucune étiquette projet par tour.
+
 ## [0.1.0-beta.31] — 2026-11-18
 
 Performance et fraîcheur du PDF (worker + base). Aucun changement visible du PDF.

@@ -193,11 +193,10 @@ def build_context(lv_id: int) -> dict[str, Any]:
         raise ValueError(f"LV introuvable: {lv_id}")
 
     # beta.30 : récap des projets de la lettre (facultatif). Ligne « Projets : A, B »
-    # masquée s'il n'y en a aucun. Le compte sert à n'afficher le projet PAR TOUR que
-    # s'il y a plusieurs projets sur la lettre.
+    # en en-tête, masquée s'il n'y en a aucun. beta.31.1 : le projet n'est plus affiché
+    # par tour, donc plus besoin de compter les projets.
     projets_list = [x for x in (lv.get("projets") or []) if x]
     lv["projets_aff"] = ", ".join(projets_list)
-    _nb_projets = len(projets_list)
 
     # Expéditeur (D) : dérivé du CLIENT (raison sociale + adresse), jamais saisi
     # dans l'appli. Repli sur la valeur stockée (lettres anciennes) si pas de client.
@@ -251,15 +250,15 @@ def build_context(lv_id: int) -> dict[str, Any]:
                -- vide pour une adresse libre -> le template affiche l'adresse seule.
                COALESCE(t.chargement_adresse, sc.adresse) AS chargement_adresse,
                sd.nom AS dechargement_site, sds.nom AS dechargement_societe,
-               COALESCE(t.dechargement_adresse, sd.adresse) AS dechargement_adresse,
-               -- beta.30 : projet facultatif rattaché au tour (nom ou adresse).
-               COALESCE(pt.nom, pt.adresse) AS tour_projet
+               COALESCE(t.dechargement_adresse, sd.adresse) AS dechargement_adresse
+          -- beta.31.1 : le projet N'est PLUS imprimé par tour (décision Manu). Le
+          -- rattachement tour->projet (t.projet_id) reste en base pour le récap
+          -- d'en-tête, mais n'est plus lu ni affiché ici.
           FROM bon.tours t
           LEFT JOIN bon.sites sc ON sc.id = t.site_chargement_id
           LEFT JOIN bon.site_societes scs ON scs.id = sc.societe_id
           LEFT JOIN bon.sites sd ON sd.id = t.site_dechargement_id
           LEFT JOIN bon.site_societes sds ON sds.id = sd.societe_id
-          LEFT JOIN bon.projets pt ON pt.id = t.projet_id
          WHERE t.lv_id = %s AND t.deleted_at IS NULL
          ORDER BY t.ordre, t.id
         """,
@@ -272,8 +271,6 @@ def build_context(lv_id: int) -> dict[str, Any]:
         # Destinataire du tour affiché seulement s'il diffère de l'en-tête (texte libre).
         dest = (tour.get("destinataire") or "").strip()
         tour["destinataire_nom"] = dest or None
-        # beta.30 : le projet du tour n'est imprimé que si la lettre a PLUSIEURS projets.
-        tour["projet_nom"] = tour.get("tour_projet") if _nb_projets > 1 else None
         tour["lignes"] = db.query(
             """
             SELECT a.nom AS nom, tl.quantite, tl.unite
