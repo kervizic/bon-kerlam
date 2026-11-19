@@ -198,7 +198,11 @@ services:
         condition: service_healthy
     ports:
       - "127.0.0.1:8099:8099"
-    mem_limit: 128m
+    # beta.32 : 128m était atteint pendant un rendu WeasyPrint (baseline uvicorn ~120m
+    # + rendu ~70m) -> le conteneur swappait (lent). Les rendus étant désormais
+    # SÉRIALISÉS (un seul à la fois, render.py), le pic est baseline + 1 rendu ~190m :
+    # 320m laisse de la marge (1er rendu + fontconfig) sans trop sur-réserver le VPS.
+    mem_limit: 320m
     environment:
       APP_VERSION: ${APP_VERSION:-dev}
       GIT_SHA: ${GIT_SHA:-unknown}

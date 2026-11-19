@@ -1594,3 +1594,13 @@ body.qc-lock .bottom-bar, body.qc-lock .selection-bar { display: none !important
 .sheet-item-add { font-weight: 600; color: var(--c-orange); }
 .sheet-item .sheet-check { vertical-align: -2px; margin-right: 6px; color: var(--c-orange); }
 .sheet-item.is-selected { border-color: var(--c-orange); }
+
+/* beta.32 : compte + déconnexion (Réglages) et entrée déconnexion du menu Plus. */
+.account-box { margin-top: 18px; }
+.account-id { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; }
+.account-name { font-weight: 700; color: var(--text); }
+.account-email { font-size: 13px; color: var(--text-muted); }
+.nav-drawer-logout { display: block; width: 100%; text-align: left; background: none; border: none; cursor: pointer;
+  padding: 12px 8px; margin-top: 6px; border-top: 1px solid var(--border); color: var(--c-red, #c0392b); font: inherit; font-weight: 600; }
+.nav-drawer-logout:hover, .nav-drawer-logout:focus-visible { background: var(--bg); }
+#logout-confirm-sheet .sheet-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }

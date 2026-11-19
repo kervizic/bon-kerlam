@@ -57,7 +57,10 @@ export async function signInWithGoogle() {
 }
 
 export async function signOut() {
-  return requireClient().auth.signOut();
+  // beta.32 : scope local -> ne déconnecte QUE cet appareil (les autres sessions et
+  // les passkeys Face ID restent valides). Évite aussi de révoquer le refresh token
+  // côté serveur (plus rapide, pas d'appel réseau bloquant).
+  return requireClient().auth.signOut({ scope: "local" });
 }
 
 // Deuxième méthode de connexion : code à 6 chiffres envoyé par e-mail (OTP).

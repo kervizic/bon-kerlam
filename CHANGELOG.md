@@ -4,6 +4,41 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.32] — 2026-11-19
+
+Performance (signature, chargement) et déconnexion.
+
+### Corrigé
+- **Iframe de signature très longue à charger** : les assets statiques de l'app
+  Documenso (`/assets/*`, noms de fichiers hashés) n'étaient pas exclus du
+  rate-limit nginx (zone `documenso_all`) ; une page d'embed charge > 150 fichiers,
+  certains repartaient en **429** → rechargements → lenteur. Les `/assets/` sont
+  désormais servis **sans limite** et avec un **cache navigateur long** (immutable).
+  Les routes dynamiques/API/auth restent limitées.
+- **« Signer » n'attend plus un rendu PDF évitable** : les rendus WeasyPrint sont
+  **sérialisés** (un seul à la fois, vCPU/RAM), **dé-dupliqués** (une lettre n'est
+  jamais rendue deux fois en parallèle), et **priorisés** (signature/préparation
+  devant le préchauffage et le re-rendu de fond). Le rendu de fond tourne en basse
+  priorité OS (`nice`). Si seul le **gabarit** a changé (contenu identique), la
+  signature utilise le PDF existant immédiatement et le re-rendu au nouveau gabarit
+  se fait en arrière-plan (séparation `content_hash` / `template_version`).
+- **Mémoire du worker** : limite relevée de 128 à **320 MiB** (128 était atteint
+  pendant un rendu → swap → lenteur).
+
+### Ajouté
+- **Bouton « Se déconnecter »** : en bas de Réglages, en **rouge**, avec le nom et
+  l'e-mail du compte au-dessus ; également dans le menu « Plus » / tiroir bureau.
+  Feuille de confirmation (« Se déconnecter ? » Se déconnecter / Annuler).
+  `auth.signOut` en **scope local** (les passkeys Face ID et les autres appareils
+  restent connectés), purge de la session, de l'état et des données utilisateur en
+  cache (pas le cache des assets du Service Worker), fermeture d'une signature en
+  cours, retour à l'écran de connexion.
+
+### Base de données (migration `0030`)
+- Colonne `template_version` sur `bon.lv_pdf_cache` (nullable) : distingue « contenu
+  modifié » de « seul le gabarit a changé » pour éviter un cache 100 % froid bloquant
+  au déploiement.
+
 ## [0.1.0-beta.31.1] — 2026-11-18
 
 ### Retiré

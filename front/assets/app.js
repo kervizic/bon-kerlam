@@ -164,7 +164,7 @@ import { swipeActionsFor, attachSwipe, closeOpenSwipe } from "./swipe-actions.js
 import {
   recentChantiers, buildCompletion, swapPatch, addressPatch, sitePatch,
   endpointLabel, endpointLatLon, coordsForText,
-} from "./tour-address.js?v=311";
+} from "./tour-address.js?v=320";
 // pdf-viewer.js (et pdf.js) chargés en import DYNAMIQUE à la 1re ouverture (g).
 import { enhanceSelect, refreshCombobox, ensureOption, normalizeText as cbNormalizeText } from "./combobox.js?v=17";
 import { initTooltips } from "./tooltips.js?v=22";
@@ -2794,9 +2794,26 @@ function schedulePdfCacheRefresh(lv) {
 // Déconnexion : on purge le cache PDF local (documents non signés du chauffeur)
 // AVANT de clôturer la session, puis on déconnecte.
 async function logout() {
+  // beta.32 : ferme proprement une signature en cours, vide l'état utilisateur et
+  // le cache des PDF locaux (PAS le cache des assets du Service Worker), puis revient
+  // à l'écran de connexion. Les passkeys Face ID sont conservées (scope local).
+  try { closeEmbeddedSigning(); } catch (e) { /* aucune signature ouverte */ }
   if (pdfRefreshTimer) { clearTimeout(pdfRefreshTimer); pdfRefreshTimer = null; }
   await pdfCache.purge().catch(() => {});
-  await signOut();
+  try { await signOut(); } catch (e) { /* best-effort : on continue le nettoyage */ }
+  try { localStorage.removeItem(VIEW_MODE_KEY); } catch (e) { /* ignore */ }
+  // Rechargement : slate propre (session, état, données en cache vidées) tout en
+  // gardant le cache d'assets du SW. L'absence de session affiche l'écran de connexion.
+  location.reload();
+}
+
+function openLogoutConfirm() {
+  const sheet = document.getElementById("logout-confirm-sheet");
+  if (sheet) sheet.hidden = false;
+}
+function closeLogoutConfirm() {
+  const sheet = document.getElementById("logout-confirm-sheet");
+  if (sheet) sheet.hidden = true;
 }
 
 /* ======================================= Accueil chauffeur (non signées) (f) == */
@@ -5701,8 +5718,16 @@ function wireStaticUI() {
       showAuthError("Connexion impossible : " + (err && err.message ? err.message : "erreur inconnue"));
     }
   });
+  // Déconnexion (beta.32) : depuis l'écran « non autorisé » -> direct ; depuis
+  // Réglages ou le menu Plus -> feuille de confirmation.
   document.getElementById("btn-logout-unauthorized").addEventListener("click", () => logout());
-  document.getElementById("btn-logout").addEventListener("click", () => logout());
+  document.getElementById("btn-logout").addEventListener("click", openLogoutConfirm);
+  document.getElementById("btn-drawer-logout").addEventListener("click", () => { closeNavDrawer(); openLogoutConfirm(); });
+  document.getElementById("btn-logout-cancel").addEventListener("click", closeLogoutConfirm);
+  document.getElementById("btn-logout-confirm").addEventListener("click", () => { closeLogoutConfirm(); logout(); });
+  document.getElementById("logout-confirm-sheet").addEventListener("click", (e) => {
+    if (e.target.id === "logout-confirm-sheet") closeLogoutConfirm(); // clic sur le fond
+  });
 
   wireEmailOtpLogin();
   wirePasskeyLogin();
@@ -6103,6 +6128,16 @@ async function handleSessionChange(session) {
         ? profil.roles
         : (profil.role ? [profil.role] : []))
     : [];
+
+  // beta.32 : compte affiché au-dessus du bouton de déconnexion (Réglages).
+  const accName = document.getElementById("account-name");
+  const accEmail = document.getElementById("account-email");
+  if (accEmail) accEmail.textContent = (profil && profil.email) || session.user.email || "";
+  if (accName) {
+    const nm = profil && profil.nom;
+    accName.textContent = nm || "";
+    accName.hidden = !nm;
+  }
 
   if (!profil) {
     document.getElementById("unauthorized-email").textContent = session.user.email || "";

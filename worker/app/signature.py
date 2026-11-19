@@ -130,15 +130,19 @@ def _create_lot_document(
     )
 
 
-def warm_cache(lv_ids: list[int]) -> dict:
+def warm_cache(lv_ids: list[int], priority: int | None = None) -> dict:
     """Travail LOCAL uniquement (beta.25, décision Manu : AUCUN document Documenso
     par anticipation) : s'assure que le PDF de chaque lettre est rendu et mis en
     cache, pour que la création du document au toucher soit quasi instantanée.
-    Aucun appel Documenso, aucun mail."""
+    Aucun appel Documenso, aucun mail. beta.32 : `priority` route vers l'ordonnanceur
+    (PRIO_SIGN quand l'utilisateur prépare une signature, PRIO_BG au préchauffage)."""
+    from .render import PRIO_SIGN
+
+    prio = PRIO_SIGN if priority is None else priority
     n = 0
     for lv_id in lv_ids:
         try:
-            pdf.letter_cached(lv_id)
+            pdf.letter_cached(lv_id, prio)
             n += 1
         except Exception:  # noqa: BLE001
             pass

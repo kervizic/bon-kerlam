@@ -14,7 +14,7 @@ from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from . import db
+from . import db, render
 from .config import settings
 
 _TPL_DIR = os.path.join(os.path.dirname(__file__), "templates")
@@ -22,6 +22,23 @@ _env = Environment(
     loader=FileSystemLoader(_TPL_DIR),
     autoescape=select_autoescape(["html"]),
 )
+
+
+def _template_version() -> str:
+    """Empreinte du gabarit lv.html : change dès que la mise en page change. Permet de
+    distinguer « contenu modifié » (re-rendu obligatoire) de « seul le gabarit a changé »
+    (le PDF existant reste valable, re-rendu en arrière-plan). beta.32."""
+    with open(os.path.join(_TPL_DIR, "lv.html"), "rb") as fh:
+        return hashlib.sha256(fh.read()).hexdigest()[:16]
+
+
+TEMPLATE_VERSION = _template_version()
+
+
+def _content_hash(context: dict[str, Any]) -> str:
+    """Empreinte du CONTENU de la lettre (données du contexte), indépendante du gabarit."""
+    payload = json.dumps(context, sort_keys=True, ensure_ascii=False, default=str)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def _format_siren(raw: str) -> str:
@@ -366,33 +383,56 @@ def measure_fields(document, page_offset: int = 0) -> list[dict]:
     return fields
 
 
-def letter_cached(lv_id: int) -> tuple[bytes, list[dict], int]:
-    """(pdf, champs page-locaux, nb_pages) d'UNE lettre, depuis le cache si son
-    contenu n'a pas changé (clé = hash du HTML rendu, qui détermine entièrement le
-    PDF), sinon rend via WeasyPrint et met en cache. Évite le rendu coûteux
-    (sous-typage de police) au moment de signer."""
-    html = render_html(build_context(lv_id))
-    content_hash = hashlib.sha256(html.encode("utf-8")).hexdigest()
-    row = db.query_one(
-        "SELECT pdf, anchors, n_pages FROM bon.lv_pdf_cache WHERE lv_id = %s AND content_hash = %s",
-        (lv_id, content_hash),
-    )
-    if row:
-        return bytes(row["pdf"]), row["anchors"], row["n_pages"]
+def _render_and_cache(lv_id: int) -> tuple[bytes, list[dict], int]:
+    """Rendu WeasyPrint RÉEL + écriture du cache. Appelé UNIQUEMENT par l'ordonnanceur
+    (render.py) : sérialisé (un seul rendu à la fois) et dé-dupliqué par lv_id."""
     from weasyprint import HTML
 
+    context = build_context(lv_id)
+    content_hash = _content_hash(context)
+    html = render_html(context)
     document = HTML(string=html, base_url=_TPL_DIR + os.sep).render()
     fields_local = measure_fields(document, 0)
     pdf_bytes = document.write_pdf()
     n_pages = len(document.pages)
     db.query(
-        "INSERT INTO bon.lv_pdf_cache (lv_id, content_hash, pdf, anchors, n_pages, updated_at) "
-        "VALUES (%s, %s, %s, %s, %s, now()) "
+        "INSERT INTO bon.lv_pdf_cache (lv_id, content_hash, template_version, pdf, anchors, n_pages, updated_at) "
+        "VALUES (%s, %s, %s, %s, %s, %s, now()) "
         "ON CONFLICT (lv_id) DO UPDATE SET content_hash = EXCLUDED.content_hash, "
-        "pdf = EXCLUDED.pdf, anchors = EXCLUDED.anchors, n_pages = EXCLUDED.n_pages, updated_at = now()",
-        (lv_id, content_hash, pdf_bytes, json.dumps(fields_local), n_pages),
+        "template_version = EXCLUDED.template_version, pdf = EXCLUDED.pdf, "
+        "anchors = EXCLUDED.anchors, n_pages = EXCLUDED.n_pages, updated_at = now()",
+        (lv_id, content_hash, TEMPLATE_VERSION, pdf_bytes, json.dumps(fields_local), n_pages),
     )
     return pdf_bytes, fields_local, n_pages
+
+
+render.configure(_render_and_cache)
+
+
+def letter_cached(lv_id: int, priority: int = render.PRIO_SIGN) -> tuple[bytes, list[dict], int]:
+    """(pdf, champs page-locaux, nb_pages) d'UNE lettre.
+
+    - Cache exact (même contenu ET même gabarit) -> renvoyé immédiatement.
+    - Même CONTENU mais gabarit différent (après un déploiement qui change la mise en
+      page) -> on renvoie le PDF existant tout de suite et on planifie un re-rendu en
+      ARRIÈRE-PLAN : signer n'attend jamais un rendu seulement dû au gabarit.
+    - Contenu modifié (ou pas de cache) -> rendu via l'ordonnanceur (sérialisé +
+      dé-dupliqué), à la priorité demandée (signature devant la file de fond).
+    """
+    context = build_context(lv_id)
+    content_hash = _content_hash(context)
+    row = db.query_one(
+        "SELECT pdf, anchors, n_pages, content_hash, template_version "
+        "FROM bon.lv_pdf_cache WHERE lv_id = %s",
+        (lv_id,),
+    )
+    if row and row["content_hash"] == content_hash:
+        if row["template_version"] != TEMPLATE_VERSION:
+            # Contenu identique, gabarit changé : rafraîchir en fond, servir l'existant.
+            render.request_render(lv_id, render.PRIO_BG)
+        return bytes(row["pdf"]), row["anchors"], row["n_pages"]
+    # Contenu modifié ou cache absent : rendu (prioritaire pour la signature).
+    return render.render_now(lv_id, priority)
 
 
 # --- File de rafraîchissement du cache (beta.31) ------------------------------
@@ -436,7 +476,7 @@ def process_dirty_once(min_age_seconds: int = 20) -> int | None:
     # Mémorise l'horodatage courant : on ne retire de la file que si la lettre n'a pas
     # été re-modifiée pendant le rendu.
     stamp = db.query_one("SELECT dirty_at FROM bon.lv_pdf_dirty WHERE lv_id = %s", (lv_id,))
-    letter_cached(lv_id)  # rend + met en cache (no-op si le hash n'a pas changé)
+    letter_cached(lv_id, render.PRIO_BG)  # re-rendu de fond (basse priorité, dé-dupliqué)
     if stamp:
         db.query(
             "DELETE FROM bon.lv_pdf_dirty WHERE lv_id = %s AND dirty_at <= %s",

@@ -289,10 +289,10 @@ def referentiel(kind: str, _=Depends(require_token("read"))):
 @router.post("/pdf/{lv_id}")
 def lv_pdf(lv_id: int, _=Depends(require_token("read"))):
     try:
-        ctx = pdf.build_context(lv_id)
+        pdf_bytes, _fields, _n = pdf.letter_cached(lv_id)  # cache + rendu sérialisé (beta.32)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return Response(content=pdf.render_pdf(ctx), media_type="application/pdf")
+    return Response(content=pdf_bytes, media_type="application/pdf")
 
 
 def _user_can_access_lv(email: str | None, lv_id: int) -> bool:
@@ -332,10 +332,10 @@ def lv_pdf_user(lv_id: int, user=Depends(require_user)):
     if not _user_can_access_lv(user.get("email"), lv_id):
         raise HTTPException(status_code=403, detail="Accès refusé à cette lettre de voiture.")
     try:
-        ctx = pdf.build_context(lv_id)
+        pdf_bytes, _fields, _n = pdf.letter_cached(lv_id)  # cache + rendu sérialisé (beta.32)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return Response(content=pdf.render_pdf(ctx), media_type="application/pdf")
+    return Response(content=pdf_bytes, media_type="application/pdf")
 
 
 @router.post("/close-midnight")
@@ -409,7 +409,9 @@ async def _warm_cache_loop() -> None:
         lv_ids = await asyncio.to_thread(signature.signable_lv_ids)
     except Exception:  # noqa: BLE001
         return
+    from .render import PRIO_BG
+
     for lv_id in lv_ids:
         with contextlib.suppress(Exception):
-            await asyncio.to_thread(signature.warm_cache, [lv_id])
+            await asyncio.to_thread(signature.warm_cache, [lv_id], PRIO_BG)
         await asyncio.sleep(3)  # basse priorité : on ne sature pas le vCPU

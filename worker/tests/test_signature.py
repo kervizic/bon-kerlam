@@ -183,7 +183,7 @@ def test_build_combined_pdf_depuis_cache(monkeypatch):
     # étant imprimé en dur dans le PDF.
     pages_par_lv = {7: 1, 8: 2, 9: 1}
 
-    def fake_cached(lv_id):
+    def fake_cached(lv_id, *a, **k):
         n = pages_par_lv[lv_id]
         local = [
             {"type": "SIGNATURE", "pageNumber": n, "pageX": 9, "pageY": 43, "pageWidth": 31, "pageHeight": 5},
@@ -243,7 +243,7 @@ def test_par_mail_active_seulement_invitation(monkeypatch):
 def test_warm_cache_local_sans_documenso(monkeypatch):
     # Préchauffe LOCALE : letter_cached par lettre, aucun appel Documenso.
     vus = []
-    monkeypatch.setattr(signature.pdf, "letter_cached", lambda lv_id: vus.append(lv_id) or (b"%PDF", [], 1))
+    monkeypatch.setattr(signature.pdf, "letter_cached", lambda lv_id, *a, **k: vus.append(lv_id) or (b"%PDF", [], 1))
     monkeypatch.setattr(signature.documenso, "create_document",
                         lambda *a, **k: pytest.fail("warm_cache ne doit créer AUCUN document"))
     assert signature.warm_cache([7, 8, 9]) == {"warmed": 3}
