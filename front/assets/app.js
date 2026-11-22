@@ -167,7 +167,8 @@ import { swipeActionsFor, attachSwipe, closeOpenSwipe } from "./swipe-actions.js
 import {
   recentChantiers, buildCompletion, swapPatch, addressPatch, sitePatch,
   endpointLabel, endpointLatLon, coordsForText,
-} from "./tour-address.js?v=331";
+} from "./tour-address.js?v=332";
+import { strokesBBox, exportLayout } from "./signature-pad.js?v=332";
 // pdf-viewer.js (et pdf.js) chargés en import DYNAMIQUE à la 1re ouverture (g).
 import { enhanceSelect, refreshCombobox, ensureOption, normalizeText as cbNormalizeText } from "./combobox.js?v=17";
 import { initTooltips } from "./tooltips.js?v=22";
@@ -3276,7 +3277,14 @@ function showSignPreparing(on) {
   if (el) el.hidden = !on;
 }
 
-const signPad = { batch: null, canvas: null, ctx: null, drawing: false, dirty: false, last: null };
+// beta.33.2 : on STOCKE les points de chaque tracé (strokes). Rendu à l'écran = couleur
+// du thème ; export = rejeu des mêmes points en NOIR, recadré + ratio 2:1.
+const signPad = { batch: null, canvas: null, ctx: null, drawing: false, dirty: false,
+  strokes: [], lastMid: null };
+
+function _signPadInkColor() {
+  return getComputedStyle(document.documentElement).getPropertyValue("--text").trim() || "#111";
+}
 
 function _signPadResize() {
   const canvas = signPad.canvas;
@@ -3287,9 +3295,11 @@ function _signPadResize() {
   canvas.height = Math.max(1, Math.round(rect.height * dpr));
   const ctx = canvas.getContext("2d");
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.setLineDash([]);                 // jamais de pointillés
   ctx.lineWidth = 2.6; ctx.lineCap = "round"; ctx.lineJoin = "round";
-  ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue("--text").trim() || "#111";
+  ctx.strokeStyle = _signPadInkColor(); // couleur du thème À L'ÉCRAN
   signPad.ctx = ctx;
+  _signPadRedraw();                    // re-dessine les tracés déjà saisis (après resize)
 }
 
 function _signPadPoint(ev) {
@@ -3297,25 +3307,40 @@ function _signPadPoint(ev) {
   return { x: ev.clientX - r.left, y: ev.clientY - r.top };
 }
 
+// Dessine un tracé (liste de points) avec lissage CONTINU (courbes quadratiques entre
+// les milieux successifs) -> aucun trou, aucun pointillé.
+function _drawSmoothStroke(ctx, pts, tx, ty) {
+  if (!pts.length) return;
+  const X = tx || ((x) => x), Y = ty || ((y) => y);
+  if (pts.length === 1) {
+    const r = ctx.lineWidth / 2;
+    ctx.beginPath(); ctx.arc(X(pts[0].x), Y(pts[0].y), r, 0, Math.PI * 2);
+    ctx.fillStyle = ctx.strokeStyle; ctx.fill();
+    return;
+  }
+  ctx.beginPath();
+  ctx.moveTo(X(pts[0].x), Y(pts[0].y));
+  for (let i = 1; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1];
+    ctx.quadraticCurveTo(X(a.x), Y(a.y), X((a.x + b.x) / 2), Y((a.y + b.y) / 2));
+  }
+  const last = pts[pts.length - 1];
+  ctx.lineTo(X(last.x), Y(last.y));
+  ctx.stroke();
+}
+
+function _signPadRedraw() {
+  const ctx = signPad.ctx, c = signPad.canvas;
+  if (!ctx || !c) return;
+  ctx.clearRect(0, 0, c.width, c.height);
+  for (const s of signPad.strokes) _drawSmoothStroke(ctx, s);
+}
+
 function _signPadStart(ev) {
   ev.preventDefault();
   signPad.canvas.setPointerCapture && signPad.canvas.setPointerCapture(ev.pointerId);
   signPad.drawing = true;
-  signPad.last = _signPadPoint(ev);
-}
-
-function _signPadMove(ev) {
-  if (!signPad.drawing) return;
-  ev.preventDefault();
-  const p = _signPadPoint(ev);
-  const ctx = signPad.ctx;
-  const last = signPad.last;
-  const mid = { x: (last.x + p.x) / 2, y: (last.y + p.y) / 2 };
-  ctx.beginPath();
-  ctx.moveTo(last.x, last.y);
-  ctx.quadraticCurveTo(last.x, last.y, mid.x, mid.y);
-  ctx.stroke();
-  signPad.last = p;
+  signPad.strokes.push([_signPadPoint(ev)]);
   if (!signPad.dirty) {
     signPad.dirty = true;
     const ph = document.getElementById("sign-pad-placeholder");
@@ -3323,9 +3348,58 @@ function _signPadMove(ev) {
   }
 }
 
-function _signPadEnd() { signPad.drawing = false; }
+function _signPadMove(ev) {
+  if (!signPad.drawing) return;
+  ev.preventDefault();
+  const p = _signPadPoint(ev);
+  const stroke = signPad.strokes[signPad.strokes.length - 1];
+  stroke.push(p);
+  // Rendu incrémental continu : du milieu précédent au nouveau milieu (contrôle = avant-dernier point).
+  const ctx = signPad.ctx, n = stroke.length;
+  const a = stroke[n - 2], b = stroke[n - 1];
+  const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  const from = signPad.lastMid || a;
+  ctx.beginPath();
+  ctx.moveTo(from.x, from.y);
+  ctx.quadraticCurveTo(a.x, a.y, mid.x, mid.y);
+  ctx.stroke();
+  signPad.lastMid = mid;
+}
+
+function _signPadEnd() {
+  if (signPad.drawing) {
+    // Relie proprement jusqu'au dernier point.
+    const stroke = signPad.strokes[signPad.strokes.length - 1];
+    if (stroke && stroke.length > 1 && signPad.lastMid) {
+      const last = stroke[stroke.length - 1];
+      const ctx = signPad.ctx;
+      ctx.beginPath(); ctx.moveTo(signPad.lastMid.x, signPad.lastMid.y); ctx.lineTo(last.x, last.y); ctx.stroke();
+    }
+  }
+  signPad.drawing = false;
+  signPad.lastMid = null;
+}
+
+// Export : rejoue les tracés en NOIR dans un canevas hors écran, recadré sur le dessin
+// (+ marge) puis remis au ratio 2:1 exact (centré), fond transparent. Indépendant du thème.
+function _signPadExportPng() {
+  const bbox = strokesBBox(signPad.strokes);
+  if (!bbox) return null;
+  const lay = exportLayout(bbox, { margin: 28, outW: 1200, ratio: 2 });
+  const cnv = document.createElement("canvas");
+  cnv.width = lay.outW; cnv.height = lay.outH;
+  const ctx = cnv.getContext("2d");
+  ctx.setLineDash([]);
+  ctx.lineCap = "round"; ctx.lineJoin = "round";
+  ctx.strokeStyle = "#000"; ctx.fillStyle = "#000";
+  ctx.lineWidth = Math.max(4, 2.6 * lay.scale); // épaisseur proportionnelle à l'échelle
+  for (const s of signPad.strokes) _drawSmoothStroke(ctx, s, lay.tx, lay.ty);
+  return cnv.toDataURL("image/png");
+}
 
 function clearSignaturePad() {
+  signPad.strokes = [];
+  signPad.lastMid = null;
   const c = signPad.canvas;
   if (c && signPad.ctx) signPad.ctx.clearRect(0, 0, c.width, c.height);
   signPad.dirty = false;
@@ -3350,7 +3424,8 @@ function openSignaturePad(batch) {
   renderSignatureRecap(batch.lvIds || []);
 }
 
-// beta.33.1 : récap vérifiable par le client (cartes repliables, la 1re ouverte).
+// beta.33.2 : récap vérifiable par le client, TOUT DÉPLIÉ (plus de cartes repliables),
+// une lettre sous l'autre, « Voir le PDF » conservé.
 async function renderSignatureRecap(lvIds) {
   const box = document.getElementById("sign-pad-recap-cards");
   if (!box) return;
@@ -3358,13 +3433,13 @@ async function renderSignatureRecap(lvIds) {
   try {
     const recaps = await Promise.all(lvIds.map((id) => workerLvRecap(id).then((r) => ({ id, r })).catch(() => ({ id, r: null }))));
     box.innerHTML = "";
-    recaps.forEach(({ id, r }, i) => box.appendChild(buildRecapCard(id, r, i === 0, recaps.length > 1)));
+    recaps.forEach(({ id, r }) => box.appendChild(buildRecapCard(id, r)));
   } catch (e) {
     box.innerHTML = '<p class="muted">Récapitulatif indisponible.</p>';
   }
 }
 
-function buildRecapCard(lvId, ctx, open, collapsible) {
+function buildRecapCard(lvId, ctx) {
   const card = document.createElement("div");
   card.className = "recap-card";
   const lv = (ctx && ctx.lv) || {};
@@ -3406,12 +3481,8 @@ function buildRecapCard(lvId, ctx, open, collapsible) {
   pdfBtn.addEventListener("click", (e) => { e.stopPropagation(); exportLvPdf({ id: lvId, numero: num }); });
   body.appendChild(pdfBtn);
   card.append(head, body);
-  if (collapsible) {
-    card.classList.toggle("is-open", open);
-    head.addEventListener("click", () => card.classList.toggle("is-open"));
-  } else {
-    card.classList.add("is-open", "not-collapsible");
-  }
+  // beta.33.2 : toujours déplié, sans possibilité de replier.
+  card.classList.add("is-open", "not-collapsible");
   return card;
 }
 
@@ -3434,7 +3505,9 @@ async function validateSignature() {
   const batch = signPad.batch;
   if (!batch) return;
   if (!signPad.dirty) { alert("Merci de signer dans le cadre avant de valider."); return; }
-  const png = signPad.canvas.toDataURL("image/png");
+  const png = _signPadExportPng();  // beta.33.2 : NOIR, continu, recadré, ratio 2:1
+  if (!png) { alert("Merci de signer dans le cadre avant de valider."); return; }
+  if (typeof window !== "undefined" && window.__DEV_SIGN) window.__lastSignPng = png; // test e2e uniquement
   showSignPreparing(true);
   try {
     await workerSignatureSurPlace(batch.lvIds, png);

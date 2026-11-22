@@ -1614,7 +1614,8 @@ body.qc-lock .bottom-bar, body.qc-lock .selection-bar { display: none !important
   padding: 12px 14px calc(14px + env(safe-area-inset-bottom)); overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .sign-pad-signer { font-size: 15px; font-weight: 600; color: var(--text); }
 .sign-pad-mention { font-size: 13px; color: var(--text); margin: 6px 0 0; font-weight: 600; }
-.sign-pad-canvas-wrap { position: relative; flex: 0 0 auto; height: 40vh; min-height: 200px;
+/* beta.33.2 : cadre de signature au ratio 2:1, pleine largeur. */
+.sign-pad-canvas-wrap { position: relative; flex: 0 0 auto; width: 100%; aspect-ratio: 2 / 1;
   border: 2px dashed var(--border); border-radius: 12px; background: var(--surface); overflow: hidden; }
 /* Récap vérifiable par le client : cartes repliables, fort contraste (plein soleil). */
 .sign-pad-recap-cards { display: flex; flex-direction: column; gap: 8px; }

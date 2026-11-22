@@ -153,10 +153,11 @@
      réelle dans le rendu (WeasyPrint `page.anchors`) pour poser les champs. */
   .signature { margin-top: 16pt; break-inside: avoid; }
   .sign-title { font-size: 9pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5pt; margin-bottom: 3pt; }
-  .sign-area { position: relative; width: 70mm; height: 25mm; }
+  /* beta.33.2 : zone de signature au ratio 2:1 (70 × 35 mm). Nom imprimé en dessous. */
+  .sign-area { position: relative; width: 72mm; height: 44mm; }
   .doc-anchor { position: absolute; display: block; line-height: 0; font-size: 0; }
-  #doc-signature { left: 2mm; top: 1mm; width: 66mm; height: 15mm; }
-  .sign-nom { position: absolute; left: 2mm; top: 18mm; width: 66mm; font-size: 9pt; }
+  #doc-signature { left: 1mm; top: 1mm; width: 70mm; height: 35mm; }
+  .sign-nom { position: absolute; left: 1mm; top: 37mm; width: 70mm; font-size: 9pt; }
 </style>
 </head>
 <body>
