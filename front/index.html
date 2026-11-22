@@ -10,8 +10,8 @@
   <!-- Empreinte de version du shell (cf. assets/app-version.js). Bumper `app-rev`
        à chaque déploiement backend devant forcer un refresh (sinon le bump d'un
        `?v=` d'asset suffit). -->
-  <meta name="app-version" content="0.1.0-beta.33">
-  <meta name="app-rev" content="330">
+  <meta name="app-version" content="0.1.0-beta.33.1">
+  <meta name="app-rev" content="331">
 
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
@@ -36,7 +36,7 @@
        en police système). crossorigin obligatoire : les polices sont toujours
        récupérées en mode CORS, l'attribut évite un double téléchargement. -->
   <link rel="preload" href="/assets/fonts/sarpanch-900.woff2?v=14" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/assets/styles.css?v=330">
+  <link rel="stylesheet" href="/assets/styles.css?v=331">
   <!-- Garde-fou anti page blanche (beta.25) : si l'appli n'a pas démarré sous 8 s
        (flag window.__bonBooted posé en fin de boot d'app.js), on désenregistre le
        SW, on vide les caches et on recharge UNE fois (anti-boucle sessionStorage).
@@ -341,6 +341,10 @@
             </button>
           </div>
           <div id="tours-list" class="tours-list"></div>
+          <!-- beta.33.1 : signer directement depuis la lettre (caché si signée). -->
+          <button type="button" id="btn-sign-lv" class="btn btn-primary btn-block btn-sign-lv" hidden>
+            Signer cette lettre de voiture
+          </button>
         </section>
 
         <!-- -------------------------------------------------------------- Mes LV -->
@@ -709,6 +713,22 @@
     <button type="button" id="toast-action" class="toast-action" hidden></button>
   </div>
 
+  <!-- beta.33.1 : signature déjà en cours sur la lettre -->
+  <div id="signature-progress-sheet" class="sheet-overlay" hidden>
+    <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="signature-progress-title">
+      <div class="sheet-header">
+        <h2 id="signature-progress-title">Signature déjà en cours</h2>
+        <button type="button" class="icon-btn" id="btn-sigprog-close" aria-label="Fermer"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      </div>
+      <p class="muted" id="signature-progress-msg"></p>
+      <div class="sheet-actions">
+        <button type="button" id="btn-sigprog-resend" class="btn btn-secondary btn-block" hidden>Renvoyer le lien</button>
+        <button type="button" id="btn-sigprog-restart" class="btn btn-danger btn-block">Annuler et recommencer</button>
+        <button type="button" id="btn-sigprog-cancel" class="btn btn-secondary btn-block">Fermer</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ===================================== Feuille « choix du mode de signature » -->
   <div id="signer-choice-sheet" class="sheet-overlay" hidden>
     <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="signer-choice-title">
@@ -736,9 +756,10 @@
         <span class="sign-pad-head-title" id="sign-pad-title">Signature</span>
       </div>
       <div class="sign-pad-body">
-        <div class="sign-pad-recap" id="sign-pad-recap"></div>
         <div class="sign-pad-signer" id="sign-pad-signer"></div>
-        <p class="sign-pad-mention">En signant, vous acceptez les lettres de voiture listées.</p>
+        <!-- beta.33.1 : récap vérifiable par le client AVANT de signer (cartes repliables). -->
+        <div class="sign-pad-recap-cards" id="sign-pad-recap-cards"></div>
+        <p class="sign-pad-mention">En signant, vous acceptez les lettres de voiture ci-dessus.</p>
         <div class="sign-pad-canvas-wrap">
           <canvas id="sign-pad-canvas" class="sign-pad-canvas"></canvas>
           <span class="sign-pad-placeholder" id="sign-pad-placeholder">Signez ici</span>
@@ -968,6 +989,6 @@
   <!-- ================================================================== Scripts -->
   <script src="/assets/config.js?v=21"></script>
   <script src="/assets/vendor/supabase/supabase.js?v=270"></script>
-  <script type="module" src="/assets/app.js?v=330"></script>
+  <script type="module" src="/assets/app.js?v=331"></script>
 </body>
 </html>

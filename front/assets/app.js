@@ -133,6 +133,7 @@ import {
   workerSignatureCancel,
   workerSignatureResend,
   workerSignatureParMail,
+  workerLvRecap,
   workerSignatureSync,
   searchAddress,
   reverseAddress,
@@ -166,7 +167,7 @@ import { swipeActionsFor, attachSwipe, closeOpenSwipe } from "./swipe-actions.js
 import {
   recentChantiers, buildCompletion, swapPatch, addressPatch, sitePatch,
   endpointLabel, endpointLatLon, coordsForText,
-} from "./tour-address.js?v=330";
+} from "./tour-address.js?v=331";
 // pdf-viewer.js (et pdf.js) chargés en import DYNAMIQUE à la 1re ouverture (g).
 import { enhanceSelect, refreshCombobox, ensureOption, normalizeText as cbNormalizeText } from "./combobox.js?v=17";
 import { initTooltips } from "./tooltips.js?v=22";
@@ -1741,6 +1742,7 @@ function renderLvNumero() {
     el.classList.add("is-brouillon");
   }
   refreshDeleteButton();
+  refreshSignButton();
 }
 
 /* ============================================= Suppression / annulation (beta.15) ==
@@ -1753,6 +1755,57 @@ function refreshDeleteButton() {
   if (!btn) return;
   const lv = state.lv;
   btn.hidden = !(lv && lv.id != null && lv.statut !== "signee");
+}
+
+// beta.33.1 : bouton « Signer » sur l'écran lettre. Visible seulement si la lettre
+// est enregistrée et non signée (brouillon sans id -> caché).
+function refreshSignButton() {
+  const btn = document.getElementById("btn-sign-lv");
+  if (!btn) return;
+  const lv = state.lv;
+  btn.hidden = !(lv && lv.id != null && lv.statut !== "signee");
+}
+
+// Signer la lettre courante : même choix (sur place / par mail) que depuis la liste.
+async function signerCurrentLv() {
+  const lv = state.lv;
+  if (!lv || lv.id == null || lv.statut === "signee") return;
+  // Signature déjà en cours -> feuille dédiée (beta.33).
+  if (signatureManageState(lv)) { openSignatureProgressSheet(lv); return; }
+  // Complétude : même comportement que la liste (bandeau « à compléter »).
+  const { lv: domLv, tours } = readLvFromDom();
+  const missing = lvCompleteness(domLv, tours, state.refs);
+  if (missing.length) {
+    refreshLvCompleteness();
+    const box = document.getElementById("lv-completeness");
+    if (box) box.scrollIntoView({ block: "center", behavior: "smooth" });
+    return;
+  }
+  // On signe CETTE lettre : la sélection devient la lettre courante.
+  signSelection.clear();
+  signSelection.set(lv.id, lv);
+  openSignerChoice();
+}
+
+// Feuille « Signature déjà en cours » : propose d'annuler/recommencer (et renvoyer
+// le lien en mode mail).
+function openSignatureProgressSheet(lv) {
+  const sheet = document.getElementById("signature-progress-sheet");
+  if (!sheet) return;
+  const state2 = signatureManageState(lv);
+  const msg = document.getElementById("signature-progress-msg");
+  if (msg) msg.textContent = state2 === "mail"
+    ? "Cette lettre est en attente de signature du client (par mail)."
+    : "La signature de cette lettre est en cours d'enregistrement.";
+  const resendBtn = document.getElementById("btn-sigprog-resend");
+  if (resendBtn) resendBtn.hidden = state2 !== "mail";
+  signatureProgressLv = lv;
+  sheet.hidden = false;
+}
+let signatureProgressLv = null;
+function closeSignatureProgressSheet() {
+  const sheet = document.getElementById("signature-progress-sheet");
+  if (sheet) sheet.hidden = true;
 }
 
 function openDeleteSheet() {
@@ -2196,6 +2249,7 @@ async function loadToday() {
   fillHeaderForm(lv || state.prefillData);
   renderLvNumero();
   refreshDeleteButton();
+  refreshSignButton();
   await loadLvProjets();
   renderLvProjetsHeader();
   await loadPrestationsFor(lv);
@@ -3282,9 +3336,7 @@ function clearSignaturePad() {
 function openSignaturePad(batch) {
   signPad.batch = batch;
   const sheet = document.getElementById("signature-pad-sheet");
-  const recap = document.getElementById("sign-pad-recap");
   const signer = document.getElementById("sign-pad-signer");
-  if (recap) recap.textContent = (batch.numeros || []).join("  ·  ");
   if (signer) signer.textContent = batch.signerName ? "Signataire : " + batch.signerName : "";
   sheet.hidden = false;
   attachViewportSheet(sheet.querySelector(".sheet-panel") || sheet);
@@ -3295,6 +3347,72 @@ function openSignaturePad(batch) {
   c.addEventListener("pointerup", _signPadEnd);
   c.addEventListener("pointercancel", _signPadEnd);
   requestAnimationFrame(() => { _signPadResize(); clearSignaturePad(); });
+  renderSignatureRecap(batch.lvIds || []);
+}
+
+// beta.33.1 : récap vérifiable par le client (cartes repliables, la 1re ouverte).
+async function renderSignatureRecap(lvIds) {
+  const box = document.getElementById("sign-pad-recap-cards");
+  if (!box) return;
+  box.innerHTML = '<p class="muted">Chargement du récapitulatif…</p>';
+  try {
+    const recaps = await Promise.all(lvIds.map((id) => workerLvRecap(id).then((r) => ({ id, r })).catch(() => ({ id, r: null }))));
+    box.innerHTML = "";
+    recaps.forEach(({ id, r }, i) => box.appendChild(buildRecapCard(id, r, i === 0, recaps.length > 1)));
+  } catch (e) {
+    box.innerHTML = '<p class="muted">Récapitulatif indisponible.</p>';
+  }
+}
+
+function buildRecapCard(lvId, ctx, open, collapsible) {
+  const card = document.createElement("div");
+  card.className = "recap-card";
+  const lv = (ctx && ctx.lv) || {};
+  const tours = (ctx && ctx.tours) || [];
+  const prestations = (ctx && ctx.prestations) || [];
+  const num = lv.numero || "#" + lvId;
+  const head = document.createElement("button");
+  head.type = "button";
+  head.className = "recap-card-head";
+  head.innerHTML = `<span class="recap-card-title">${escapeHtml(num)}${lv.date ? " — " + escapeHtml(lv.date) : ""}</span>`;
+  const body = document.createElement("div");
+  body.className = "recap-card-body";
+  const line = (label, val) => val ? `<div class="recap-line"><span class="recap-k">${escapeHtml(label)}</span><span class="recap-v">${escapeHtml(val)}</span></div>` : "";
+  let html = "";
+  html += line("Client", lv.expediteur);
+  html += line("Destinataire", lv.destinataire);
+  html += line(lv.projets_aff && lv.projets_aff.includes(",") ? "Projets" : "Projet", lv.projets_aff);
+  html += line("Heures", lv.heures_aff);
+  for (const p of prestations) {
+    const q = [p.quantite_aff, p.unite_aff].filter(Boolean).join(" ");
+    const extra = p.materiel ? " — " + p.materiel : "";
+    html += line("Prestation", `${p.libelle || ""}${extra}${q ? " · " + q : ""}`);
+  }
+  tours.forEach((t, idx) => {
+    const ch = [t.chargement_nom, t.chargement_adresse].filter(Boolean).join(" · ");
+    const de = [t.dechargement_nom, t.dechargement_adresse].filter(Boolean).join(" · ");
+    html += `<div class="recap-tour"><div class="recap-tour-route">${escapeHtml(ch || "—")} <span class="recap-arrow">→</span> ${escapeHtml(de || "—")}</div>`;
+    for (const li of (t.lignes || [])) {
+      const q = [li.quantite_aff, li.unite_aff].filter(Boolean).join(" ");
+      html += `<div class="recap-goods">${escapeHtml(li.nom || "")}${q ? " · " + escapeHtml(q) : ""}</div>`;
+    }
+    html += "</div>";
+  });
+  body.innerHTML = html || '<p class="muted">Aucun détail.</p>';
+  const pdfBtn = document.createElement("button");
+  pdfBtn.type = "button";
+  pdfBtn.className = "recap-pdf-btn";
+  pdfBtn.textContent = "Voir le PDF";
+  pdfBtn.addEventListener("click", (e) => { e.stopPropagation(); exportLvPdf({ id: lvId, numero: num }); });
+  body.appendChild(pdfBtn);
+  card.append(head, body);
+  if (collapsible) {
+    card.classList.toggle("is-open", open);
+    head.addEventListener("click", () => card.classList.toggle("is-open"));
+  } else {
+    card.classList.add("is-open", "not-collapsible");
+  }
+  return card;
 }
 
 function closeSignaturePad() {
@@ -5638,6 +5756,31 @@ function wireStaticUI() {
   if (showSignees) showSignees.addEventListener("change", () => loadMesLv());
   const btnSigner = document.getElementById("btn-signer");
   if (btnSigner) btnSigner.addEventListener("click", openSignerChoice);
+  // beta.33.1 : bouton Signer sur l'écran lettre + feuille « déjà en cours ».
+  const btnSignLv = document.getElementById("btn-sign-lv");
+  if (btnSignLv) btnSignLv.addEventListener("click", signerCurrentLv);
+  const sigprogClose = () => closeSignatureProgressSheet();
+  document.getElementById("btn-sigprog-close")?.addEventListener("click", sigprogClose);
+  document.getElementById("btn-sigprog-cancel")?.addEventListener("click", sigprogClose);
+  document.getElementById("signature-progress-sheet")?.addEventListener("click", (e) => {
+    if (e.target.id === "signature-progress-sheet") closeSignatureProgressSheet();
+  });
+  document.getElementById("btn-sigprog-resend")?.addEventListener("click", async () => {
+    const lv = signatureProgressLv; if (!lv) return;
+    try { await workerSignatureResend([lv.id]); showToast("Lien renvoyé au client."); closeSignatureProgressSheet(); await loadToday(); }
+    catch (err) { alert((err && err.message) || String(err)); }
+  });
+  document.getElementById("btn-sigprog-restart")?.addEventListener("click", async () => {
+    const lv = signatureProgressLv; if (!lv) return;
+    if (!confirm("Annuler la signature en cours et recommencer ?")) return;
+    try {
+      await workerSignatureCancel([lv.id]);
+      closeSignatureProgressSheet();
+      await loadToday();
+      signSelection.clear(); signSelection.set(lv.id, state.lv || lv);
+      openSignerChoice();
+    } catch (err) { alert((err && err.message) || String(err)); }
+  });
   const btnSignerClose = document.getElementById("btn-signer-choice-close");
   if (btnSignerClose) btnSignerClose.addEventListener("click", dismissSignerChoice);
   // beta.33 : câblage du cadre de signature au doigt.

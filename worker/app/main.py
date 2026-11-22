@@ -118,6 +118,19 @@ def lv_get(lv_id: int, _=Depends(require_token("read"))):
     return ctx
 
 
+@router.get("/lv/{lv_id}/recap")
+def lv_recap(lv_id: int, user=Depends(require_user)):
+    """beta.33.1 : récapitulatif lisible d'une lettre (mêmes données que le PDF) pour
+    que le client le vérifie AVANT de signer. Authentifié par session utilisateur,
+    avec contrôle d'accès (le chauffeur ne voit que ses lettres)."""
+    if not _user_can_access_lv(user.get("email"), lv_id):
+        raise HTTPException(status_code=403, detail="Accès refusé à cette lettre de voiture.")
+    try:
+        return pdf.build_context(lv_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @router.get("/alertes")
 def alertes(_=Depends(require_token("read"))):
     camions = db.query(

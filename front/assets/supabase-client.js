@@ -759,6 +759,9 @@ export async function workerSignatureResend(lvIds) {
 export async function workerSignatureParMail(lvIds) {
   return callWorker("/signature/par-mail", { method: "POST", body: { lv_ids: lvIds } });
 }
+export async function workerLvRecap(lvId) {
+  return callWorker(`/lv/${lvId}/recap`);
+}
 export async function workerSignatureSync(documentId) {
   const body = documentId != null ? { document_id: documentId } : {};
   return callWorker("/signature/sync", { method: "POST", body });

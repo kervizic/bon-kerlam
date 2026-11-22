@@ -4,6 +4,25 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.33.1] — 2026-11-22
+
+### Ajouté
+- **Bouton « Signer » directement sur l'écran d'une lettre** (en bas, orange, texte
+  anthracite). Ouvre le même choix (sur ce téléphone / par mail, signataire) que
+  depuis la liste. Caché si la lettre est signée ; champs incomplets → bandeau
+  « à compléter » (comme la liste) ; signature déjà en cours → feuille « Signature
+  déjà en cours » (Annuler et recommencer / Renvoyer le lien).
+- **Récapitulatif vérifiable par le client AVANT le cadre de signature** (sur place) :
+  pour chaque lettre — numéro, date, client, destinataire, projets, heures,
+  prestations, et chaque tour (chargement → livraison + marchandises et quantités).
+  Plusieurs lettres → cartes repliables (la première ouverte). Bouton « Voir le PDF »
+  par lettre (PDF de cache). Le cadre de signature vient en dessous (défilement
+  naturel), avec « En signant, vous acceptez les lettres de voiture ci-dessus. »
+  Fort contraste (lisible en plein soleil), clair et sombre. Rien n'est créé côté
+  Documenso avant « Valider la signature » (inchangé).
+- Worker : endpoint `GET /worker/lv/{id}/recap` (session utilisateur + contrôle
+  d'accès) renvoyant les données du récap (mêmes que le PDF).
+
 ## [0.1.0-beta.33] — 2026-11-22
 
 Signature SUR PLACE sans page Documenso, et anti-blocage.

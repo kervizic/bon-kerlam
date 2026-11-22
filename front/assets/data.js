@@ -837,6 +837,22 @@ export async function workerSignatureSurPlace(lvIds, signaturePng) {
   }
   return live.workerSignatureSurPlace(lvIds, signaturePng);
 }
+export async function workerLvRecap(lvId) {
+  if (DEMO) {
+    const lv = byId(demoDb.lettres_voiture, lvId) || {};
+    const cl = byId(demoDb.clients, lv.client_id) || {};
+    return {
+      lv: { numero: lv.numero || "#" + lvId, date: "11/11/2026",
+        expediteur: cl.raison_sociale || "Client démo", destinataire: cl.raison_sociale || "Client démo",
+        projets_aff: "Régie Franciliane", heures_aff: "7h00–16h00" },
+      prestations: [{ libelle: "Jour de régie avec chauffeur", quantite_aff: "1", unite_aff: "jour", materiel: "20 t 8×4 bi-benne grue" }],
+      tours: [{ chargement_nom: "Cemex · Ivry béton", chargement_adresse: "Quai Marcel Boyer, 94200 Ivry",
+        dechargement_nom: "Veolia · Noisy", dechargement_adresse: "2 rue de la Plaine, 93160 Noisy",
+        lignes: [{ nom: "Grave", quantite_aff: "12", unite_aff: "t" }] }],
+    };
+  }
+  return live.workerLvRecap(lvId);
+}
 export async function workerSignatureCancel(lvIds) {
   if (DEMO) return { cancelled: lvIds };
   return live.workerSignatureCancel(lvIds);

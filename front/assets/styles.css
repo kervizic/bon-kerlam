@@ -1609,13 +1609,35 @@ body.qc-lock .bottom-bar, body.qc-lock .selection-bar { display: none !important
 .sign-pad-panel { display: flex; flex-direction: column; }
 .sign-pad-head { gap: 10px; }
 .sign-pad-head-title { font-weight: 700; font-size: 16px; }
+/* beta.33.1 : défilement naturel (récap puis cadre de signature en dessous). */
 .sign-pad-body { flex: 1 1 auto; display: flex; flex-direction: column; gap: 10px;
-  padding: 12px 14px calc(14px + env(safe-area-inset-bottom)); overflow: hidden; }
-.sign-pad-recap { font-weight: 600; color: var(--text); }
-.sign-pad-signer { font-size: 14px; color: var(--text-muted); }
-.sign-pad-mention { font-size: 13px; color: var(--text-muted); margin: 0; }
-.sign-pad-canvas-wrap { position: relative; flex: 1 1 auto; min-height: 180px;
+  padding: 12px 14px calc(14px + env(safe-area-inset-bottom)); overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.sign-pad-signer { font-size: 15px; font-weight: 600; color: var(--text); }
+.sign-pad-mention { font-size: 13px; color: var(--text); margin: 6px 0 0; font-weight: 600; }
+.sign-pad-canvas-wrap { position: relative; flex: 0 0 auto; height: 40vh; min-height: 200px;
   border: 2px dashed var(--border); border-radius: 12px; background: var(--surface); overflow: hidden; }
+/* Récap vérifiable par le client : cartes repliables, fort contraste (plein soleil). */
+.sign-pad-recap-cards { display: flex; flex-direction: column; gap: 8px; }
+.recap-card { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); overflow: hidden; }
+.recap-card-head { width: 100%; text-align: left; background: var(--bg); border: none; cursor: pointer;
+  padding: 11px 12px; font: inherit; font-weight: 700; color: var(--text); display: flex; justify-content: space-between; align-items: center; }
+.recap-card-head::after { content: "▾"; color: var(--text-muted); transition: transform .15s; }
+.recap-card.is-open .recap-card-head::after { transform: rotate(180deg); }
+.recap-card.not-collapsible .recap-card-head { cursor: default; }
+.recap-card.not-collapsible .recap-card-head::after { display: none; }
+.recap-card-title { font-size: 15px; }
+.recap-card-body { display: none; padding: 10px 12px; }
+.recap-card.is-open .recap-card-body { display: block; }
+.recap-line { display: flex; gap: 8px; padding: 2px 0; font-size: 14px; }
+.recap-k { flex: 0 0 96px; color: var(--text-muted); font-weight: 600; }
+.recap-v { flex: 1 1 auto; color: var(--text); font-weight: 600; }
+.recap-tour { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+.recap-tour-route { font-weight: 700; color: var(--text); font-size: 14px; }
+.recap-arrow { color: var(--c-orange); font-weight: 700; }
+.recap-goods { font-size: 13px; color: var(--text); margin-left: 8px; }
+.recap-pdf-btn { margin-top: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 999px;
+  padding: 7px 14px; font-size: 13px; font-weight: 700; color: var(--c-orange); cursor: pointer; }
+.btn-sign-lv { margin-top: 18px; }
 .sign-pad-canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
 .sign-pad-placeholder { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
   color: var(--text-muted); font-size: 18px; pointer-events: none; }
@@ -1631,3 +1653,6 @@ body.qc-lock .bottom-bar, body.qc-lock .selection-bar { display: none !important
 .lv-sign-action { background: var(--bg); border: 1px solid var(--border); border-radius: 999px;
   padding: 6px 12px; font-size: 13px; font-weight: 600; color: var(--text); cursor: pointer; }
 .lv-sign-action.is-danger { color: var(--c-red); border-color: rgba(198,40,40,.4); }
+
+/* beta.33.1 : actions empilées des feuilles de confirmation. */
+#signature-progress-sheet .sheet-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
