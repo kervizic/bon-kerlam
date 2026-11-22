@@ -87,13 +87,16 @@ def test_par_mail_refuse_contact_absent(monkeypatch):
         signature.par_mail([1])
 
 
+PNG = "data:image/png;base64,iVBORw0KGgo="
+
+
 def test_refuse_renvoi_lettre_signee(monkeypatch):
-    # beta.29 : une lettre déjà signée ne peut pas être renvoyée en signature (409).
+    # beta.33 : une lettre déjà signée ne peut JAMAIS être re-signée (409).
     monkeypatch.setattr(signature, "_rows", lambda ids: [
         {"id": 7, "numero": "KER-03003", "contact_id": 2, "statut": "signee", "documenso_document_id": 57},
     ])
     with pytest.raises(signature.SignatureConflict, match="signée"):
-        signature.sur_place([7])
+        signature.enqueue_sur_place([7], PNG)
 
 
 def test_refuse_renvoi_signature_active(monkeypatch):
@@ -116,35 +119,67 @@ def test_sur_place_exige_contact_email(monkeypatch):
                         lambda ids: [{"id": 1, "numero": "KER-1", "contact_id": 10, "statut": "en_cours"}])
     monkeypatch.setattr(signature, "_signer", lambda lv_id: {"numero": "KER-1", "contact_email": None})
     with pytest.raises(ValueError, match="contact signataire|e-mail"):
-        signature.sur_place([1])
+        signature.enqueue_sur_place([1], PNG)
 
 
-def test_sur_place_un_seul_document_pour_le_lot(monkeypatch):
-    # beta.24 : UN SEUL document Documenso pour tout le lot (même signataire).
+def test_enqueue_sur_place_ne_cree_rien_cote_documenso(monkeypatch):
+    # beta.33 ORDRE INVERSÉ : enqueue dépose seulement le job + marque « recording ».
+    # AUCUN appel Documenso à ce stade.
     monkeypatch.setattr(signature, "_rows", lambda ids: [
         {"id": 7, "numero": "KER-03003", "contact_id": 10, "statut": "en_cours"},
         {"id": 8, "numero": "KER-03004", "contact_id": 10, "statut": "en_cours"},
     ])
     monkeypatch.setattr(signature, "_signer",
                         lambda lv_id: {"contact_nom": "Manu", "contact_email": "manu@kervizic.fr"})
+    monkeypatch.setattr(signature.documenso, "create_document",
+                        lambda **k: pytest.fail("enqueue ne doit créer AUCUN document"))
+    sqls = []
+    monkeypatch.setattr(signature.db, "query", lambda sql, params=None: sqls.append((sql, params)) or [])
+    res = signature.enqueue_sur_place([7, 8], PNG)
+    assert res["ok"] is True and res["lv_ids"] == [7, 8]
+    # Un INSERT job + un UPDATE « recording ».
+    assert any("INSERT INTO bon.signature_jobs" in s for s, _ in sqls)
+    assert any("signature_job_state = 'recording'" in s for s, _ in sqls)
+
+
+def test_enqueue_refuse_png_manquant(monkeypatch):
+    monkeypatch.setattr(signature, "_rows", lambda ids: [
+        {"id": 7, "numero": "K", "contact_id": 10, "statut": "en_cours"}])
+    monkeypatch.setattr(signature, "_signer",
+                        lambda lv_id: {"contact_nom": "Manu", "contact_email": "manu@kervizic.fr"})
+    with pytest.raises(ValueError, match="PNG"):
+        signature.enqueue_sur_place([7], "pas-une-image")
+
+
+def test_run_job_cree_un_document_signe_chaque_champ_complete(monkeypatch):
+    # Le JOB de fond : un seul document pour le lot, signe CHAQUE champ avec le PNG,
+    # complète, puis marque signé.
+    monkeypatch.setattr(signature, "_rows", lambda ids: [
+        {"id": 7, "numero": "KER-03003", "contact_id": 10, "statut": "a_signer"},
+        {"id": 8, "numero": "KER-03004", "contact_id": 10, "statut": "a_signer"},
+    ])
     monkeypatch.setattr(signature, "build_combined_pdf", lambda ids: (b"%PDF", [1, 2], [{"type": "SIGNATURE"}]))
-    created = {}
+    monkeypatch.setattr(signature.documenso, "create_document",
+                        lambda **k: {"document_id": 99, "token": "tok", "signing_url": "u"})
+    monkeypatch.setattr(signature.documenso, "document_signature_fields", lambda doc: ("tok", [11, 22]))
+    signed = []
+    monkeypatch.setattr(signature.documenso, "sign_field_with_token",
+                        lambda tok, fid, png: signed.append((fid, png)) or {})
+    completed = {}
+    monkeypatch.setattr(signature.documenso, "complete_document_with_token",
+                        lambda tok, doc: completed.update({"doc": doc}) or {})
+    monkeypatch.setattr(signature.documenso, "is_completed", lambda doc: True)
+    monkeypatch.setattr(signature.documenso, "download_signed", lambda doc: b"%PDFsigned")
+    marked = {}
+    monkeypatch.setattr(signature, "_mark_signed", lambda doc, pdfb: marked.update({"doc": doc, "pdf": pdfb}))
+    monkeypatch.setattr(signature.db, "query", lambda sql, params=None: [])
 
-    def fake_create(**kw):
-        created.update(kw)
-        return {"document_id": 99, "token": "tok99", "signing_url": "u"}
-
-    monkeypatch.setattr(signature.documenso, "create_document", fake_create)
-    updates = []
-    monkeypatch.setattr(signature.db, "query", lambda sql, params=None: updates.append((sql, params)) or [])
-    res = signature.sur_place([7, 8])
-    # Un seul appel create_document, pas d'e-mail, token renvoyé.
-    assert created["send_email"] is False
-    assert res["document_id"] == 99 and res["token"] == "tok99"
-    assert res["lv_ids"] == [7, 8] and res["signer_name"] == "Manu"
-    # Un seul UPDATE qui marque TOUTES les lettres du lot avec le même documenso_id.
-    assert len(updates) == 1
-    assert updates[0][1] == (99, [7, 8])
+    signature._run_job({"id": 1, "lv_ids": [7, 8], "signature_png": PNG,
+                        "signer_name": "Manu", "signer_email": "manu@kervizic.fr", "document_id": None})
+    # Chaque champ signé avec le MÊME PNG, document complété, lettres marquées signées.
+    assert signed == [(11, PNG), (22, PNG)]
+    assert completed["doc"] == 99
+    assert marked["doc"] == 99 and marked["pdf"] == b"%PDFsigned"
 
 
 def _blank_pdf(n_pages: int) -> bytes:

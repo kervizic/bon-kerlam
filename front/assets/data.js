@@ -829,17 +829,21 @@ export async function workerSignatureWarm(lvIds) {
   if (DEMO) return { warmed: (lvIds || []).length };
   return live.workerSignatureWarm(lvIds);
 }
-export async function workerSignatureSurPlace(lvIds) {
+export async function workerSignatureSurPlace(lvIds, signaturePng) {
   if (DEMO) {
-    // Signature intégrée (beta.25) : UN document combiné créé AU TOUCHER, aucun mail.
-    return {
-      mode: "sur_place", documenso_url: location.origin, document_id: 1234,
-      token: "demo-token", signer_name: "Manu Démo", signer_email: "manu@kervizic.fr",
-      numeros: lvIds.map((id) => (byId(demoDb.lettres_voiture, id) || {}).numero || "#" + id),
-      lv_ids: lvIds,
-    };
+    // beta.33 : la signature est dessinée dans l'appli ; en démo on confirme juste.
+    return { mode: "sur_place", ok: true, lv_ids: lvIds,
+      numeros: lvIds.map((id) => (byId(demoDb.lettres_voiture, id) || {}).numero || "#" + id) };
   }
-  return live.workerSignatureSurPlace(lvIds);
+  return live.workerSignatureSurPlace(lvIds, signaturePng);
+}
+export async function workerSignatureCancel(lvIds) {
+  if (DEMO) return { cancelled: lvIds };
+  return live.workerSignatureCancel(lvIds);
+}
+export async function workerSignatureResend(lvIds) {
+  if (DEMO) return { resent: true };
+  return live.workerSignatureResend(lvIds);
 }
 export async function workerSignatureParMail(lvIds) {
   if (DEMO) {

@@ -747,8 +747,14 @@ export async function workerAlertes() {
 export async function workerEnvoiGroupe(lvIds) {
   return callWorker("/signature/envoi-groupe", { method: "POST", body: { lv_ids: lvIds } });
 }
-export async function workerSignatureSurPlace(lvIds) {
-  return callWorker("/signature/sur-place", { method: "POST", body: { lv_ids: lvIds } });
+export async function workerSignatureSurPlace(lvIds, signaturePng) {
+  return callWorker("/signature/sur-place", { method: "POST", body: { lv_ids: lvIds, signature_png: signaturePng } });
+}
+export async function workerSignatureCancel(lvIds) {
+  return callWorker("/signature/cancel", { method: "POST", body: { lv_ids: lvIds } });
+}
+export async function workerSignatureResend(lvIds) {
+  return callWorker("/signature/resend", { method: "POST", body: { lv_ids: lvIds } });
 }
 export async function workerSignatureParMail(lvIds) {
   return callWorker("/signature/par-mail", { method: "POST", body: { lv_ids: lvIds } });

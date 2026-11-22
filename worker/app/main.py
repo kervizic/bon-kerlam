@@ -28,6 +28,9 @@ async def lifespan(app: FastAPI):
     tasks = [asyncio.create_task(_maintenance_loop())]
     if settings.documenso_api_key:
         tasks.append(asyncio.create_task(_signature_loop()))
+        # beta.33 : traite la file de signature sur place (création doc + signature
+        # tRPC + scellement + archivage + mail), en tâche de fond, rejouable.
+        tasks.append(asyncio.create_task(_signature_jobs_loop()))
     # beta.29 : préchauffe le cache PDF des lettres signables, une à la fois, en
     # arrière-plan (évite le cache FROID après un déploiement sans saturer le vCPU).
     tasks.append(asyncio.create_task(_warm_cache_loop()))
@@ -170,17 +173,47 @@ def signature_warm(payload: dict, user=Depends(require_user)):
 
 @router.post("/signature/sur-place")
 def signature_sur_place(payload: dict, user=Depends(require_user)):
-    """Signature « sur place » (intégrée), créée AU TOUCHER : UN document combiné,
-    distributionMethod=NONE (AUCUN mail). Renvoie le token pour l'iframe embed."""
+    """beta.33 — signature SUR PLACE sans page embed. Le client a déjà dessiné sa
+    signature DANS l'appli ; le front envoie le PNG ici. Rien n'est créé côté Documenso
+    à ce stade : on dépose le dessin dans la file persistante et on répond tout de suite
+    « enregistré ». Le worker crée le document, signe, scelle, archive et envoie le mail
+    en tâche de fond."""
+    lv_ids = [int(x) for x in (payload or {}).get("lv_ids") or []]
+    signature_png = (payload or {}).get("signature_png") or ""
+    if not lv_ids:
+        raise HTTPException(status_code=400, detail="Aucune lettre sélectionnée.")
+    _assert_user_access(user.get("email"), lv_ids)
+    try:
+        return {"mode": "sur_place", **signature.enqueue_sur_place(lv_ids, signature_png)}
+    except signature.SignatureConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/signature/cancel")
+def signature_cancel(payload: dict, user=Depends(require_user)):
+    """Annule une signature en cours (sur place OU mail) : supprime le document
+    Documenso SANS mail et remet les lettres « à signer »."""
     lv_ids = [int(x) for x in (payload or {}).get("lv_ids") or []]
     if not lv_ids:
         raise HTTPException(status_code=400, detail="Aucune lettre sélectionnée.")
     _assert_user_access(user.get("email"), lv_ids)
     try:
-        res = signature.sur_place(lv_ids)
-        return {"mode": "sur_place", "documenso_url": settings.documenso_url.rstrip("/"), **res}
+        return signature.cancel_signature(lv_ids)
     except signature.SignatureConflict as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/signature/resend")
+def signature_resend(payload: dict, user=Depends(require_user)):
+    """Mode mail : renvoie l'invitation à signer au client (Documenso renvoie un mail)."""
+    lv_ids = [int(x) for x in (payload or {}).get("lv_ids") or []]
+    if not lv_ids:
+        raise HTTPException(status_code=400, detail="Aucune lettre sélectionnée.")
+    _assert_user_access(user.get("email"), lv_ids)
+    try:
+        return signature.resend_mail(lv_ids)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -384,6 +417,21 @@ async def _signature_loop() -> None:
         await asyncio.sleep(30 if active > 0 else 180)
         with contextlib.suppress(Exception):
             await asyncio.to_thread(signature.poll_pending)
+        # beta.33 : anti-blocage (sur place > 15 min, mail > 7 j) à chaque tour.
+        with contextlib.suppress(Exception):
+            await asyncio.to_thread(signature.cleanup_stuck_signatures)
+
+
+async def _signature_jobs_loop() -> None:
+    """beta.33 : traite la file bon.signature_jobs, UN job à la fois. Boucle rapide
+    quand il reste du travail, lente sinon. Rejouable : un job 'processing' laissé par
+    un redémarrage est repris automatiquement."""
+    await asyncio.sleep(8)  # laisse le worker démarrer
+    while True:
+        res = {"processed": None}
+        with contextlib.suppress(Exception):
+            res = await asyncio.to_thread(signature.process_signature_jobs)
+        await asyncio.sleep(1 if res.get("processed") else 5)
 
 
 async def _refresh_loop() -> None:

@@ -148,3 +148,66 @@ def delete_document(document_id: int) -> bool:
     """Supprime/annule un document (utilisé pour retirer le test de signature)."""
     r = httpx.delete(f"{_base()}/documents/{document_id}", headers=_headers(), timeout=30)
     return r.status_code < 300
+
+
+def resend_document(document_id: int) -> bool:
+    """Mode « par mail » : renvoie l'invitation à signer au(x) destinataire(s)
+    (Documenso renvoie un mail — c'est VOULU, action « Renvoyer le lien »)."""
+    detail = document_status(document_id)
+    recipients = detail.get("recipients") or []
+    ids = [rc["recipientId"] for rc in recipients if rc.get("recipientId") is not None
+           and str(rc.get("signingStatus", "")).upper() != "SIGNED"]
+    if not ids:
+        ids = [rc["recipientId"] for rc in recipients if rc.get("recipientId") is not None]
+    r = httpx.post(f"{_base()}/documents/{document_id}/resend",
+                   headers=_headers(), json={"recipients": ids}, timeout=30)
+    return r.status_code < 300
+
+
+# --- Signature SANS page embed (beta.33) : endpoints tRPC internes --------------
+# Le dessin du client (PNG base64) est posé sur le champ via le SEUL token du
+# destinataire, puis le document est complété. Documenso scelle (PAdES) comme l'embed.
+# PoC validé 19/11 : l'en-tête Origin est OBLIGATOIRE (403 sinon). Format SuperJSON
+# non-batch : corps enveloppé dans {"json": {...}}.
+def _trpc_base() -> str:
+    return settings.documenso_url.rstrip("/") + "/api/trpc"
+
+
+def _origin() -> str:
+    return settings.documenso_url.rstrip("/")
+
+
+def _trpc(proc: str, payload: dict, token: str, timeout: float = 30.0) -> dict:
+    headers = {
+        "Content-Type": "application/json",
+        "Origin": _origin(),
+        "Referer": f"{_origin()}/sign/{token}",
+        "User-Agent": "bon-kerlam-worker",
+    }
+    r = httpx.post(f"{_trpc_base()}/{proc}", headers=headers, json={"json": payload}, timeout=timeout)
+    if r.status_code >= 300:
+        raise DocumensoError(f"tRPC {proc}: {r.status_code} {r.text[:200]}")
+    return r.json()
+
+
+def document_signature_fields(document_id: int) -> tuple[str | None, list[int]]:
+    """(token destinataire, liste des ids de champs SIGNATURE) depuis le détail v1."""
+    detail = document_status(document_id)
+    recipients = detail.get("recipients") or []
+    token = recipients[0].get("token") if recipients else None
+    fields = detail.get("fields") or (recipients[0].get("fields") if recipients else []) or []
+    field_ids = [f["id"] for f in fields if str(f.get("type", "")).upper() == "SIGNATURE"]
+    return token, field_ids
+
+
+def sign_field_with_token(token: str, field_id: int, value_data_url: str) -> dict:
+    """Pose la signature DESSINÉE (data URL PNG complète) sur un champ, token seul."""
+    return _trpc("field.signFieldWithToken",
+                 {"token": token, "fieldId": field_id, "value": value_data_url, "isBase64": True},
+                 token)
+
+
+def complete_document_with_token(token: str, document_id: int) -> dict:
+    """Termine le document (déclenche le scellement PAdES côté Documenso), token seul."""
+    return _trpc("recipient.completeDocumentWithToken",
+                 {"token": token, "documentId": document_id}, token)

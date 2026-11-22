@@ -12,6 +12,7 @@ Toutes les lettres d'un envoi groupé doivent partager le même contact signatai
 
 from __future__ import annotations
 
+import base64
 import contextlib
 import io
 import logging
@@ -110,6 +111,26 @@ def _validate_lot(lv_ids: list[int]) -> tuple[list[dict], dict]:
     return rows, signer
 
 
+def _validate_lot_for_enqueue(lv_ids: list[int]) -> tuple[list[dict], dict]:
+    """Comme _validate_lot mais SANS 409 « déjà en signature » (beta.33 : la reprise
+    d'une signature en cours est gérée par l'appli). On refuse seulement les lettres
+    déjà SIGNÉES (jamais re-signer une lettre signée), et on exige un contact unique
+    avec e-mail."""
+    rows = _rows(lv_ids)
+    if not rows:
+        raise ValueError("Aucune lettre valide.")
+    signees = [r["numero"] or f"#{r['id']}" for r in rows if r["statut"] == "signee"]
+    if signees:
+        raise SignatureConflict(f"Déjà signée(s) : {', '.join(map(str, signees))}.")
+    contact_ids = {r["contact_id"] for r in rows}
+    if len(contact_ids) != 1 or None in contact_ids:
+        raise ValueError("Toutes les lettres doivent partager le même contact signataire.")
+    signer = _signer(rows[0]["id"])
+    if not signer or not signer.get("contact_email"):
+        raise ValueError("Contact signataire sans e-mail.")
+    return rows, signer
+
+
 def _create_lot_document(
     rows: list[dict], signer: dict, *, send_email: bool, subject: str = "", message: str = "",
 ) -> dict:
@@ -149,26 +170,31 @@ def warm_cache(lv_ids: list[int], priority: int | None = None) -> dict:
     return {"warmed": n}
 
 
-def sur_place(lv_ids: list[int]) -> dict:
-    """UN SEUL document combiné (toutes les lettres du même signataire), créé AU
-    TOUCHER sur « Signer sur ce téléphone ». distributionMethod=NONE : AUCUN mail.
-    Toutes les lettres portent le même documenso_id. Renvoie le token (embed)."""
-    rows, signer = _validate_lot(lv_ids)
-    res = _create_lot_document(rows, signer, send_email=False)
+def enqueue_sur_place(lv_ids: list[int], signature_png: str) -> dict:
+    """beta.33 — signature SUR PLACE, ORDRE INVERSÉ : le client a déjà dessiné sa
+    signature (PNG) DANS l'appli. On n'a RIEN créé côté Documenso. Ici on se contente
+    de déposer le dessin dans la file PERSISTANTE (bon.signature_jobs) et de marquer
+    les lettres « enregistrement… ». Le worker fera tout le reste en tâche de fond
+    (création document, signature tRPC, scellement, archivage, mail). Retour immédiat.
+    """
+    rows, signer = _validate_lot_for_enqueue(lv_ids)
+    if not isinstance(signature_png, str) or not signature_png.startswith("data:image"):
+        raise ValueError("Signature (PNG data URL) manquante ou invalide.")
     ids = [r["id"] for r in rows]
+    # Dépose le job PUIS verrouille les lettres en « enregistrement », dans la même
+    # transaction (une seule connexion autocommit : on fait les deux à la suite).
     db.query(
-        "UPDATE bon.lettres_voiture SET documenso_document_id = %s, signature_mode = 'sur_place', "
-        "signature_sent_at = now(), statut = 'a_signer' WHERE id = ANY(%s)",
-        (res["document_id"], ids),
+        "INSERT INTO bon.signature_jobs (lv_ids, signer_name, signer_email, signature_png) "
+        "VALUES (%s, %s, %s, %s)",
+        (ids, signer.get("contact_nom") or "", signer["contact_email"], signature_png),
     )
-    return {
-        "document_id": res["document_id"],
-        "token": res.get("token"),
-        "signer_name": signer.get("contact_nom") or "",
-        "signer_email": signer["contact_email"],
-        "numeros": [r["numero"] or f"#{r['id']}" for r in rows],
-        "lv_ids": ids,
-    }
+    db.query(
+        "UPDATE bon.lettres_voiture SET signature_mode = 'sur_place', signature_sent_at = now(), "
+        "statut = 'a_signer', signature_job_state = 'recording', documenso_document_id = NULL "
+        "WHERE id = ANY(%s)",
+        (ids,),
+    )
+    return {"ok": True, "numeros": [r["numero"] or f"#{r['id']}" for r in rows], "lv_ids": ids}
 
 
 def par_mail(lv_ids: list[int]) -> dict:
@@ -322,3 +348,259 @@ def _send_signed_mail(doc_id: int, signed_pdf: bytes) -> None:
         to=to, subject=subject, body=body,
         attachment=(f"lettres-voiture-{plage.replace(' ', '-')}.pdf", signed_pdf, "application/pdf"),
     )
+
+
+# ====================================================================== beta.33
+# Traitement de fond de la file de signature SUR PLACE (bon.signature_jobs).
+# Ordre inversé : tout se fait ICI, après que le client a validé son dessin.
+
+_MAX_ATTEMPTS = 3
+_RETRY_DELAY_S = 30          # délai entre deux tentatives d'un même job
+_SEAL_WAIT_S = 30.0         # attente max du scellement COMPLETED côté Documenso
+_STUCK_SUR_PLACE_MIN = 15   # ménage : sur place non terminée depuis > 15 min
+_MAIL_EXPIRY_DAYS = 7       # mode mail : expiration automatique
+
+
+def _doc_id_for_lv(lv_ids: list[int]) -> int | None:
+    rows = db.query(
+        "SELECT DISTINCT documenso_document_id FROM bon.lettres_voiture "
+        "WHERE id = ANY(%s) AND documenso_document_id IS NOT NULL",
+        (list(lv_ids),),
+    )
+    return rows[0]["documenso_document_id"] if rows else None
+
+
+def _store_failed_png(job_id: int, data_url: str) -> str | None:
+    """Conserve le PNG d'une tentative échouée dans le bucket privé 30 j (diagnostic,
+    jamais sur le PDF). Best-effort."""
+    if not settings.service_role_key or not data_url:
+        return None
+    try:
+        b64 = data_url.split(",", 1)[1]
+        raw = base64.b64decode(b64)
+    except Exception:  # noqa: BLE001
+        return None
+    key = f"signature-echecs/{job_id}.png"
+    url = f"{settings.storage_url}/object/{settings.docs_bucket}/{key}"
+    try:
+        r = httpx.post(url, headers={"Authorization": f"Bearer {settings.service_role_key}",
+                                     "Content-Type": "image/png", "x-upsert": "true"},
+                       content=raw, timeout=30)
+        if r.status_code < 300:
+            return f"{settings.docs_bucket}/{key}"
+        log.error("conservation PNG échec job %s: HTTP %s", job_id, r.status_code)
+    except Exception as exc:  # noqa: BLE001
+        log.error("conservation PNG échec job %s: %r", job_id, exc)
+    return None
+
+
+def _mark_signed(doc_id: int, signed_pdf: bytes | None) -> None:
+    """Archive le PDF signé, passe les lettres à « signee », purge le cache, envoie le
+    mail KERLAM unique (comme beta.29)."""
+    path = _archive_signed(doc_id, signed_pdf) if signed_pdf else None
+    db.query(
+        "UPDATE bon.lettres_voiture SET statut = 'signee', signature_job_state = NULL, "
+        "signed_pdf_path = COALESCE(%s, signed_pdf_path) "
+        "WHERE documenso_document_id = %s AND deleted_at IS NULL",
+        (path, doc_id),
+    )
+    with contextlib.suppress(Exception):
+        pdf.drop_cache_for_document(doc_id)
+    if signed_pdf:
+        with contextlib.suppress(Exception):
+            _send_signed_mail(doc_id, signed_pdf)
+
+
+def _claim_next_job() -> dict | None:
+    """Réclame atomiquement le prochain job à traiter (rejouable : un job resté
+    'processing' après un redémarrage est repris)."""
+    rows = db.query(
+        "UPDATE bon.signature_jobs SET status = 'processing', updated_at = now() "
+        "WHERE id = (SELECT id FROM bon.signature_jobs "
+        "            WHERE status IN ('pending','processing') AND next_attempt_at <= now() "
+        "            ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED) "
+        "RETURNING *"
+    )
+    return rows[0] if rows else None
+
+
+def _run_job(job: dict) -> None:
+    """Exécute UN job : crée le document (si besoin), pose la signature sur chaque
+    champ, complète, attend le scellement, archive, marque signé, envoie le mail."""
+    job_id = job["id"]
+    lv_ids = list(job["lv_ids"])
+    png = job["signature_png"]
+    doc_id = job.get("document_id")
+
+    # 1) Créer le document Documenso (une seule fois ; idempotent après redémarrage).
+    if not doc_id:
+        rows = _rows(lv_ids)
+        if not rows:
+            raise ValueError("Lettres du job introuvables.")
+        signer = {"contact_nom": job.get("signer_name"), "contact_email": job["signer_email"]}
+        res = _create_lot_document(rows, signer, send_email=False)
+        doc_id = res["document_id"]
+        db.query("UPDATE bon.signature_jobs SET document_id = %s, updated_at = now() WHERE id = %s",
+                 (doc_id, job_id))
+        db.query("UPDATE bon.lettres_voiture SET documenso_document_id = %s WHERE id = ANY(%s)",
+                 (doc_id, lv_ids))
+
+    # 2) Poser le dessin sur CHAQUE champ SIGNATURE (token du destinataire seul).
+    token, field_ids = documenso.document_signature_fields(doc_id)
+    if not token or not field_ids:
+        raise documenso.DocumensoError(f"token/champs introuvables pour doc {doc_id}")
+    for fid in field_ids:
+        documenso.sign_field_with_token(token, fid, png)
+
+    # 3) Terminer -> scellement PAdES asynchrone côté Documenso.
+    documenso.complete_document_with_token(token, doc_id)
+
+    # 4) Attendre COMPLETED (borné), télécharger, archiver, marquer signé, mailer.
+    deadline = time.monotonic() + _SEAL_WAIT_S
+    while time.monotonic() < deadline:
+        with contextlib.suppress(Exception):
+            if documenso.is_completed(doc_id):
+                break
+        time.sleep(1.0)
+    signed = None
+    with contextlib.suppress(Exception):
+        signed = documenso.download_signed(doc_id)
+    _mark_signed(doc_id, signed)
+    db.query("UPDATE bon.signature_jobs SET status = 'done', updated_at = now() WHERE id = %s", (job_id,))
+
+
+def _fail_job(job: dict, exc: Exception) -> None:
+    """Échec d'une tentative : réessaie (délai) ou, après _MAX_ATTEMPTS, abandonne —
+    supprime le document créé (SANS mail), remet les lettres « à signer » + bandeau
+    « à refaire », conserve le PNG pour diagnostic."""
+    job_id = job["id"]
+    attempts = (job.get("attempts") or 0) + 1
+    err = f"{type(exc).__name__}: {exc}"[:500]
+    if attempts < _MAX_ATTEMPTS:
+        db.query(
+            "UPDATE bon.signature_jobs SET status = 'pending', attempts = %s, last_error = %s, "
+            "next_attempt_at = now() + make_interval(secs => %s), updated_at = now() WHERE id = %s",
+            (attempts, err, _RETRY_DELAY_S, job_id),
+        )
+        log.warning("job signature %s tentative %s échouée: %s", job_id, attempts, err)
+        return
+    # Abandon définitif.
+    doc_id = job.get("document_id") or _doc_id_for_lv(list(job["lv_ids"]))
+    if doc_id:
+        with contextlib.suppress(Exception):
+            documenso.delete_document(doc_id)  # emailSettings tous false -> aucun mail
+    png_path = _store_failed_png(job_id, job.get("signature_png") or "")
+    db.query(
+        "UPDATE bon.lettres_voiture SET statut = 'a_signer', signature_job_state = 'failed', "
+        "documenso_document_id = NULL WHERE id = ANY(%s)",
+        (list(job["lv_ids"]),),
+    )
+    db.query(
+        "UPDATE bon.signature_jobs SET status = 'failed', attempts = %s, last_error = %s, "
+        "png_path = %s, updated_at = now() WHERE id = %s",
+        (attempts, err, png_path, job_id),
+    )
+    log.error("job signature %s ABANDONNÉ après %s tentatives: %s", job_id, attempts, err)
+
+
+def process_signature_jobs() -> dict:
+    """Traite UN job de la file (appelé en boucle par le worker). Renvoie l'id traité."""
+    job = _claim_next_job()
+    if not job:
+        return {"processed": None}
+    try:
+        _run_job(job)
+        return {"processed": job["id"], "ok": True}
+    except Exception as exc:  # noqa: BLE001
+        _fail_job(job, exc)
+        return {"processed": job["id"], "ok": False}
+
+
+def cleanup_stuck_signatures() -> dict:
+    """Anti-blocage périodique :
+    - SUR PLACE non terminée depuis > 15 min -> document supprimé (sans mail), lettre
+      remise « à signer » (file nettoyée).
+    - MODE MAIL expiré (> 7 j sans signature) -> annulation sans mail, lettre « à signer ».
+    """
+    cleaned = 0
+    # Sur place bloquée : jobs toujours en file et lettres en « recording » anciennes.
+    stuck = db.query(
+        "SELECT DISTINCT documenso_document_id AS doc, array_agg(id) AS ids "
+        "FROM bon.lettres_voiture "
+        "WHERE signature_job_state = 'recording' AND signature_mode = 'sur_place' "
+        "AND signature_sent_at < now() - make_interval(mins => %s) AND deleted_at IS NULL "
+        "GROUP BY documenso_document_id",
+        (_STUCK_SUR_PLACE_MIN,),
+    )
+    for row in stuck:
+        ids = list(row["ids"])
+        doc = row["doc"]
+        if doc:
+            with contextlib.suppress(Exception):
+                documenso.delete_document(doc)
+        db.query(
+            "UPDATE bon.lettres_voiture SET statut = 'a_signer', signature_job_state = NULL, "
+            "documenso_document_id = NULL WHERE id = ANY(%s)",
+            (ids,),
+        )
+        db.query(
+            "UPDATE bon.signature_jobs SET status = 'failed', last_error = 'stuck>15min', "
+            "updated_at = now() WHERE lv_ids && %s AND status IN ('pending','processing')",
+            (ids,),
+        )
+        cleaned += 1
+    # Mode mail expiré.
+    expired = db.query(
+        "SELECT DISTINCT documenso_document_id AS doc, array_agg(id) AS ids "
+        "FROM bon.lettres_voiture "
+        "WHERE signature_mode = 'par_mail' AND statut = 'envoyee' "
+        "AND signature_sent_at < now() - make_interval(days => %s) AND deleted_at IS NULL "
+        "GROUP BY documenso_document_id",
+        (_MAIL_EXPIRY_DAYS,),
+    )
+    for row in expired:
+        _cancel_doc(row["doc"], list(row["ids"]))
+        cleaned += 1
+    return {"cleaned": cleaned}
+
+
+def _cancel_doc(doc_id: int | None, ids: list[int]) -> None:
+    """Supprime le document Documenso (SANS mail) et remet les lettres « à signer »."""
+    if doc_id:
+        with contextlib.suppress(Exception):
+            documenso.delete_document(doc_id)
+    db.query(
+        "UPDATE bon.lettres_voiture SET statut = 'a_signer', signature_mode = NULL, "
+        "signature_job_state = NULL, documenso_document_id = NULL, signature_sent_at = NULL "
+        "WHERE id = ANY(%s)",
+        (ids,),
+    )
+    db.query(
+        "UPDATE bon.signature_jobs SET status = 'failed', last_error = 'cancelled', "
+        "updated_at = now() WHERE lv_ids && %s AND status IN ('pending','processing')",
+        (ids,),
+    )
+
+
+def cancel_signature(lv_ids: list[int]) -> dict:
+    """Annule la signature en cours d'un lot (sur place OU mail) : supprime le document
+    (SANS mail) et remet les lettres « à signer ». Jamais sur une lettre signée."""
+    rows = _rows(lv_ids)
+    signees = [r["id"] for r in rows if r["statut"] == "signee"]
+    if signees:
+        raise SignatureConflict("Lettre déjà signée : annulation impossible.")
+    ids = [r["id"] for r in rows]
+    _cancel_doc(_doc_id_for_lv(ids), ids)
+    return {"cancelled": ids}
+
+
+def resend_mail(lv_ids: list[int]) -> dict:
+    """Mode mail : renvoie l'invitation à signer au client (Documenso renvoie un mail)."""
+    doc_id = _doc_id_for_lv(lv_ids)
+    if not doc_id:
+        raise ValueError("Aucun document de signature à renvoyer.")
+    ok = documenso.resend_document(doc_id)
+    if ok:
+        db.query("UPDATE bon.lettres_voiture SET signature_sent_at = now() WHERE id = ANY(%s)",
+                 (list(lv_ids),))
+    return {"resent": ok, "document_id": doc_id}

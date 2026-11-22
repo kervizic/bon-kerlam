@@ -28,5 +28,11 @@ export function statutLabel(code) {
  * n'étant attribué qu'au premier tour, l'absence de numéro = brouillon. */
 export function lvBadge(lv) {
   if (!lv || !lv.numero) return { label: "Brouillon", cls: "brouillon" };
+  // beta.33 : états de signature sur place / mail (hors lettres déjà signées).
+  if (lv.statut !== "signee") {
+    if (lv.signature_job_state === "recording") return { label: "Signée — enregistrement…", cls: "a_signer" };
+    if (lv.signature_job_state === "failed") return { label: "Signature non enregistrée", cls: "echec" };
+    if (lv.statut === "envoyee" && lv.signature_mode === "par_mail") return { label: "En attente du client", cls: "envoyee" };
+  }
   return { label: statutLabel(lv.statut), cls: lv.statut };
 }

@@ -130,6 +130,8 @@ import {
   workerLvPdf,
   workerSignatureWarm,
   workerSignatureSurPlace,
+  workerSignatureCancel,
+  workerSignatureResend,
   workerSignatureParMail,
   workerSignatureSync,
   searchAddress,
@@ -164,7 +166,7 @@ import { swipeActionsFor, attachSwipe, closeOpenSwipe } from "./swipe-actions.js
 import {
   recentChantiers, buildCompletion, swapPatch, addressPatch, sitePatch,
   endpointLabel, endpointLatLon, coordsForText,
-} from "./tour-address.js?v=320";
+} from "./tour-address.js?v=330";
 // pdf-viewer.js (et pdf.js) chargés en import DYNAMIQUE à la 1re ouverture (g).
 import { enhanceSelect, refreshCombobox, ensureOption, normalizeText as cbNormalizeText } from "./combobox.js?v=17";
 import { initTooltips } from "./tooltips.js?v=22";
@@ -2682,6 +2684,14 @@ function buildLvRow(lv, { dateText } = {}) {
   pdf.innerHTML = PDF_ICON_SVG;
   pdf.addEventListener("click", (e) => { e.stopPropagation(); exportLvPdf(lv); });
   row.append(open, pdf);
+  // beta.33 : actions anti-blocage (Annuler / Renvoyer) pour une lettre en signature.
+  const actions = buildSignatureActions(lv);
+  if (actions) {
+    const wrap = document.createElement("div");
+    wrap.className = "lv-row-wrap";
+    wrap.append(row, actions);
+    return wrap;
+  }
   return row;
 }
 
@@ -2797,7 +2807,7 @@ async function logout() {
   // beta.32 : ferme proprement une signature en cours, vide l'état utilisateur et
   // le cache des PDF locaux (PAS le cache des assets du Service Worker), puis revient
   // à l'écran de connexion. Les passkeys Face ID sont conservées (scope local).
-  try { closeEmbeddedSigning(); } catch (e) { /* aucune signature ouverte */ }
+  try { closeSignaturePad(); } catch (e) { /* aucune signature ouverte */ }
   if (pdfRefreshTimer) { clearTimeout(pdfRefreshTimer); pdfRefreshTimer = null; }
   await pdfCache.purge().catch(() => {});
   try { await signOut(); } catch (e) { /* best-effort : on continue le nettoyage */ }
@@ -2821,12 +2831,55 @@ function closeLogoutConfirm() {
 const signSelection = new Map();
 
 function isSignable(lv) {
-  // beta.29 : ne JAMAIS re-sélectionner une lettre déjà signée, envoyée (par mail),
-  // ni en signature intégrée ACTIVE (a_signer avec un document Documenso déjà
-  // attaché). Sélectionnables : brouillon / en cours / à signer non encore engagée.
-  if (lv.statut === "signee" || lv.statut === "envoyee") return false;
-  if (lv.statut === "a_signer" && lv.documenso_document_id != null) return false;
+  // beta.33 : jamais re-sélectionner une lettre signée, ni en cours d'enregistrement
+  // (sur place), ni en attente du client (mail actif). Une signature ÉCHOUÉE est
+  // re-signable (on la reprend). Brouillon / en cours / à signer (sans job) : OK.
+  if (lv.statut === "signee") return false;
+  if (lv.signature_job_state === "recording") return false;
+  if (lv.statut === "envoyee" && lv.signature_mode === "par_mail") return false;
   return true;
+}
+
+// État de signature « gérable » d'une lettre (barre d'actions) : null si rien.
+function signatureManageState(lv) {
+  if (!lv || lv.statut === "signee") return null;
+  if (lv.signature_job_state === "recording") return "recording";
+  if (lv.statut === "envoyee" && lv.signature_mode === "par_mail") return "mail";
+  return null;
+}
+
+// Barre d'actions inline pour une lettre en signature (anti-blocage beta.33).
+function buildSignatureActions(lv) {
+  const state = signatureManageState(lv);
+  if (!state) return null;
+  const bar = document.createElement("div");
+  bar.className = "lv-sign-actions";
+  const addBtn = (label, danger, fn) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "lv-sign-action" + (danger ? " is-danger" : "");
+    b.textContent = label;
+    b.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      b.disabled = true;
+      try {
+        await fn();
+        await loadMesLv();
+      } catch (err) {
+        const msg = (err && err.message) || "";
+        if (msg) alert(msg);  // msg vide = annulation de la confirmation : silencieux
+        b.disabled = false;
+      }
+    });
+    bar.appendChild(b);
+  };
+  if (state === "mail") addBtn("Renvoyer le lien", false, () => workerSignatureResend([lv.id]));
+  const cancelLabel = state === "recording" ? "Annuler et recommencer" : "Annuler la signature";
+  addBtn(cancelLabel, true, async () => {
+    if (!confirm(cancelLabel + " ?")) throw new Error("");
+    await workerSignatureCancel([lv.id]);
+  });
+  return bar;
 }
 
 function refreshSelectionBar() {
@@ -3124,41 +3177,15 @@ async function confirmSigner() {
   closeSignerChoice();
   if (signerState.mode === "sur_place") {
     const batch = plan.batches[0];
-    // beta.25 : le document Documenso combiné est créé AU TOUCHER, en UN appel
-    // (document + destinataire + champs, distributionMethod=NONE, aucun mail). Le
-    // cache PDF préchauffé rend cette création quasi instantanée.
-    const promise = workerSignatureSurPlace(batch.lvIds);
-    // Spinner « Préparation… » SEULEMENT si l'attente dépasse 300 ms.
-    const spinnerTimer = setTimeout(() => showSignPreparing(true), 300);
-    let res;
-    try {
-      res = await promise;
-    } catch (err) {
-      clearTimeout(spinnerTimer);
-      showSignPreparing(false);
-      const msg = err.message || String(err);
-      if (/\b409\b/.test(msg)) {
-        // beta.29 : lettre déjà signée ou déjà en signature active -> on refuse et
-        // on rafraîchit la liste (l'état en mémoire était périmé).
-        alert(msg.replace(/^bon-worker 409 — ?/, "") || "Lettre déjà signée.");
-        await loadMesLv();
-      } else {
-        alert("Échec de la préparation du document : " + msg);
-      }
-      return;
-    }
-    clearTimeout(spinnerTimer);
-    showSignPreparing(false);
-    if (!res || !res.token) {
-      alert("Document préparé mais aucun lien de signature reçu.");
-      return;
-    }
-    // sur_place a déjà marqué les lettres « à signer » avec le documenso_id.
-    // Les autres lettres (autres signataires) restent sélectionnées.
-    for (const id of batch.lvIds) signSelection.delete(id);
-    refreshSelectionBar();
-    openEmbeddedSigning(res);
-    loadMesLv();
+    // beta.33 : ORDRE INVERSÉ. On n'appelle RIEN côté Documenso ici : on ouvre notre
+    // propre cadre de signature. Le document n'est créé qu'après que le client a
+    // validé son dessin (envoyé au worker, qui fait tout le reste en tâche de fond).
+    const group = (signerState.groups || []).find((g) => g.contactId === batch.contactId);
+    const numeros = batch.lvIds.map((id) => {
+      const lv = signSelection.get(id);
+      return (lv && lv.numero) || "#" + id;
+    });
+    openSignaturePad({ ...batch, numeros, signerName: group ? group.nom : "" });
     return;
   }
   // Par mail : un envoi (un lot) par signataire.
@@ -3185,123 +3212,125 @@ async function confirmSigner() {
   }
 }
 
-/* ============================ Signature INTÉGRÉE (beta.24) ====================
- * « Signer sur ce téléphone » ouvre la signature DANS l'appli (iframe vers
- * /embed/sign/{token}), sans navigation hors PWA ni compte Documenso visible.
- * L'embed reprend le mode (sombre/clair) de l'appli. On écoute les postMessage
- * de l'embed (document-completed / all-documents-completed / document-error). */
-
-// Thème EFFECTIF de l'appli : sombre si data-theme=sombre, ou auto + système sombre.
-function isAppDark() {
-  const attr = document.documentElement.getAttribute("data-theme");
-  if (attr === "sombre") return true;
-  if (attr === "clair") return false;
-  return !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
-}
+/* ===================== Signature SUR PLACE au doigt (beta.33) =================
+ * Le client dessine sa signature DANS l'appli (canvas haute résolution), puis
+ * « Valider » envoie le PNG au worker. RIEN n'est créé côté Documenso avant la
+ * validation. Plus d'iframe embed Documenso. */
 
 function showSignPreparing(on) {
   const el = document.getElementById("sign-preparing");
   if (el) el.hidden = !on;
 }
 
-let embedMessageHandler = null;
+const signPad = { batch: null, canvas: null, ctx: null, drawing: false, dirty: false, last: null };
 
-function openEmbeddedSigning(res) {
-  const sheet = document.getElementById("embed-sign-sheet");
-  const frame = document.getElementById("embed-sign-frame");
-  const titleEl = document.getElementById("embed-sign-title");
-  if (!sheet || !frame) return;
-  const base = (res.documenso_url || "").replace(/\/$/, "");
-  const dark = isAppDark();
-  const options = {
-    name: res.signer_name || "",
-    lockName: true,
-    email: res.signer_email || undefined,
-    lockEmail: true,
-    language: "fr",
-    allowDocumentRejection: false,
-    // darkModeDisabled = inverse du thème de l'appli : l'embed peut passer en
-    // sombre uniquement si l'appli est en sombre.
-    darkModeDisabled: !dark,
-    // Couleurs KERLAM (orange primaire, texte anthracite) si l'embed les applique.
-    cssVars: { primary: "#FD8008", primaryForeground: "#1D1D1B" },
-  };
-  const frag = btoa(encodeURIComponent(JSON.stringify(options)));
-  const nums = (res.numeros || []).join(", ");
-  if (titleEl) titleEl.textContent = nums ? `Signature — ${nums}` : "Signature";
-  // Écoute des messages de l'embed (origine Documenso uniquement).
-  let embedOrigin = "";
-  try { embedOrigin = new URL(base).origin; } catch (e) { embedOrigin = ""; }
-  if (embedMessageHandler) window.removeEventListener("message", embedMessageHandler);
-  embedMessageHandler = (ev) => {
-    if (embedOrigin && ev.origin !== embedOrigin) return;
-    const action = ev.data && (ev.data.action || ev.data.type);
-    if (action === "document-completed" || action === "all-documents-completed") {
-      onEmbeddedSigned(res);
-    } else if (action === "document-error") {
-      alert("Erreur pendant la signature. Réessayez.");
-    } else if (action === "document-rejected") {
-      closeEmbeddedSigning();
-    }
-  };
-  window.addEventListener("message", embedMessageHandler);
-  // beta.29 (F5b) : overlay de chargement tant que l'iframe (~4,5 Mo) n'est pas
-  // prête -> pas d'écran blanc. Masqué au 'load' de l'iframe.
-  const loading = document.getElementById("embed-sign-loading");
-  if (loading) loading.hidden = false;
-  frame.onload = () => { if (loading) loading.hidden = true; };
-  frame.src = `${base}/embed/sign/${res.token}#${frag}`;
+function _signPadResize() {
+  const canvas = signPad.canvas;
+  if (!canvas) return;
+  const rect = canvas.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  canvas.width = Math.max(1, Math.round(rect.width * dpr));
+  canvas.height = Math.max(1, Math.round(rect.height * dpr));
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.lineWidth = 2.6; ctx.lineCap = "round"; ctx.lineJoin = "round";
+  ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue("--text").trim() || "#111";
+  signPad.ctx = ctx;
+}
+
+function _signPadPoint(ev) {
+  const r = signPad.canvas.getBoundingClientRect();
+  return { x: ev.clientX - r.left, y: ev.clientY - r.top };
+}
+
+function _signPadStart(ev) {
+  ev.preventDefault();
+  signPad.canvas.setPointerCapture && signPad.canvas.setPointerCapture(ev.pointerId);
+  signPad.drawing = true;
+  signPad.last = _signPadPoint(ev);
+}
+
+function _signPadMove(ev) {
+  if (!signPad.drawing) return;
+  ev.preventDefault();
+  const p = _signPadPoint(ev);
+  const ctx = signPad.ctx;
+  const last = signPad.last;
+  const mid = { x: (last.x + p.x) / 2, y: (last.y + p.y) / 2 };
+  ctx.beginPath();
+  ctx.moveTo(last.x, last.y);
+  ctx.quadraticCurveTo(last.x, last.y, mid.x, mid.y);
+  ctx.stroke();
+  signPad.last = p;
+  if (!signPad.dirty) {
+    signPad.dirty = true;
+    const ph = document.getElementById("sign-pad-placeholder");
+    if (ph) ph.hidden = true;
+  }
+}
+
+function _signPadEnd() { signPad.drawing = false; }
+
+function clearSignaturePad() {
+  const c = signPad.canvas;
+  if (c && signPad.ctx) signPad.ctx.clearRect(0, 0, c.width, c.height);
+  signPad.dirty = false;
+  const ph = document.getElementById("sign-pad-placeholder");
+  if (ph) ph.hidden = false;
+}
+
+function openSignaturePad(batch) {
+  signPad.batch = batch;
+  const sheet = document.getElementById("signature-pad-sheet");
+  const recap = document.getElementById("sign-pad-recap");
+  const signer = document.getElementById("sign-pad-signer");
+  if (recap) recap.textContent = (batch.numeros || []).join("  ·  ");
+  if (signer) signer.textContent = batch.signerName ? "Signataire : " + batch.signerName : "";
   sheet.hidden = false;
+  attachViewportSheet(sheet.querySelector(".sheet-panel") || sheet);
+  signPad.canvas = document.getElementById("sign-pad-canvas");
+  const c = signPad.canvas;
+  c.addEventListener("pointerdown", _signPadStart);
+  c.addEventListener("pointermove", _signPadMove);
+  c.addEventListener("pointerup", _signPadEnd);
+  c.addEventListener("pointercancel", _signPadEnd);
+  requestAnimationFrame(() => { _signPadResize(); clearSignaturePad(); });
 }
 
-function showSignFinalizing(on) {
-  const el = document.getElementById("sign-finalizing");
-  if (el) el.hidden = !on;
-}
-
-// Attend (borné) que toutes les lettres du lot passent « signée », en relançant la
-// synchro de fond toutes les 2 s (max ~60 s). Renvoie true si tout est signé.
-async function waitLettresSignees(lvIds, { ticks = 30, everyMs = 2000 } = {}) {
-  const ids = (lvIds || []).map((x) => String(x));
-  for (let i = 0; i < ticks; i++) {
-    let letters = [];
-    try { letters = await listLettresVoiture(); } catch (e) { /* réseau : on retente */ }
-    const done = ids.every((id) => {
-      const lv = (letters || []).find((l) => String(l.id) === id);
-      return lv && lv.statut === "signee";
-    });
-    if (done) return true;
-    await new Promise((r) => setTimeout(r, everyMs));
-    try { await workerSignatureSync(); } catch (e) { /* le polling de fond rattrapera */ }
+function closeSignaturePad() {
+  const sheet = document.getElementById("signature-pad-sheet");
+  if (!sheet || sheet.hidden) return;
+  const c = signPad.canvas;
+  if (c) {
+    c.removeEventListener("pointerdown", _signPadStart);
+    c.removeEventListener("pointermove", _signPadMove);
+    c.removeEventListener("pointerup", _signPadEnd);
+    c.removeEventListener("pointercancel", _signPadEnd);
   }
-  return false;
+  detachViewportSheet(sheet.querySelector(".sheet-panel") || sheet);
+  sheet.hidden = true;
+  signPad.batch = null; signPad.canvas = null; signPad.ctx = null; signPad.drawing = false;
 }
 
-function closeEmbeddedSigning() {
-  const sheet = document.getElementById("embed-sign-sheet");
-  const frame = document.getElementById("embed-sign-frame");
-  if (frame) frame.src = "about:blank";
-  if (sheet) sheet.hidden = true;
-  if (embedMessageHandler) {
-    window.removeEventListener("message", embedMessageHandler);
-    embedMessageHandler = null;
+async function validateSignature() {
+  const batch = signPad.batch;
+  if (!batch) return;
+  if (!signPad.dirty) { alert("Merci de signer dans le cadre avant de valider."); return; }
+  const png = signPad.canvas.toDataURL("image/png");
+  showSignPreparing(true);
+  try {
+    await workerSignatureSurPlace(batch.lvIds, png);
+  } catch (err) {
+    showSignPreparing(false);
+    alert("Signature non enregistrée : " + (err && err.message ? err.message : String(err)));
+    return;
   }
-}
-
-async function onEmbeddedSigned(res) {
-  closeEmbeddedSigning();
-  const lvIds = (res.lv_ids || []).slice();
-  // beta.29 (F2) : finalisation robuste. 1er sync : le worker ATTEND (borné) que
-  // le document passe COMPLETED côté Documenso (quelques secondes de latence), puis
-  // archive et marque « signée ». On repoll ensuite toutes les 2 s jusqu'à « signée ».
-  showSignFinalizing(true);
-  try { await workerSignatureSync(res.document_id); } catch (e) { /* le polling de fond rattrapera */ }
-  const ok = await waitLettresSignees(lvIds, { ticks: 30, everyMs: 2000 });
-  showSignFinalizing(false);
-  await loadMesLv();
-  showToast(ok
-    ? `${plur(lvIds.length, "lettre signée", "lettres signées")}.`
-    : "Signature en cours de finalisation…");
+  showSignPreparing(false);
+  for (const id of batch.lvIds) signSelection.delete(id);
+  refreshSelectionBar();
+  closeSignaturePad();
+  showToast("Signature enregistrée.");
+  loadMesLv();
 }
 
 /* ---- Actions de la sélection : corbeille groupée + PDF (beta.21) ------------ */
@@ -5611,8 +5640,13 @@ function wireStaticUI() {
   if (btnSigner) btnSigner.addEventListener("click", openSignerChoice);
   const btnSignerClose = document.getElementById("btn-signer-choice-close");
   if (btnSignerClose) btnSignerClose.addEventListener("click", dismissSignerChoice);
-  const btnEmbedClose = document.getElementById("btn-embed-sign-close");
-  if (btnEmbedClose) btnEmbedClose.addEventListener("click", closeEmbeddedSigning);
+  // beta.33 : câblage du cadre de signature au doigt.
+  const btnSignBack = document.getElementById("btn-sign-pad-back");
+  if (btnSignBack) btnSignBack.addEventListener("click", closeSignaturePad);
+  const btnSignClear = document.getElementById("btn-sign-pad-clear");
+  if (btnSignClear) btnSignClear.addEventListener("click", clearSignaturePad);
+  const btnSignValidate = document.getElementById("btn-sign-pad-validate");
+  if (btnSignValidate) btnSignValidate.addEventListener("click", validateSignature);
   const signerSheet = document.getElementById("signer-choice-sheet");
   if (signerSheet) signerSheet.addEventListener("click", (e) => { if (e.target.id === "signer-choice-sheet") dismissSignerChoice(); });
   const modeSurPlace = document.getElementById("mode-sur-place");

@@ -10,8 +10,8 @@
   <!-- Empreinte de version du shell (cf. assets/app-version.js). Bumper `app-rev`
        à chaque déploiement backend devant forcer un refresh (sinon le bump d'un
        `?v=` d'asset suffit). -->
-  <meta name="app-version" content="0.1.0-beta.32">
-  <meta name="app-rev" content="320">
+  <meta name="app-version" content="0.1.0-beta.33">
+  <meta name="app-rev" content="330">
 
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
@@ -36,7 +36,7 @@
        en police système). crossorigin obligatoire : les polices sont toujours
        récupérées en mode CORS, l'attribut évite un double téléchargement. -->
   <link rel="preload" href="/assets/fonts/sarpanch-900.woff2?v=14" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/assets/styles.css?v=320">
+  <link rel="stylesheet" href="/assets/styles.css?v=330">
   <!-- Garde-fou anti page blanche (beta.25) : si l'appli n'a pas démarré sous 8 s
        (flag window.__bonBooted posé en fin de boot d'app.js), on désenregistre le
        SW, on vide les caches et on recharge UNE fois (anti-boucle sessionStorage).
@@ -727,18 +727,24 @@
   </div>
 
   <!-- ===== Signature INTÉGRÉE (beta.24) : iframe plein écran vers Documenso ===== -->
-  <div id="embed-sign-sheet" class="embed-sign" hidden>
-    <div class="embed-sign-bar">
-      <span class="embed-sign-logo logo" aria-hidden="true"><span class="logo-ker">KER</span><span class="logo-lam">LAM</span></span>
-      <span id="embed-sign-title" class="embed-sign-title">Signature</span>
-      <button type="button" class="icon-btn embed-sign-close" id="btn-embed-sign-close" aria-label="Fermer la signature"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
-    </div>
-    <div class="embed-sign-body">
-      <iframe id="embed-sign-frame" class="embed-sign-frame" title="Signature des lettres de voiture" src="about:blank" allow="camera; fullscreen"></iframe>
-      <!-- beta.29 : état de chargement propre tant que l'iframe n'a pas chargé (pas d'écran blanc). -->
-      <div id="embed-sign-loading" class="embed-sign-loading" role="status" hidden>
-        <span class="spinner" aria-hidden="true"></span>
-        <span>Chargement de la signature…</span>
+  <!-- beta.33 : signature SUR PLACE au doigt, DANS l'appli (plus d'iframe Documenso).
+       Feuille plein écran clavier-absent (safe-area), ‹ pour fermer. -->
+  <div id="signature-pad-sheet" class="sheet-overlay sheet-overlay-fs" hidden>
+    <div class="sheet-panel sign-pad-panel" role="dialog" aria-modal="true" aria-labelledby="sign-pad-title">
+      <div class="site-picker-searchbar sign-pad-head">
+        <button type="button" class="icon-btn site-picker-back" id="btn-sign-pad-back" aria-label="Fermer sans signer"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg></button>
+        <span class="sign-pad-head-title" id="sign-pad-title">Signature</span>
+      </div>
+      <div class="sign-pad-body">
+        <div class="sign-pad-recap" id="sign-pad-recap"></div>
+        <div class="sign-pad-signer" id="sign-pad-signer"></div>
+        <p class="sign-pad-mention">En signant, vous acceptez les lettres de voiture listées.</p>
+        <div class="sign-pad-canvas-wrap">
+          <canvas id="sign-pad-canvas" class="sign-pad-canvas"></canvas>
+          <span class="sign-pad-placeholder" id="sign-pad-placeholder">Signez ici</span>
+          <button type="button" id="btn-sign-pad-clear" class="sign-pad-clear">Effacer</button>
+        </div>
+        <button type="button" id="btn-sign-pad-validate" class="btn btn-primary btn-block sign-pad-validate">Valider la signature</button>
       </div>
     </div>
   </div>
@@ -962,6 +968,6 @@
   <!-- ================================================================== Scripts -->
   <script src="/assets/config.js?v=21"></script>
   <script src="/assets/vendor/supabase/supabase.js?v=270"></script>
-  <script type="module" src="/assets/app.js?v=320"></script>
+  <script type="module" src="/assets/app.js?v=330"></script>
 </body>
 </html>

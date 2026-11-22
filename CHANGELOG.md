@@ -4,6 +4,40 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.33] — 2026-11-22
+
+Signature SUR PLACE sans page Documenso, et anti-blocage.
+
+### Changé
+- **Signature sur place au doigt, DANS l'appli** : plus d'iframe embed Documenso.
+  Feuille plein écran (récap des lettres, nom du signataire, grand cadre de signature
+  au doigt haute résolution avec « Effacer », mention « En signant, vous acceptez les
+  lettres de voiture listées »). **Ordre inversé** : rien n'est créé côté Documenso
+  tant que le client n'a pas validé son dessin. À la validation, l'appli envoie le PNG
+  au worker, reçoit « Signature enregistrée » et ferme la feuille ; la lettre affiche
+  « Signée — enregistrement… ».
+- **Worker en tâche de fond (file persistante, rejouable après redémarrage)** : crée le
+  document Documenso (sans mail), pose la signature dessinée sur chaque champ via les
+  endpoints tRPC `field.signFieldWithToken` / `recipient.completeDocumentWithToken`
+  (token du destinataire + en-tête Origin), attend le scellement PAdES, archive,
+  passe « signée » et envoie le mail KERLAM unique. **3 tentatives** ; en cas d'échec
+  définitif, le document est supprimé (sans mail), la lettre revient « à signer » avec
+  le bandeau **« Signature non enregistrée — à refaire »** (le PNG est conservé 30 j
+  pour diagnostic).
+
+### Ajouté
+- **Anti-blocage** : ménage automatique (sur place non terminée > 15 min → document
+  supprimé sans mail, lettre « à signer » ; mode mail expiré > 7 j → annulation sans
+  mail). Mode mail : statut « En attente du client » avec actions **« Renvoyer le
+  lien »** et **« Annuler la signature »**. Plus de blocage 409 : « Signer » sur une
+  lettre déjà en signature propose **« Annuler et recommencer »**. Le trigger
+  d'immuabilité des lettres SIGNÉES reste strictement inchangé.
+
+### Base de données (migration `0031`)
+- Table `bon.signature_jobs` (file persistante) + colonne
+  `lettres_voiture.signature_job_state` (`recording` / `failed`) ; vue
+  `api.lettres_voiture` recréée pour l'exposer.
+
 ## [0.1.0-beta.32] — 2026-11-19
 
 Performance (signature, chargement) et déconnexion.
