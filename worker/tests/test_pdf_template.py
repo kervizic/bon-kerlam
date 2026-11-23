@@ -65,6 +65,45 @@ def test_zone_signature_reservee():
     assert "sign-box" not in html     # plus de cadre pointillé
 
 
+def test_sign_nom_au_dessus_de_la_zone():
+    # beta.33.5 : le NOM du signataire est positionné AU-DESSUS de la zone de
+    # signature (top 0), l'ancre Documenso en dessous (top 6mm). On vérifie la
+    # règle CSS dans le gabarit rendu (indépendant de WeasyPrint).
+    html = pdf.render_html(_context())
+    # Le nom reste imprimé en dur et la zone 44×22 mm est conservée.
+    assert "Claire Fontaine" in html
+    assert "width: 44mm; height: 22mm" in html
+    # Le nom est à top:0 et l'ancre signature plus bas (top:6mm) -> nom au-dessus.
+    assert ".sign-nom { position: absolute; left: 1mm; top: 0;" in html
+    assert "#doc-signature { left: 1mm; top: 6mm;" in html
+
+
+def test_rendu_ancre_signature_stable_avec_ou_sans_nom():
+    # beta.33.5 : l'espace du nom est réservé en PERMANENCE. L'ancre #doc-signature
+    # (donc le champ Documenso mesuré) doit tomber au MÊME endroit que le nom soit
+    # connu ou non (cas « envoi par mail avant signature »). Vérifié sur le rendu
+    # RÉEL (WeasyPrint) et non au simple calcul. Ignoré si WeasyPrint absent (CI).
+    import pytest
+    pytest.importorskip("weasyprint")
+
+    def _field(signataire_nom):
+        ctx = _context()
+        ctx["lv"]["signataire_nom"] = signataire_nom
+        doc = pdf.render_document(ctx)
+        fields = pdf.measure_fields(doc, 0)
+        sig = next(f for f in fields if f["type"] == "SIGNATURE")
+        return sig
+
+    avec = _field("Claire Fontaine")
+    sans = _field(None)
+    # Position et taille du champ signature IDENTIQUES avec/sans nom.
+    for key in ("pageNumber", "pageX", "pageY", "pageWidth", "pageHeight"):
+        assert avec[key] == sans[key], f"{key} diffère: {avec[key]} vs {sans[key]}"
+    # Zone au ratio ~2:1 (44 × 22 mm) : pageWidth/pageHeight ≈ 2 (A4 210×297).
+    ratio = (avec["pageWidth"] / 210) / (avec["pageHeight"] / 297)
+    assert 1.9 < ratio < 2.1, f"ratio zone signature = {ratio:.2f} (attendu ~2:1)"
+
+
 def test_aucun_tableau():
     # Dépouillement maximal : AUCUN tableau nulle part dans le PDF.
     html = pdf.render_html(_context())
