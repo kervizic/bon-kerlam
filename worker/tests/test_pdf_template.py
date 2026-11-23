@@ -99,9 +99,13 @@ def test_rendu_ancre_signature_stable_avec_ou_sans_nom():
     # Position et taille du champ signature IDENTIQUES avec/sans nom.
     for key in ("pageNumber", "pageX", "pageY", "pageWidth", "pageHeight"):
         assert avec[key] == sans[key], f"{key} diffère: {avec[key]} vs {sans[key]}"
-    # Zone au ratio ~2:1 (44 × 22 mm) : pageWidth/pageHeight ≈ 2 (A4 210×297).
-    ratio = (avec["pageWidth"] / 210) / (avec["pageHeight"] / 297)
-    assert 1.9 < ratio < 2.1, f"ratio zone signature = {ratio:.2f} (attendu ~2:1)"
+    # Zone 44 × 22 mm (ratio 2:1) : les % Documenso sont relatifs à CHAQUE dimension
+    # de l'A4 (210 × 297 mm). On reconvertit en mm avant de comparer.
+    largeur_mm = avec["pageWidth"] / 100 * 210
+    hauteur_mm = avec["pageHeight"] / 100 * 297
+    assert 43 < largeur_mm < 45, f"largeur zone = {largeur_mm:.1f} mm (attendu ~44)"
+    assert 21 < hauteur_mm < 23, f"hauteur zone = {hauteur_mm:.1f} mm (attendu ~22)"
+    assert 1.9 < largeur_mm / hauteur_mm < 2.1, f"ratio = {largeur_mm / hauteur_mm:.2f} (attendu ~2:1)"
 
 
 def test_aucun_tableau():
