@@ -488,7 +488,10 @@ def shoot_beta336_sign_from_lv(ctx, prefix: str) -> None:
                     continue
                 clicked = rows[idx]["num"]
                 page.evaluate(
-                    f"(i) => {{ const o = document.querySelectorAll('{sel} .lv-row .lv-row-open'); if (o[i]) o[i].click(); }}",
+                    f"""(i) => {{
+                        const o = document.querySelectorAll('{sel} .lv-row .lv-row-open');
+                        if (o[i]) o[i].click();
+                    }}""",
                     idx,
                 )
                 page.wait_for_timeout(1000)
@@ -526,8 +529,13 @@ def shoot_beta336_sign_from_lv(ctx, prefix: str) -> None:
             page.goto(f"{BASE}?demo=1&screen=mes-lv&role=chauffeur&theme={theme}", wait_until="load")
             page.wait_for_timeout(800)
             page.evaluate(
-                """() => { const c = document.getElementById('mes-lv-show-signees');
-                           if (c && !c.checked) { c.checked = true; c.dispatchEvent(new Event('change', {bubbles:true})); } }"""
+                """() => {
+                    const c = document.getElementById('mes-lv-show-signees');
+                    if (c && !c.checked) {
+                        c.checked = true;
+                        c.dispatchEvent(new Event('change', {bubbles:true}));
+                    }
+                }"""
             )
             page.wait_for_timeout(600)
             opened = page.evaluate(
