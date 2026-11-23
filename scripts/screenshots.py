@@ -441,6 +441,121 @@ beta225_failures: list[str] = []
 beta226_failures: list[str] = []
 beta232_failures: list[str] = []
 beta25_failures: list[str] = []
+beta336_failures: list[str] = []
+
+
+def shoot_beta336_sign_from_lv(ctx, prefix: str) -> None:
+    """beta.33.6 : ouvrir une lettre « À signer » DEPUIS LA LISTE affiche bien CETTE
+    lettre (plus de remplacement par la « lettre du jour ») et le bouton « Signer »
+    est VISIBLE en bas, au-dessus de la barre d'onglets. Sur une lettre SIGNÉE, le
+    bouton reste masqué. Couvre chauffeur (Mes LV) et bureau (liste LV), clair +
+    sombre. Régression du bug « pas de bouton pour signer quand on est dans le bon »."""
+    PROBE = r"""
+      () => {
+        const btn = document.getElementById('btn-sign-lv');
+        const num = document.getElementById('lv-numero');
+        const bar = document.querySelector('.bottom-bar');
+        const r = btn ? btn.getBoundingClientRect() : null;
+        const br = bar ? bar.getBoundingClientRect() : null;
+        return {
+          numero: num ? num.textContent.trim() : null,
+          present: !!btn,
+          hidden: btn ? btn.hidden : null,
+          visible: !!(r && r.width > 0 && getComputedStyle(btn).display !== 'none' && !btn.hidden),
+          aboveBar: !!(r && br && r.bottom <= br.top + 1),
+        };
+      }
+    """
+    for role in ("chauffeur", "bureau"):
+        screen = "mes-lv" if role == "chauffeur" else "lv"
+        sel = "#mes-lv-list" if role == "chauffeur" else "#list-lv"
+        for theme in ("clair", "sombre"):
+            page = ctx.new_page()
+            try:
+                page.goto(f"{BASE}?demo=1&screen={screen}&role={role}&theme={theme}", wait_until="load")
+                page.wait_for_timeout(800)
+                rows = page.evaluate(
+                    f"""() => Array.from(document.querySelectorAll('{sel} .lv-row')).map(r => {{
+                        const n = r.querySelector('.lv-row-numero');
+                        const bd = r.querySelector('.badge');
+                        return {{ num: n ? n.textContent.trim() : '', badge: bd ? bd.textContent.trim() : '' }};
+                    }})"""
+                )
+                idx = next((i for i, r in enumerate(rows) if "signer" in r["badge"].lower()), None)
+                if idx is None:
+                    beta336_failures.append(f"signer-lv/{role}/{theme}: aucune lettre « À signer » dans la liste")
+                    page.close()
+                    continue
+                clicked = rows[idx]["num"]
+                page.evaluate(
+                    f"(i) => {{ const o = document.querySelectorAll('{sel} .lv-row .lv-row-open'); if (o[i]) o[i].click(); }}",
+                    idx,
+                )
+                page.wait_for_timeout(1000)
+                page.evaluate("() => window.scrollTo(0, document.body.scrollHeight)")
+                page.wait_for_timeout(300)
+                probe = page.evaluate(PROBE)
+                if probe["numero"] != clicked:
+                    beta336_failures.append(
+                        f"signer-lv/{role}/{theme}: lettre affichée {probe['numero']!r} != cliquée {clicked!r} "
+                        f"(loadToday a écrasé state.lv)"
+                    )
+                if not probe["visible"]:
+                    beta336_failures.append(
+                        f"signer-lv/{role}/{theme}: bouton Signer NON visible sur {clicked} "
+                        f"(present={probe['present']}, hidden={probe['hidden']})"
+                    )
+                if not probe["aboveBar"]:
+                    beta336_failures.append(
+                        f"signer-lv/{role}/{theme}: bouton Signer passe SOUS la barre d'onglets"
+                    )
+                page.screenshot(path=str(OUT / f"{prefix}-signer-dans-le-bon-{role}-{theme}.png"), full_page=False)
+                print(f"   signer-dans-le-bon-{role}-{theme} (lettre={probe['numero']}, visible={probe['visible']}, "
+                      f"au-dessus-barre={probe['aboveBar']})")
+            except Exception as exc:  # noqa: BLE001
+                beta336_failures.append(f"signer-lv/{role}/{theme}: exception {exc}")
+                print(f"   !! signer-lv/{role}/{theme}: {exc}")
+            finally:
+                page.close()
+
+    # Lettre SIGNÉE (KER-03040, démo) : bouton toujours MASQUÉ. Via « Mes LV » +
+    # case « Signées » (chauffeur), clair + sombre.
+    for theme in ("clair", "sombre"):
+        page = ctx.new_page()
+        try:
+            page.goto(f"{BASE}?demo=1&screen=mes-lv&role=chauffeur&theme={theme}", wait_until="load")
+            page.wait_for_timeout(800)
+            page.evaluate(
+                """() => { const c = document.getElementById('mes-lv-show-signees');
+                           if (c && !c.checked) { c.checked = true; c.dispatchEvent(new Event('change', {bubbles:true})); } }"""
+            )
+            page.wait_for_timeout(600)
+            opened = page.evaluate(
+                """() => {
+                    const rows = Array.from(document.querySelectorAll('#mes-lv-list .lv-row'));
+                    const row = rows.find(r => /Sign/i.test((r.querySelector('.badge')||{}).textContent||''));
+                    const open = row ? row.querySelector('.lv-row-open') : null;
+                    if (open) { open.click(); return true; }
+                    return false;
+                }"""
+            )
+            if not opened:
+                beta336_failures.append(f"signee/{theme}: aucune lettre signée dans « Mes LV » (case Signées)")
+                page.close()
+                continue
+            page.wait_for_timeout(1000)
+            probe = page.evaluate(PROBE)
+            if probe["visible"]:
+                beta336_failures.append(
+                    f"signee/{theme}: bouton Signer VISIBLE sur une lettre signée ({probe['numero']})"
+                )
+            page.screenshot(path=str(OUT / f"{prefix}-signee-sans-bouton-{theme}.png"), full_page=False)
+            print(f"   signee-sans-bouton-{theme} (lettre={probe['numero']}, bouton-masqué={not probe['visible']})")
+        except Exception as exc:  # noqa: BLE001
+            beta336_failures.append(f"signee/{theme}: exception {exc}")
+            print(f"   !! signee/{theme}: {exc}")
+        finally:
+            page.close()
 
 
 def _assert(cond: bool, msg: str) -> None:
@@ -1655,6 +1770,8 @@ def main() -> int:
         shoot_formulaire_heures(iphone, "iphone-chauffeur")
         shoot_suppression(iphone, "iphone-chauffeur")
         shoot_combobox(iphone, "iphone")
+        print("Chromium (iPhone) : bouton Signer dans le bon depuis la liste beta.33.6")
+        shoot_beta336_sign_from_lv(iphone, "iphone")
         iphone.close()
 
         ipad = browser.new_context(viewport=IPAD, device_scale_factor=2, is_mobile=True, has_touch=True, **LOCALE)
@@ -1750,6 +1867,8 @@ def main() -> int:
         shoot_beta21_contraste_onglet(wk_iphone2, "webkit-iphone")
         print("WebKit (Safari iOS, DSR 2) : barre d'onglets masquée au clavier beta.21.1")
         shoot_beta21_keyboard(wk_iphone2, "webkit-iphone")
+        print("WebKit (Safari iOS, DSR 2) : bouton Signer dans le bon depuis la liste beta.33.6")
+        shoot_beta336_sign_from_lv(wk_iphone2, "webkit-iphone")
         wk_iphone2.close()
         wk.close()
 
@@ -1847,6 +1966,14 @@ def main() -> int:
         rc = 1
     else:
         print("OK : beta.25 (mise à jour automatique sur changement de version.json).")
+    if beta336_failures:
+        print("beta.33.6 KO (bouton Signer absent / mauvaise lettre ouverte depuis la liste) :")
+        for f in beta336_failures:
+            print("  -", f)
+        rc = 1
+    else:
+        print("OK : beta.33.6 (ouvrir une lettre « À signer » affiche CETTE lettre + bouton Signer visible ; "
+              "lettre signée = pas de bouton).")
     return rc
 
 

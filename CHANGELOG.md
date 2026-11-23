@@ -4,6 +4,28 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.33.6] — 2026-11-23
+
+### Corrigé
+- **Bouton « Signer » absent quand on ouvre une lettre depuis la liste** (« pas de
+  lien pour signer en bas du bon »). En ouvrant une lettre « À signer » depuis
+  « Mes lettres de voiture » (ou la liste bureau), `navigate("today")` relançait le
+  chargeur de route `loadToday`, qui **écrasait la lettre ouverte par la « lettre du
+  jour »** (ou un brouillon vide sans numéro). Sur un brouillon sans `id`, le bouton
+  « Signer » était masqué → aucun bouton visible ; sinon la mauvaise lettre
+  s'affichait. `openLvInToday` ne relance plus `loadToday` (nouveau garde-fou
+  `navigate(route, { skipLoader })`) et charge désormais lui-même les projets de la
+  lettre ouverte. Le bouton « Signer » (orange, texte anthracite) est de nouveau
+  visible en bas de l'écran d'une lettre non signée, au-dessus de la barre d'onglets,
+  pour le chauffeur comme pour le bureau ; masqué sur une lettre signée.
+
+### Tests
+- e2e WebKit (Safari iOS) **et** Chromium, iPhone 15 (393×852) : ouvrir une lettre
+  « À signer » depuis la liste affiche bien CETTE lettre et un bouton « Signer »
+  visible au-dessus de la barre d'onglets (chauffeur + bureau, clair + sombre) ;
+  une lettre signée n'affiche aucun bouton « Signer ».
+- Jeu de démo : ajout d'une lettre signée (KER-03040) pour couvrir le cas « signée ».
+
 ## [0.1.0-beta.33.1] — 2026-11-22
 
 ### Ajouté

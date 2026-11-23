@@ -3599,10 +3599,16 @@ async function createNewLvAndOpen() {
 async function openLvInToday(lv) {
   state.lv = lv;
   fillHeaderForm(lv);
-  renderLvNumero();
+  renderLvNumero();            // -> refreshDeleteButton() + refreshSignButton()
+  await loadLvProjets();
+  renderLvProjetsHeader();
   await loadPrestationsFor(lv);
   await loadToursFor(lv);
-  navigate("today");
+  // skipLoader : la vue « today » vient d'être peuplée ci-dessus pour CETTE
+  // lettre. On NE relance PAS loadToday (qui rechargerait la « lettre du jour »
+  // et écraserait state.lv par un brouillon vide / une autre lettre, masquant le
+  // bouton Signer — bug beta.33.6 « pas de bouton pour signer dans le bon »).
+  await navigate("today", { skipLoader: true });
   scheduleLvCompleteness();
 }
 
@@ -5777,7 +5783,7 @@ function closeNavDrawer() {
   if (d) d.hidden = true;
 }
 
-async function navigate(route) {
+async function navigate(route, { skipLoader = false } = {}) {
   if (!ROUTES.includes(route)) route = defaultRouteForMode();
   maybeSwitchModeForRoute(route); // cohérence mode <-> contenu (utilisateurs bureau)
   resetUndo(); // on quitte le formulaire courant : la pile d'annulation repart de zéro
@@ -5801,7 +5807,11 @@ async function navigate(route) {
   } catch (e) {}
 
   const loader = ROUTE_LOADERS[route];
-  if (loader) await loader();
+  // skipLoader : l'appelant a DÉJÀ peuplé la vue (ex. openLvInToday ouvre une
+  // lettre précise). Sans ce garde-fou, loadToday rechargerait la « lettre du
+  // jour » et écraserait state.lv (bug beta.33.6 : le bouton Signer disparaît car
+  // la lettre ouverte est remplacée par un brouillon vide / une autre lettre).
+  if (loader && !skipLoader) await loader();
 }
 
 /* =================================================================== UI statique == */

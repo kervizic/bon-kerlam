@@ -38,3 +38,6 @@ htmlcov/
 
 # Police logo copiée à la build depuis front/assets/fonts (source unique)
 worker/app/templates/fonts/sarpanch-900.woff2
+
+# Captures e2e générées localement (artefact CI, non versionné)
+screenshots/
