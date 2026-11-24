@@ -973,6 +973,44 @@ export async function rpcAdressesChantier(clientId) {
   return live.rpcAdressesChantier(clientId);
 }
 
+// beta.34 : lignes du dernier tour partant d'un lieu de chargement (site OU adresse).
+export async function rpcDernierChargementLignes(siteId, adresse, excludeTourId) {
+  if (DEMO) {
+    const norm = (s) => String(s == null ? "" : s).trim().toLowerCase();
+    const lvById = new Map((demoDb.lettres_voiture || []).map((l) => [l.id, l]));
+    const candidats = (demoDb.tours || []).filter((t) => {
+      if (t.deleted_at) return false;
+      if (excludeTourId != null && String(t.id) === String(excludeTourId)) return false;
+      const lv = lvById.get(t.lv_id);
+      if (!lv || lv.deleted_at) return false;
+      if (siteId != null && String(t.site_chargement_id) === String(siteId)) return true;
+      if (adresse && t.chargement_adresse && norm(t.chargement_adresse) === norm(adresse)) return true;
+      return false;
+    });
+    candidats.sort((a, b) => {
+      const la = lvById.get(a.lv_id) || {}, lb = lvById.get(b.lv_id) || {};
+      const da = String(la.date_etablissement || ""), db = String(lb.date_etablissement || "");
+      if (da !== db) return db.localeCompare(da);
+      const ca = String(la.created_at || ""), cb = String(lb.created_at || "");
+      if (ca !== cb) return cb.localeCompare(ca);
+      return (b.ordre || 0) - (a.ordre || 0) || (b.id || 0) - (a.id || 0);
+    });
+    const cible = candidats[0];
+    if (!cible) return [];
+    const artById = new Map((demoDb.articles || []).map((a) => [a.id, a]));
+    return (demoDb.tour_lignes || [])
+      .filter((l) => String(l.tour_id) === String(cible.id) && (l.article_id != null || l.quantite != null))
+      .sort((a, b) => (a.id || 0) - (b.id || 0))
+      .map((l) => ({
+        article_id: l.article_id != null ? l.article_id : null,
+        article_nom: (artById.get(l.article_id) || {}).nom || null,
+        quantite: l.quantite != null ? l.quantite : null,
+        unite: l.unite || null,
+      }));
+  }
+  return live.rpcDernierChargementLignes(siteId, adresse, excludeTourId);
+}
+
 export async function rpcSiteDoublon(lat, lon, rayonM = 100.0) {
   if (DEMO) {
     return demoDb.sites
