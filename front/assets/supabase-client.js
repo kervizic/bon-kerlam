@@ -862,6 +862,20 @@ export async function rpcAdressesChantier(clientId) {
   return data || [];
 }
 
+// beta.34 : lignes (article, quantité, unité) du DERNIER tour partant d'un lieu de
+// chargement donné (site permanent OU adresse de chantier). Sert la reprise au
+// choix du lieu de chargement. p_exclude_tour_id exclut le tour en cours d'édition.
+// La RLS limite aux lettres visibles (hors corbeille ; signées incluses en lecture).
+export async function rpcDernierChargementLignes(siteId, adresse, excludeTourId) {
+  const { data, error } = await requireClient().rpc("dernier_chargement_lignes", {
+    p_site_id: siteId != null ? siteId : null,
+    p_adresse: adresse || null,
+    p_exclude_tour_id: excludeTourId != null ? excludeTourId : null,
+  });
+  if (error) throw error;
+  return data || [];
+}
+
 export async function rpcSiteDoublon(lat, lon, rayonM = 100.0) {
   const { data, error } = await requireClient().rpc("site_doublon", { p_lat: lat, p_lon: lon, p_rayon_m: rayonM });
   if (error) throw error;

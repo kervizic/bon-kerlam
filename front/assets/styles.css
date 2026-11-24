@@ -647,6 +647,9 @@ input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
 .nav-link { text-decoration: none; }
 
 .lignes-list { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
+/* beta.34 : indice discret « Repris du dernier chargement à <lieu> ». */
+.lignes-reprise-hint { font-size: 12px; margin: -2px 0 6px; }
+.lignes-reprise-hint[hidden] { display: none; }
 /* Nom d'article sur sa propre ligne (pleine largeur, nom complet lisible sur un
    écran de 393 px) ; quantité + unité + suppression sur la ligne du dessous. */
 .ligne-row {

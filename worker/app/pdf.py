@@ -71,6 +71,7 @@ def unite_label(code: str, quantite) -> str:
         "m3": "m³",
         "unite": "unités" if plural else "unité",
         "big_bag": "big bags" if plural else "big bag",
+        "benne": "bennes" if plural else "benne",
         "jour": "jours" if plural else "jour",
         "heure": "heures" if plural else "heure",
     }

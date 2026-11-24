@@ -4,6 +4,42 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.34] — 2026-11-24
+
+### Ajouté
+- **Unité « benne »** à côté de t, m³, unité et big bag : disponible dans le
+  sélecteur d'unité de chaque ligne de marchandise, dans le catalogue d'unités des
+  articles (Réglages), et affichée au pluriel partout — « 1 benne » / « 2 bennes » —
+  dans l'app (résumé de tour replié), le récapitulatif de signature et le PDF. Le
+  poids d'une benne n'étant pas convertible, la jauge de charge la compte en « poids
+  partiel » (aucun total faussé), comme les big bags.
+- **Reprise des lignes au choix du lieu de chargement d'un tour.** Quand on choisit
+  (ou change) le lieu de chargement d'un tour qui n'a encore **aucune ligne saisie à
+  la main** (lignes vides ou lignes reprises automatiquement et non modifiées), les
+  lignes (nature, quantité, unité) du **dernier tour partant de ce même lieu** sont
+  pré-remplies. Exemple : au départ de Veolia, une ligne « benne gravats » apparaît
+  d'office. Source : toutes les lettres visibles par l'utilisateur (RLS), hors
+  corbeille, lettres signées incluses en lecture ; le plus récent par date de lettre
+  puis création. Les lignes saisies à la main ne sont **jamais** écrasées ; les
+  lignes reprises restent modifiables et supprimables. Indice discret « Repris du
+  dernier chargement à <lieu> ». Requête légère (RPC indexée) ; hors ligne sans
+  cache, rien ne se passe.
+
+### Base de données
+- Migration **0032** (additive, rejouable) : unité « benne » ajoutée au catalogue
+  d'unités par défaut des articles (aucune contrainte CHECK/enum sur l'unité, texte
+  libre) ; RPC `dernier_chargement_lignes(site|adresse, exclude_tour)` en
+  `SECURITY INVOKER` (RLS appliquée) ; index partiels sur `bon.tours`
+  (`site_chargement_id` et `lower(btrim(chargement_adresse))`).
+
+### Tests
+- SQL : sélection du dernier chargement par site et par adresse normalisée,
+  exclusion de la corbeille et du tour courant, isolation RLS entre chauffeurs
+  (lettre signée lisible par son propriétaire), `ligne_tonnes('benne')` = NULL.
+- JS : non-écrasement des lignes saisies, reprise des lignes vides/reprises,
+  normalisation des lignes RPC, pluriel des unités (« 1 benne » / « 2 bennes »).
+- Worker : libellé PDF « benne » / « bennes ».
+
 ## [0.1.0-beta.33.6] — 2026-11-23
 
 ### Corrigé

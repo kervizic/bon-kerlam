@@ -39,6 +39,13 @@ def test_unite_label_jour_heure_pluriel():
     assert pdf.unite_label("heure", 3) == "heures"
 
 
+def test_unite_label_benne_pluriel():
+    # beta.34 : « 1 benne » / « 2 bennes ».
+    assert pdf.unite_label("benne", 1) == "benne"
+    assert pdf.unite_label("benne", 2) == "bennes"
+    assert pdf.unite_label("benne", 3.0) == "bennes"
+
+
 def test_prestations_bloc_present_et_place_avant_tours():
     prestations = [
         {

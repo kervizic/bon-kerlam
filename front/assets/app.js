@@ -140,6 +140,7 @@ import {
   rpcPrefill,
   rpcSitesPour,
   rpcAdressesChantier,
+  rpcDernierChargementLignes,
   rpcLvUndo,
   rpcSetDerniereUnite,
   rpcDernieresHeures,
@@ -168,6 +169,7 @@ import {
   recentChantiers, buildCompletion, swapPatch, addressPatch, sitePatch,
   endpointLabel, endpointLatLon, coordsForText,
 } from "./tour-address.js?v=334";
+import { peutReprendre, lignesReprises, uniteLabel } from "./tour-prefill.js?v=340";
 import { strokesBBox, exportLayout } from "./signature-pad.js?v=332";
 // pdf-viewer.js (et pdf.js) chargés en import DYNAMIQUE à la 1re ouverture (g).
 import { enhanceSelect, refreshCombobox, ensureOption, normalizeText as cbNormalizeText } from "./combobox.js?v=17";
@@ -2319,7 +2321,7 @@ async function renderTourCard(entry) {
       .filter(Boolean).join(" → ") || "Tour vide";
     const q = (entry.lignes || []).reduce((s, l) => s + (parseFloat(String(l.quantite).replace(",", ".")) || 0), 0);
     const unite = (entry.lignes && entry.lignes[0] && entry.lignes[0].unite) || "t";
-    summaryEl.textContent = q > 0 ? `${trajet} · ${frQty(q)} ${unite}` : trajet;
+    summaryEl.textContent = q > 0 ? `${trajet} · ${frQty(q)} ${uniteLabel(unite, q)}` : trajet;
   };
   collapseBtn.addEventListener("click", () => {
     const collapsed = node.classList.toggle("is-collapsed");
@@ -2363,8 +2365,14 @@ function renderLigneRow(lignesList, entry, ligne) {
   wireAutosaveField(uniteSel, { table: "tour_lignes", id: ligne.id, field: "unite" });
 
   // Ces 3 champs déclenchent une remise en cache hors-ligne (autosave 600ms).
+  // beta.34 : toute édition manuelle « verrouille » la ligne (plus jamais écrasée
+  // par une reprise automatique au changement de lieu de chargement).
   [articleSel, qteInput, uniteSel].forEach((el) => {
-    el.addEventListener("change", () => setTimeout(refreshWeightGauge, 750));
+    el.addEventListener("change", () => {
+      ligne._userTouched = true;
+      ligne._reprise = false;
+      setTimeout(refreshWeightGauge, 750);
+    });
   });
   uniteSel.addEventListener("change", () => {
     if (state.chauffeur && articleSel.value) {
@@ -5006,7 +5014,7 @@ function renderArticleCard(a, allRows, startOpen = false) {
       const chipRow = document.createElement("div");
       chipRow.className = "chip-row";
       const currentUnites = new Set(a.unites || []);
-      for (const [value, label] of [["t", "tonne"], ["m3", "m³"], ["unite", "unité"]]) {
+      for (const [value, label] of [["t", "tonne"], ["m3", "m³"], ["unite", "unité"], ["benne", "benne"]]) {
         const chip = document.createElement("label");
         chip.className = "chip-check" + (currentUnites.has(value) ? " is-checked" : "");
         const cb = document.createElement("input");
@@ -5278,6 +5286,70 @@ async function applyTourPatch(node, tour, which, patch) {
   refreshEndpoint(node, tour, which);
   invalidateChantierCache();
   closeSitePicker();
+  // beta.34 : au choix/changement du lieu de CHARGEMENT, reprendre les lignes du
+  // dernier tour partant de ce lieu (sans jamais écraser des lignes saisies).
+  if (which === "chargement") {
+    maybeReprendreChargement(node, tour).catch(() => {});
+  }
+}
+
+// beta.34 : pré-remplit les lignes du tour avec celles du DERNIER tour partant du
+// même lieu de chargement, uniquement si le tour n'a aucune ligne saisie à la main
+// (lignes vides ou reprises automatiques non modifiées). Requête légère (RPC) ; en
+// cas d'échec (hors ligne, lieu sans historique), on ne fait simplement rien.
+async function maybeReprendreChargement(node, tour) {
+  const entry = state.tours.find((e) => e && e.tour && e.tour.id === tour.id);
+  if (!entry || !peutReprendre(entry.lignes)) return;
+  const siteId = tour.site_chargement_id != null ? tour.site_chargement_id : null;
+  const adresse = tour.chargement_adresse || null;
+  if (siteId == null && !adresse) return;
+
+  let rows = [];
+  try { rows = await rpcDernierChargementLignes(siteId, adresse, tour.id); }
+  catch (e) { return; }
+  const patchs = lignesReprises(rows);
+  if (!patchs.length) return;
+  // Re-vérifier après l'aller-retour réseau (l'utilisateur a pu saisir entre-temps).
+  if (!peutReprendre(entry.lignes)) return;
+
+  const lignesListEl = node.querySelector(".lignes-list");
+  // Retire les lignes vides/reprises existantes (jamais une ligne saisie : garanti
+  // par peutReprendre ci-dessus).
+  for (const l of entry.lignes.slice()) {
+    try { await deleteLigne(l.id); } catch (e) { /* ignore */ }
+  }
+  entry.lignes = [];
+  if (lignesListEl) lignesListEl.querySelectorAll(".ligne-row").forEach((r) => r.remove());
+
+  for (const p of patchs) {
+    try {
+      const ligne = await createLigne({
+        tour_id: tour.id, article_id: p.article_id, quantite: p.quantite, unite: p.unite,
+      });
+      ligne._reprise = true; // reprise auto : remplaçable tant que non modifiée
+      entry.lignes.push(ligne);
+      if (lignesListEl) renderLigneRow(lignesListEl, entry, ligne);
+    } catch (e) { /* une ligne en échec ne bloque pas les autres */ }
+  }
+  if (entry.lignes.length) {
+    const lieu = endpointLabel(tour, "chargement", siteLabelById, "");
+    showReprisHint(node, lieu);
+    await refreshWeightGauge();
+  }
+}
+
+// Indice discret « Repris du dernier chargement à <lieu> » sous les lignes du tour.
+function showReprisHint(node, lieu) {
+  const anchor = node.querySelector(".lignes-list");
+  if (!anchor) return;
+  let hint = node.querySelector(".lignes-reprise-hint");
+  if (!hint) {
+    hint = document.createElement("p");
+    hint.className = "lignes-reprise-hint muted";
+    anchor.insertAdjacentElement("afterend", hint);
+  }
+  hint.textContent = lieu ? `Repris du dernier chargement à ${lieu}` : "Repris du dernier chargement";
+  hint.hidden = false;
 }
 // Ouvre la feuille de choix pour une extrémité de tour (réel ou brouillon).
 async function openTourPicker({ node, tour, which, materialize }) {
