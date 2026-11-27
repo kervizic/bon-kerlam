@@ -64,6 +64,10 @@ import {
   uploadLignePhoto,
   deleteLignePhoto,
   signedUrlsLignePhotos,
+  listDocumentsChauffeur,
+  sendDocumentOp,
+  signedUrlsDocuments,
+  rpcDocumentsProprietaires,
   createLigne,
   updateLigne,
   deleteLigne,
@@ -175,6 +179,7 @@ import {
 } from "./tour-address.js?v=334";
 import { peutReprendre, lignesReprises, uniteLabel } from "./tour-prefill.js?v=340";
 import { createLinePhotos } from "./line-photos.js?v=350";
+import { createMyDocuments } from "./my-documents.js?v=360";
 import { strokesBBox, exportLayout } from "./signature-pad.js?v=332";
 // pdf-viewer.js (et pdf.js) chargés en import DYNAMIQUE à la 1re ouverture (g).
 import { enhanceSelect, refreshCombobox, ensureOption, normalizeText as cbNormalizeText } from "./combobox.js?v=17";
@@ -590,11 +595,31 @@ const linePhotos = createLinePhotos({
 });
 let linePhotosStarted = false;
 
+/* beta.36 : « Mes documents » (documents personnels : propriétaire + admin). */
+const myDocs = createMyDocuments({
+  api: {
+    list: listDocumentsChauffeur,
+    send: sendDocumentOp,
+    signedUrls: signedUrlsDocuments,
+    owners: rpcDocumentsProprietaires,
+  },
+  getContext: () => ({
+    email: state.profil ? state.profil.email : null,
+    userId: state.profil ? state.profil.id : null,
+    isAdmin: hasRole("admin"),
+  }),
+  demo: isDemoMode(),
+  onError: (msg) => showToast(msg),
+});
+
 const ROUTES = [
   "dashboard", "today", "mes-lv", "reglages",
   "lv", "planning", "projets", "clients", "sites", "camions",
   "chauffeurs", "articles", "prestations", "utilisateurs",
+  "mes-documents", "documents-chauffeurs",
 ];
+// Routes communes aux deux modes (ne basculent pas Chauffeur <-> Bureau).
+const SHARED_ROUTES = ["reglages", "mes-documents", "documents-chauffeurs"];
 
 function hasRole(role) {
   return state.roles.includes(role);
@@ -658,7 +683,7 @@ function initModeForUser() {
 }
 // Bascule le mode pour qu'il corresponde à la route demandée (cohérence nav).
 function maybeSwitchModeForRoute(route) {
-  if (!canSwitchMode() || route === "reglages") return;
+  if (!canSwitchMode() || SHARED_ROUTES.includes(route)) return;
   const wanted = CHAUFFEUR_ROUTES.includes(route) ? "chauffeur" : "bureau";
   if (state.mode !== wanted) setMode(wanted, { navigateDefault: false });
 }
@@ -2894,6 +2919,23 @@ function schedulePdfCacheRefresh(lv) {
   }, 2500);
 }
 
+// beta.36 : dernier profil connu (démarrage hors ligne). Purgé à la déconnexion.
+const PROFIL_CACHE_KEY = "bon_profil_cache";
+function rememberProfil(p) {
+  try {
+    if (!p) { localStorage.removeItem(PROFIL_CACHE_KEY); return; }
+    const { id, email, nom, role, roles, actif } = p;
+    localStorage.setItem(PROFIL_CACHE_KEY, JSON.stringify({ id, email, nom, role, roles, actif }));
+  } catch (e) { /* stockage indisponible */ }
+}
+function cachedProfil(email) {
+  try {
+    const p = JSON.parse(localStorage.getItem(PROFIL_CACHE_KEY) || "null");
+    if (p && email && String(p.email).toLowerCase() === String(email).toLowerCase()) return p;
+  } catch (e) { /* ignore */ }
+  return null;
+}
+
 // Déconnexion : on purge le cache PDF local (documents non signés du chauffeur)
 // AVANT de clôturer la session, puis on déconnecte.
 async function logout() {
@@ -2903,8 +2945,11 @@ async function logout() {
   try { closeSignaturePad(); } catch (e) { /* aucune signature ouverte */ }
   if (pdfRefreshTimer) { clearTimeout(pdfRefreshTimer); pdfRefreshTimer = null; }
   await pdfCache.purge().catch(() => {});
+  // beta.36 : documents personnels (cache hors ligne + file d'envoi) purgés.
+  await myDocs.purgeLocal().catch(() => {});
   try { await signOut(); } catch (e) { /* best-effort : on continue le nettoyage */ }
   try { localStorage.removeItem(VIEW_MODE_KEY); } catch (e) { /* ignore */ }
+  try { localStorage.removeItem(PROFIL_CACHE_KEY); } catch (e) { /* ignore */ }
   // Rechargement : slate propre (session, état, données en cache vidées) tout en
   // gardant le cache d'assets du SW. L'absence de session affiche l'écran de connexion.
   location.reload();
@@ -5870,6 +5915,8 @@ const ROUTE_LOADERS = {
   articles: loadArticlesScreen,
   prestations: loadPrestationsScreen,
   utilisateurs: loadUtilisateursScreen,
+  "mes-documents": () => myDocs.load(),
+  "documents-chauffeurs": () => (hasRole("admin") ? myDocs.loadAdmin() : navigate("mes-documents")),
 };
 
 // Async et retourne la promesse du chargement de route : les appelants qui ont
@@ -6474,15 +6521,20 @@ async function handleSessionChange(session) {
 
   if (!session) {
     showScreen("login");
+    myDocs.offlineAccess(); // beta.36 : documents en cache montrables sans réseau
     return;
   }
 
   let profil = null;
   try {
     profil = await getProfil();
+    rememberProfil(profil);
   } catch (err) {
     console.error(err);
     reportIfVersionMismatch(err);
+    // beta.36 : démarrage sans réseau (contrôle routier) -> dernier profil connu de
+    // CET utilisateur (affichage seulement ; la RLS reste la seule autorité).
+    profil = cachedProfil(session.user && session.user.email);
   }
   state.profil = profil;
   state.roles = profil
@@ -6509,6 +6561,7 @@ async function handleSessionChange(session) {
   if (!linePhotosStarted) {
     linePhotosStarted = true;
     linePhotos.init(); // envoi des photos en attente (file hors ligne)
+    myDocs.init(); // beta.36 : envoi des documents en attente
   }
 
   if (hasRole("chauffeur")) {
@@ -6525,11 +6578,13 @@ async function handleSessionChange(session) {
       const forced = new URLSearchParams(location.search).get("role");
       if (forced === "chauffeur") state.roles = ["chauffeur"];
       else if (forced === "bureau") state.roles = ["bureau"];
+      else if (forced === "admin") state.roles = ["bureau", "chauffeur", "admin"];
     } catch (e) { /* noop */ }
   }
 
   document.body.classList.toggle("has-bureau", hasRole("bureau"));
   document.body.classList.toggle("has-chauffeur", hasRole("chauffeur"));
+  document.body.classList.toggle("has-admin", hasRole("admin"));
   initModeForUser(); // vue chauffeur par défaut + sélecteur visible pour le bureau
 
   const badgeEl = document.getElementById("profil-badge");
@@ -6549,6 +6604,9 @@ async function handleSessionChange(session) {
   maybePromptPasskeyEnroll();
 
   await loadRefs();
+  // beta.36 : cache hors ligne des documents personnels (contrôle sans réseau),
+  // silencieux et non bloquant.
+  setTimeout(() => { myDocs.warmCache(); }, 1500);
   const navAppSel = document.getElementById("f-nav-app");
   if (navAppSel) navAppSel.value = getNavApp();
 
@@ -6573,6 +6631,7 @@ async function openDemoScreen(name) {
     chauffeurs: "chauffeurs", planning: "planning", projets: "projets",
     clients: "clients", sites: "sites", camions: "camions", articles: "articles",
     prestations: "prestations", utilisateurs: "utilisateurs", reglages: "reglages",
+    "mes-documents": "mes-documents", "documents-chauffeurs": "documents-chauffeurs",
   };
   if (name === "tour") {
     await navigate("today");
@@ -6599,6 +6658,7 @@ async function boot() {
   // Mode démo (captures CI) : exposer l'ouverture de fiche rapide pour scénariser
   // la capture « fiche contact avec ⓘ ». Jamais exposé hors démo.
   if (isDemoMode()) window.openQuickCreate = openQuickCreate;
+  if (isDemoMode()) window.bonDocs = myDocs; // e2e beta.36 (état du scanner)
 
   // `?theme=clair|sombre` (uniquement actif sous ?demo=1, cf. demoThemeParam())
   // force le thème pour les captures CI, par-dessus la préférence localStorage.
@@ -6611,6 +6671,7 @@ async function boot() {
     return;
   }
 
+  myDocs.initOfflineAccess();
   onAuthStateChange((_event, session) => {
     handleSessionChange(session);
   });

@@ -105,3 +105,21 @@ test("sortPhotos : Avant puis Après, chronologique", () => {
   ]);
   assert.deepEqual(out.map((p) => p.id), [3, 2, 1]);
 });
+
+test("élément ajouté pendant un envoi en cours : envoyé dans la foulée (beta.36)", async () => {
+  const store = memoryStore();
+  const sent = [];
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const q = createPhotoQueue({
+    store,
+    upload: async (it) => { if (it.id === "a") await gate; sent.push(it.id); },
+  });
+  const p1 = q.enqueue({ id: "a", queuedAt: "1" });
+  await new Promise((r) => setTimeout(r, 5));
+  const p2 = q.enqueue({ id: "b", queuedAt: "2" });
+  release();
+  await Promise.all([p1, p2]);
+  assert.deepEqual(sent, ["a", "b"]);
+  assert.equal((await q.list()).length, 0);
+});

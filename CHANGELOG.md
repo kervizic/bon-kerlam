@@ -4,6 +4,58 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.36] - 2026-11-27
+
+### Ajouté
+- **Mes documents** (Réglages, menu Plus, menu latéral) : permis de conduire, carte
+  conducteur, FCO / FIMO, CACES (plusieurs, catégorie libre), Autre (libellé libre).
+  Recto + verso facultatif, date d'expiration et n° facultatifs. Carte par document
+  avec miniature, date d'expiration et pastille discrète (orange < 60 j, rouge si
+  expiré) : affichage seul, aucune notification, aucun rappel. Enregistrement
+  immédiat (pas de bouton de validation).
+- Prise : appareil photo, galerie ou PDF (10 Mo max). **Mode scanner** après chaque
+  photo : 4 coins détectés automatiquement (sans dépendance), ajustables au doigt,
+  « Pleine image », redressement de perspective, contraste Couleur ou N&B, export
+  JPEG ≤ 2000 px, EXIF retiré, pas de filigrane.
+- **Montrer** : visionneuse plein écran (zoom pincé, double tape, recto / verso,
+  PDF intégré), luminosité inchangée.
+- **Hors ligne** : documents conservés sur l'appareil (IndexedDB) pour être montrés
+  sans réseau ; ajout / modification / suppression hors ligne mis en file et envoyés
+  au retour du réseau. Démarrage sans réseau : dernier profil connu utilisé ; si la
+  session a expiré, l'écran de connexion propose « Mes documents (sans réseau) »
+  (lecture seule, documents déjà en cache). Tout est purgé à la déconnexion.
+- **Confidentialité** : visibles uniquement par leur propriétaire et par l'admin
+  (nouveau rôle `admin`) ; le bureau seul ne les voit pas ; jamais anonyme. Écran
+  admin « Documents des chauffeurs » : liste des chauffeurs puis leurs documents en
+  lecture (suppression possible).
+
+### Base de données
+- Migration **0034** (additive, rejouable, down fourni) : rôle `admin` (valeur de
+  `bon.utilisateurs.roles`, `bon.is_admin()`) attribuable / retirable uniquement par
+  un admin ou le superuser (trigger, le bureau ne peut pas se l'octroyer) ; table
+  `bon.documents_chauffeur` + vue `api.documents_chauffeur` ; RLS propriétaire +
+  admin ; cohérence des chemins, propriétaire immuable, 40 documents max par
+  personne ; bucket privé `documents-chauffeurs` (10 Mo, JPEG / PDF) + policies
+  storage ; fichiers remplacés et documents supprimés (cascade utilisateur comprise)
+  envoyés dans la file `bon.storage_purge` (worker beta.35, inchangé) ; RPC admin
+  `api.documents_proprietaires()`. Tables bureau de 0011 inchangées.
+
+### Divers
+- File d'envoi (photos et documents) : un élément ajouté pendant un envoi en cours
+  part dans la foulée (au lieu d'attendre le réveil suivant) ; stockage IndexedDB
+  des Blobs avec leur type MIME (rétro-compatible beta.35).
+- Rien sur les PDF de lettres ni dans les mails.
+
+### Tests
+- SQL : chauffeur A ≠ B, bureau refusé, admin lecture + suppression (pas de
+  modification pour autrui), anon et non listé refusés, garde-fou du rôle admin,
+  chemins, plafond, file de purge (remplacement, suppression, cascade), down.
+- JS : scanner (détection des coins, homographie, redressement sur image de test,
+  contraste), expiration, cache hors ligne, file, purge à la déconnexion.
+- E2E WebKit iPhone + Chromium : permis recto / verso en mode scanner, pastilles,
+  Montrer + zoom pincé, hors ligne (affichage, ajout PDF en file puis envoi),
+  purge à la déconnexion, écran admin, accès hors ligne depuis la connexion.
+
 ## [0.1.0-beta.35] — 2026-11-27
 
 ### Ajouté

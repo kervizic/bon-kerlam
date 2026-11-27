@@ -10,7 +10,7 @@
   <!-- Empreinte de version du shell (cf. assets/app-version.js). Bumper `app-rev`
        à chaque déploiement backend devant forcer un refresh (sinon le bump d'un
        `?v=` d'asset suffit). -->
-  <meta name="app-version" content="0.1.0-beta.35">
+  <meta name="app-version" content="0.1.0-beta.36">
   <meta name="app-rev" content="340">
 
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
@@ -36,7 +36,7 @@
        en police système). crossorigin obligatoire : les polices sont toujours
        récupérées en mode CORS, l'attribut évite un double téléchargement. -->
   <link rel="preload" href="/assets/fonts/sarpanch-900.woff2?v=14" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/assets/styles.css?v=350">
+  <link rel="stylesheet" href="/assets/styles.css?v=360">
   <!-- Garde-fou anti page blanche (beta.25) : si l'appli n'a pas démarré sous 8 s
        (flag window.__bonBooted posé en fin de boot d'app.js), on désenregistre le
        SW, on vide les caches et on recharge UNE fois (anti-boucle sessionStorage).
@@ -80,6 +80,7 @@
       <div class="logo logo-lg" aria-hidden="true"><span class="logo-ker">KER</span><span class="logo-lam">LAM</span></div>
       <p class="auth-tagline">Lettres de voiture</p>
 
+      <button type="button" id="btn-docs-offline" class="btn btn-secondary btn-block docs-offline-btn" hidden>Mes documents (sans réseau)</button>
       <div id="login-choice" class="login-choice">
         <button id="btn-passkey-login" class="btn btn-primary btn-block" type="button" hidden>
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
@@ -203,6 +204,8 @@
           <li class="nav-bureau"><a href="#/articles"     data-route="articles">Articles</a></li>
           <li class="nav-bureau"><a href="#/prestations"  data-route="prestations">Prestations</a></li>
           <li class="nav-bureau"><a href="#/utilisateurs" data-route="utilisateurs">Utilisateurs</a></li>
+          <li><a href="#/mes-documents" data-route="mes-documents">Mes documents</a></li>
+          <li class="nav-admin"><a href="#/documents-chauffeurs" data-route="documents-chauffeurs">Documents des chauffeurs</a></li>
           <li><a href="#/reglages"     data-route="reglages">Réglages</a></li>
         </ul>
       </nav>
@@ -368,6 +371,11 @@
         <section id="view-reglages" class="view" data-view="reglages" hidden>
           <div class="view-header"><h1>Réglages</h1></div>
 
+          <nav class="reglages-docs" aria-label="Documents">
+            <a class="sheet-item reglages-docs-link" href="#/mes-documents" data-route="mes-documents"><strong>Mes documents</strong><span>Permis, carte conducteur, FCO / FIMO, CACES…</span></a>
+            <a class="sheet-item reglages-docs-link nav-admin" href="#/documents-chauffeurs" data-route="documents-chauffeurs"><strong>Documents des chauffeurs</strong><span>Consultation (administrateur)</span></a>
+          </nav>
+
           <fieldset class="field-group">
             <legend>Thème</legend>
             <label class="radio-row"><input type="radio" name="theme" value="auto" id="theme-auto"> Auto (système)</label>
@@ -437,6 +445,25 @@
             <a href="/conditions/">Conditions</a>
             <a href="/LICENSES-THIRD-PARTY.txt">Licences</a>
           </nav>
+        </section>
+
+        <!-- ------------------------------------------------- beta.36 : Mes documents -->
+        <section id="view-mes-documents" class="view" data-view="mes-documents" hidden>
+          <div class="view-header"><h1>Mes documents</h1></div>
+          <p id="docs-empty" class="entity-empty" hidden>Aucun document.</p>
+          <div id="docs-list" class="docs-list"></div>
+          <button type="button" id="btn-doc-add" class="btn btn-primary btn-block doc-add">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            Ajouter un document
+          </button>
+        </section>
+
+        <section id="view-documents-chauffeurs" class="view" data-view="documents-chauffeurs" hidden>
+          <div class="view-header docs-admin-header">
+            <button type="button" class="icon-btn" id="btn-docs-admin-back" aria-label="Retour à la liste" hidden><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg></button>
+            <h1 id="docs-admin-title">Documents des chauffeurs</h1>
+          </div>
+          <div id="docs-admin-list" class="docs-list"></div>
         </section>
 
         <!-- ------------------------------------------------------------------- LV -->
@@ -619,6 +646,8 @@
           <a class="nav-bureau" href="#/articles"     data-route="articles">Articles</a>
           <a class="nav-bureau" href="#/prestations"  data-route="prestations">Prestations</a>
           <a class="nav-bureau" href="#/utilisateurs" data-route="utilisateurs">Utilisateurs</a>
+          <a href="#/mes-documents" data-route="mes-documents">Mes documents</a>
+          <a class="nav-admin" href="#/documents-chauffeurs" data-route="documents-chauffeurs">Documents des chauffeurs</a>
           <a href="#/reglages"     data-route="reglages">Réglages</a>
           <button type="button" id="btn-drawer-logout" class="nav-drawer-logout">Se déconnecter</button>
         </nav>
@@ -655,6 +684,110 @@
     <div class="pv-stage"><img class="pv-img" alt=""></div>
     <button type="button" class="pv-nav pv-prev" aria-label="Photo précédente"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
     <button type="button" class="pv-nav pv-next" aria-label="Photo suivante"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
+  </div>
+
+  <!-- beta.36 : Mes documents (fiche, mode scanner, visionneuse) -->
+  <div id="docs-offline" class="sheet-overlay sheet-overlay-fs" hidden>
+    <div class="sheet-panel docs-offline-panel" role="dialog" aria-modal="true" aria-labelledby="docs-offline-title">
+      <div class="sheet-header">
+        <h2 id="docs-offline-title">Mes documents</h2>
+        <button type="button" class="icon-btn" id="btn-docs-offline-close" aria-label="Fermer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      </div>
+      <div id="docs-offline-list" class="docs-list"></div>
+    </div>
+  </div>
+  <div id="doc-sheet" class="sheet-overlay" hidden>
+    <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="doc-sheet-title">
+      <div class="sheet-header">
+        <h2 id="doc-sheet-title">Nouveau document</h2>
+        <button type="button" class="icon-btn doc-sheet-close" aria-label="Fermer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      </div>
+      <fieldset class="doc-types">
+        <legend class="visually-hidden">Type de document</legend>
+        <label class="chip-radio"><input type="radio" name="doc-type" value="permis"> Permis de conduire</label>
+        <label class="chip-radio"><input type="radio" name="doc-type" value="carte_conducteur"> Carte conducteur</label>
+        <label class="chip-radio"><input type="radio" name="doc-type" value="fco_fimo"> FCO / FIMO</label>
+        <label class="chip-radio"><input type="radio" name="doc-type" value="caces"> CACES</label>
+        <label class="chip-radio"><input type="radio" name="doc-type" value="autre"> Autre</label>
+      </fieldset>
+      <div class="field" id="doc-libelle-field" hidden>
+        <label for="doc-libelle">Libellé</label>
+        <input type="text" id="doc-libelle" maxlength="80" autocomplete="off">
+      </div>
+      <div class="doc-faces">
+        <div class="doc-face" data-side="recto">
+          <span class="doc-face-label">Recto</span>
+          <button type="button" class="doc-face-preview" aria-label="Voir le recto"></button>
+          <div class="doc-face-actions">
+            <button type="button" class="btn btn-secondary btn-sm" data-pick="camera">Photo</button>
+            <button type="button" class="btn btn-secondary btn-sm" data-pick="gallery">Galerie</button>
+            <button type="button" class="btn btn-secondary btn-sm" data-pick="pdf">PDF</button>
+          </div>
+        </div>
+        <div class="doc-face" data-side="verso">
+          <span class="doc-face-label">Verso <span class="muted">(facultatif)</span></span>
+          <button type="button" class="doc-face-preview" aria-label="Voir le verso"></button>
+          <div class="doc-face-actions">
+            <button type="button" class="btn btn-secondary btn-sm" data-pick="camera">Photo</button>
+            <button type="button" class="btn btn-secondary btn-sm" data-pick="gallery">Galerie</button>
+            <button type="button" class="btn btn-secondary btn-sm" data-pick="pdf">PDF</button>
+            <button type="button" class="btn-link doc-face-remove" hidden>Retirer</button>
+          </div>
+        </div>
+      </div>
+      <div class="doc-fields">
+        <div class="field">
+          <label for="doc-expiration">Expiration <span class="muted">(facultatif)</span></label>
+          <input type="date" id="doc-expiration">
+        </div>
+        <div class="field">
+          <label for="doc-numero">N° <span class="muted">(facultatif)</span></label>
+          <input type="text" id="doc-numero" maxlength="60" autocomplete="off">
+        </div>
+      </div>
+      <button type="button" id="btn-doc-delete" class="btn btn-danger btn-block doc-delete" hidden>Supprimer le document</button>
+    </div>
+  </div>
+  <input type="file" id="doc-input-camera" class="visually-hidden-input" accept="image/*" capture="environment" tabindex="-1" aria-hidden="true">
+  <input type="file" id="doc-input-gallery" class="visually-hidden-input" accept="image/*" tabindex="-1" aria-hidden="true">
+  <input type="file" id="doc-input-pdf" class="visually-hidden-input" accept="application/pdf" tabindex="-1" aria-hidden="true">
+
+  <div id="doc-scanner" class="doc-scanner" role="dialog" aria-modal="true" aria-label="Recadrer le document" hidden>
+    <div class="ds-stage">
+      <canvas class="ds-canvas"></canvas>
+      <svg class="ds-overlay" aria-hidden="true"><polygon class="ds-quad" points=""/></svg>
+      <span class="ds-handle" data-corner="0" aria-hidden="true"></span>
+      <span class="ds-handle" data-corner="1" aria-hidden="true"></span>
+      <span class="ds-handle" data-corner="2" aria-hidden="true"></span>
+      <span class="ds-handle" data-corner="3" aria-hidden="true"></span>
+      <p class="ds-busy" hidden>Traitement…</p>
+    </div>
+    <div class="ds-bar">
+      <div class="ds-row">
+        <button type="button" class="ds-chip ds-auto">Auto</button>
+        <button type="button" class="ds-chip ds-full">Pleine image</button>
+        <span class="ds-sep" aria-hidden="true"></span>
+        <button type="button" class="ds-chip" data-ds-mode="couleur" aria-pressed="true">Couleur</button>
+        <button type="button" class="ds-chip" data-ds-mode="nb" aria-pressed="false">N&amp;B</button>
+      </div>
+      <div class="ds-row">
+        <button type="button" class="btn btn-secondary ds-cancel">Annuler</button>
+        <button type="button" class="btn btn-primary ds-ok">Valider</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="doc-viewer" class="doc-viewer" role="dialog" aria-modal="true" aria-label="Document" hidden>
+    <div class="pv-top">
+      <span class="pv-caption dv-title"></span>
+      <button type="button" class="icon-btn dv-delete" aria-label="Supprimer le document" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6M14 11v6"/></svg></button>
+      <button type="button" class="icon-btn dv-close" aria-label="Fermer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div class="dv-stage"><div class="dv-zoom"></div></div>
+    <div class="dv-sides" role="group" aria-label="Face" hidden>
+      <button type="button" class="ds-chip" data-dv-side="recto" aria-pressed="true">Recto</button>
+      <button type="button" class="ds-chip" data-dv-side="verso" aria-pressed="false">Verso</button>
+    </div>
   </div>
 
   <!-- beta.32 : confirmation de déconnexion -->
@@ -1023,6 +1156,6 @@
   <!-- ================================================================== Scripts -->
   <script src="/assets/config.js?v=21"></script>
   <script src="/assets/vendor/supabase/supabase.js?v=270"></script>
-  <script type="module" src="/assets/app.js?v=350"></script>
+  <script type="module" src="/assets/app.js?v=360"></script>
 </body>
 </html>

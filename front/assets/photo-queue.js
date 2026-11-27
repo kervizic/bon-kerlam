@@ -79,7 +79,9 @@ export function memoryStore() {
   return {
     async put(item) { m.set(item.id, item); },
     async delete(id) { m.delete(id); },
+    async get(id) { return m.get(id) || null; },
     async getAll() { return Array.from(m.values()); },
+    async clear() { m.clear(); },
   };
 }
 
@@ -90,6 +92,7 @@ export function memoryStore() {
  */
 export function createPhotoQueue({ store, upload, onChange = () => {}, onDrop = () => {} }) {
   let running = null;
+  let again = false; // élément ajouté pendant un envoi : relance immédiate
 
   async function runOnce() {
     const items = (await store.getAll()).sort((a, b) => String(a.queuedAt).localeCompare(String(b.queuedAt)));
@@ -121,7 +124,18 @@ export function createPhotoQueue({ store, upload, onChange = () => {}, onDrop = 
     },
     /** Envoie ce qui est en file ; un seul envoi à la fois (appels concurrents mutualisés). */
     flush() {
-      if (!running) running = runOnce().finally(() => { running = null; });
+      if (running) {
+        again = true;
+        return running;
+      }
+      running = (async () => {
+        let sent = 0;
+        do {
+          again = false;
+          sent += await runOnce();
+        } while (again);
+        return sent;
+      })().finally(() => { running = null; });
       return running;
     },
     async list() { return store.getAll(); },
@@ -130,7 +144,32 @@ export function createPhotoQueue({ store, upload, onChange = () => {}, onDrop = 
 }
 
 /* --------------------------------------------------------- IndexedDB (nav.) -- */
-// Les Blobs sont stockés en ArrayBuffer (plus robuste sur Safari iOS).
+// Les Blobs sont stockés en ArrayBuffer (plus robuste sur Safari iOS), avec leur
+// type MIME (beta.36 : PDF des documents) ; y compris dans un sous-objet `files`.
+// Rétro-compatible : un ArrayBuffer nu (file beta.35) est relu en image/jpeg.
+const isBlob = (v) => v && typeof v.arrayBuffer === "function" && typeof v.type === "string";
+
+export async function packBlobs(obj) {
+  const out = {};
+  for (const [k, v] of Object.entries(obj || {})) {
+    if (isBlob(v)) out[k] = { __blob: await v.arrayBuffer(), type: v.type || "image/jpeg" };
+    else if (k === "files" && v && typeof v === "object") out[k] = await packBlobs(v);
+    else out[k] = v;
+  }
+  return out;
+}
+
+export function unpackBlobs(obj) {
+  const out = {};
+  for (const [k, v] of Object.entries(obj || {})) {
+    if (v && v.__blob instanceof ArrayBuffer) out[k] = new Blob([v.__blob], { type: v.type || "image/jpeg" });
+    else if (v instanceof ArrayBuffer) out[k] = new Blob([v], { type: "image/jpeg" });
+    else if (k === "files" && v && typeof v === "object") out[k] = unpackBlobs(v);
+    else out[k] = v;
+  }
+  return out;
+}
+
 export function idbStore(dbName = "bon-photos", storeName = "queue") {
   let dbp = null;
   const open = () => {
@@ -154,17 +193,20 @@ export function idbStore(dbName = "bon-photos", storeName = "queue") {
       t.onabort = () => reject(t.error);
     });
   };
-  const toBuf = async (b) => (b && typeof b.arrayBuffer === "function" ? b.arrayBuffer() : b);
-  const toBlob = (buf) => (buf instanceof ArrayBuffer ? new Blob([buf], { type: "image/jpeg" }) : buf);
   return {
     async put(item) {
-      const rec = { ...item, blob: await toBuf(item.blob), thumb: await toBuf(item.thumb) };
+      const rec = await packBlobs(item);
       await tx("readwrite", (s) => s.put(rec));
+    },
+    async get(id) {
+      const r = await tx("readonly", (s) => s.get(id));
+      return r ? unpackBlobs(r) : null;
     },
     async delete(id) { await tx("readwrite", (s) => s.delete(id)); },
     async getAll() {
       const rows = (await tx("readonly", (s) => s.getAll())) || [];
-      return rows.map((r) => ({ ...r, blob: toBlob(r.blob), thumb: toBlob(r.thumb) }));
+      return rows.map(unpackBlobs);
     },
+    async clear() { await tx("readwrite", (s) => s.clear()); },
   };
 }

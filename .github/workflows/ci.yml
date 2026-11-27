@@ -23,7 +23,7 @@ jobs:
         run: pytest worker/tests -q
 
   front-tests:
-    name: tests JS (détection installation + pile d'annulation)
+    name: tests JS (détection installation + pile d'annulation + scanner/documents)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -108,7 +108,7 @@ jobs:
           S3_ENDPOINT=https://s3.eu-west-par.io.cloud.ovh.net
           S3_ACCESS_KEY=
           S3_SECRET_KEY=
-          APP_VERSION=0.1.0-beta.35
+          APP_VERSION=0.1.0-beta.36
           GIT_SHA=${{ github.sha }}
           GEOCODE_ON_START=false
           KERLAM_SIREN=
@@ -188,11 +188,11 @@ jobs:
             if curl -fsS http://127.0.0.1:8099/worker/version >/dev/null 2>&1; then break; fi
             sleep 3
           done
-      - name: /worker/version == 0.1.0-beta.35
+      - name: /worker/version == 0.1.0-beta.36
         run: |
           body=$(curl -fsS http://127.0.0.1:8099/worker/version)
           echo "$body"
-          echo "$body" | python -c "import sys,json; d=json.load(sys.stdin); assert d['version']=='0.1.0-beta.35', d; assert d['schema_version'], d; print('version ok, schema', d['schema_version'])"
+          echo "$body" | python -c "import sys,json; d=json.load(sys.stdin); assert d['version']=='0.1.0-beta.36', d; assert d['schema_version'], d; print('version ok, schema', d['schema_version'])"
       - name: Attente de GoTrue (auth)
         run: |
           for i in $(seq 1 30); do
@@ -251,6 +251,18 @@ jobs:
             curl -fsS http://127.0.0.1:8081/index.html >/dev/null 2>&1 && break || sleep 1
           done
           python -u scripts/e2e_photos.py http://127.0.0.1:8081/index.html all
+          kill $SRV 2>/dev/null || true
+      - name: E2E beta.36 Mes documents (WebKit iPhone + Chromium)
+        run: |
+          python -c "import http.server,functools; \
+            Srv=type('S',(http.server.ThreadingHTTPServer,),{'allow_reuse_address':True,'daemon_threads':True}); \
+            H=functools.partial(http.server.SimpleHTTPRequestHandler,directory='front'); \
+            Srv(('127.0.0.1',8082),H).serve_forever()" &
+          SRV=$!
+          for i in $(seq 1 20); do
+            curl -fsS http://127.0.0.1:8082/index.html >/dev/null 2>&1 && break || sleep 1
+          done
+          python -u scripts/e2e_documents.py http://127.0.0.1:8082/index.html all
           kill $SRV 2>/dev/null || true
       - name: Publication des captures
         if: always()

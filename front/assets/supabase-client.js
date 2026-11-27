@@ -755,6 +755,58 @@ export async function signedUrlsLignePhotos(paths, expiresInSec = 600) {
   return out;
 }
 
+// ------------------------------------------------ Mes documents (beta.36) --
+// Bucket PRIVÉ dédié ; lecture par URL signées courtes (2 min). Visibles du seul
+// propriétaire et de l'admin (RLS + policies storage, migration 0034).
+const PERSO_DOCS_BUCKET = "documents-chauffeurs";
+
+export async function listDocumentsChauffeur(ownerId = null) {
+  let q = requireClient().from("documents_chauffeur").select("*");
+  if (ownerId != null) q = q.eq("owner_id", ownerId);
+  const { data, error } = await q.order("created_at", { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+/** Envoi idempotent d'une opération de la file (ajout/modification/suppression). */
+export async function sendDocumentOp(op) {
+  const c = requireClient();
+  if (op.kind === "delete") {
+    const { error } = await c.from("documents_chauffeur").delete().eq("id", op.docId);
+    if (error) throw error;
+    return;
+  }
+  const bucket = c.storage.from(PERSO_DOCS_BUCKET);
+  for (const [path, blob] of Object.entries(op.files || {})) {
+    const { error } = await bucket.upload(path, blob, {
+      contentType: blob.type || "image/jpeg", upsert: false, cacheControl: "31536000",
+    });
+    if (error && !isDuplicate(error)) throw error;
+  }
+  const { data, error } = await c.from("documents_chauffeur").update(op.row).eq("id", op.docId).select("id");
+  if (error) throw error;
+  if (data && data.length) return;
+  const ins = await c.from("documents_chauffeur").insert(op.row);
+  if (ins.error && !isDuplicate(ins.error)) throw ins.error;
+}
+
+/** { chemin: URL signée } (une seule requête). */
+export async function signedUrlsDocuments(paths, expiresInSec = 120) {
+  if (!paths.length) return {};
+  const { data, error } = await requireClient().storage.from(PERSO_DOCS_BUCKET).createSignedUrls(paths, expiresInSec);
+  if (error) throw error;
+  const out = {};
+  for (const r of data || []) if (r && r.signedUrl && !r.error) out[r.path] = r.signedUrl;
+  return out;
+}
+
+/** Écran admin : propriétaires ayant des documents (vide si non admin). */
+export async function rpcDocumentsProprietaires() {
+  const { data, error } = await requireClient().rpc("documents_proprietaires");
+  if (error) throw error;
+  return data || [];
+}
+
 // --------------------------------------------------------------- bon-worker ----
 // `/worker/*` est proxifié même-origine par nginx (cf. deploy/nginx/bon.kerlam.fr.conf) :
 // un simple fetch relatif suffit, pas besoin de CORS. Ces endpoints exigent

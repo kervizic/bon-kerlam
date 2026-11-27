@@ -179,3 +179,6 @@ export function getGps(timeoutMs = 8000) {
     );
   });
 }
+
+/** Canvas -> JPEG sans EXIF/XMP (réutilisé par le mode scanner, beta.36). */
+export { toBlob as toJpegBlob };

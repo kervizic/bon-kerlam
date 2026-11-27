@@ -794,24 +794,27 @@ export async function signedUrlChauffeurDoc(path) {
 // simulé via navigator.onLine (Playwright context.set_offline) : l'envoi échoue
 // comme une coupure réseau réelle et la photo reste en file.
 const demoPhotoBlobs = new Map();
+// Sonde réseau réelle (même origine, non mise en cache) : échoue hors ligne
+// comme le ferait un appel à l'API ou à Storage.
+async function demoRequireNetwork() {
+  let reachable = typeof navigator === "undefined" || navigator.onLine !== false;
+  if (reachable) {
+    try {
+      const r = await fetch(`version.json?photo-ping=${Date.now()}`, { cache: "no-store" });
+      reachable = r.ok;
+    } catch (e) {
+      reachable = false;
+    }
+  }
+  if (!reachable) throw Object.assign(new Error("TypeError: Failed to fetch"), { code: "" });
+}
 export async function listLignePhotos(lvId) {
   if (DEMO) return (demoDb.ligne_photos || []).filter((p) => String(p.lv_id) === String(lvId));
   return live.listLignePhotos(lvId);
 }
 export async function uploadLignePhoto(item) {
   if (DEMO) {
-    // Sonde réseau réelle (même origine, non mise en cache) : échoue hors ligne
-    // comme le ferait l'envoi vers Storage.
-    let reachable = typeof navigator === "undefined" || navigator.onLine !== false;
-    if (reachable) {
-      try {
-        const r = await fetch(`version.json?photo-ping=${Date.now()}`, { cache: "no-store" });
-        reachable = r.ok;
-      } catch (e) {
-        reachable = false;
-      }
-    }
-    if (!reachable) throw Object.assign(new Error("TypeError: Failed to fetch"), { code: "" });
+    await demoRequireNetwork();
     const row = rowOf(item);
     demoDb.ligne_photos = demoDb.ligne_photos || [];
     if (demoDb.ligne_photos.some((p) => p.id === row.id)) return;
@@ -842,6 +845,91 @@ export async function signedUrlsLignePhotos(paths) {
     return out;
   }
   return live.signedUrlsLignePhotos(paths);
+}
+
+/* -------------------------------------------------- Mes documents (beta.36) == */
+// Démo : métadonnées en mémoire + fichiers en Blob local. Deux autres chauffeurs
+// fictifs ont des documents (écran admin). Hors ligne simulé comme les photos.
+const demoDocBlobs = new Map();
+function demoCardSvg(title, sub, hue) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="856" height="540" viewBox="0 0 856 540">
+<rect width="856" height="540" rx="32" fill="hsl(${hue},45%,88%)"/><rect x="40" y="40" width="200" height="250" rx="12" fill="hsl(${hue},20%,70%)"/>
+<text x="280" y="100" font-family="sans-serif" font-size="44" font-weight="700" fill="#222">${title}</text>
+<text x="280" y="160" font-family="sans-serif" font-size="30" fill="#333">${sub}</text>
+<rect x="280" y="200" width="480" height="18" fill="#555"/><rect x="280" y="240" width="380" height="18" fill="#777"/>
+<rect x="40" y="340" width="776" height="22" fill="#666"/><rect x="40" y="390" width="640" height="22" fill="#888"/></svg>`;
+  return new Blob([svg], { type: "image/svg+xml" });
+}
+function demoDocsSeed() {
+  const docs = [];
+  const add = (ownerId, id, type, libelle, expiration, title, sub, hue) => {
+    const recto = `u/${ownerId}/${id}/${id.replace(/^.{8}/, "f0000000")}.jpg`;
+    const blob = demoCardSvg(title, sub, hue);
+    demoDocBlobs.set(recto, blob);
+    demoDocBlobs.set(recto.replace(/\.jpg$/, ".thumb.jpg"), blob);
+    docs.push({ id, owner_id: ownerId, type, libelle, numero: null, expiration, recto_path: recto, verso_path: null,
+      created_at: "2026-10-01T08:00:00Z" });
+  };
+  const inDays = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+  add(1, "d0000001-0000-4000-8000-000000000001", "permis", null, inDays(700), "PERMIS DE CONDUIRE", "Marc DUBREUIL", 330);
+  add(1, "d0000001-0000-4000-8000-000000000002", "carte_conducteur", null, inDays(40), "CARTE CONDUCTEUR", "Marc DUBREUIL", 200);
+  add(4, "d0000004-0000-4000-8000-000000000001", "fco_fimo", null, inDays(-12), "FCO", "Fatou DIALLO", 120);
+  return docs;
+}
+export async function listDocumentsChauffeur(ownerId = null) {
+  if (DEMO) {
+    await demoRequireNetwork();
+    if (!demoDb.documents_chauffeur) demoDb.documents_chauffeur = demoDocsSeed();
+    const me = seed.DEMO_PROFILE.id;
+    const want = ownerId == null ? me : ownerId;
+    return demoDb.documents_chauffeur.filter((d) => d.owner_id === want).map((d) => ({ ...d }));
+  }
+  return live.listDocumentsChauffeur(ownerId);
+}
+export async function sendDocumentOp(op) {
+  if (DEMO) {
+    await demoRequireNetwork();
+    if (!demoDb.documents_chauffeur) demoDb.documents_chauffeur = demoDocsSeed();
+    const list = demoDb.documents_chauffeur;
+    if (op.kind === "delete") {
+      demoDb.documents_chauffeur = list.filter((d) => d.id !== op.docId);
+      return;
+    }
+    for (const [p, b] of Object.entries(op.files || {})) demoDocBlobs.set(p, b);
+    const row = list.find((d) => d.id === op.docId);
+    if (row) Object.assign(row, op.row);
+    else list.push({ owner_id: seed.DEMO_PROFILE.id, created_at: new Date().toISOString(), ...op.row });
+    return;
+  }
+  return live.sendDocumentOp(op);
+}
+export async function signedUrlsDocuments(paths) {
+  if (DEMO) {
+    await demoRequireNetwork();
+    const out = {};
+    for (const p of paths) {
+      const b = demoDocBlobs.get(p);
+      if (b) out[p] = URL.createObjectURL(b);
+    }
+    return out;
+  }
+  return live.signedUrlsDocuments(paths);
+}
+export async function rpcDocumentsProprietaires() {
+  if (DEMO) {
+    await demoRequireNetwork();
+    if (!demoDb.documents_chauffeur) demoDb.documents_chauffeur = demoDocsSeed();
+    const by = new Map();
+    for (const d of demoDb.documents_chauffeur) {
+      const u = demoDb.utilisateurs.find((x) => x.id === d.owner_id) || { nom: "?", email: "" };
+      const e = by.get(d.owner_id) || { owner_id: d.owner_id, nom: u.nom, email: u.email, nb: 0, prochaine_expiration: null };
+      e.nb += 1;
+      if (d.expiration && (!e.prochaine_expiration || d.expiration < e.prochaine_expiration)) e.prochaine_expiration = d.expiration;
+      by.set(d.owner_id, e);
+    }
+    return Array.from(by.values()).sort((a, b) => String(a.nom).localeCompare(String(b.nom), "fr"));
+  }
+  return live.rpcDocumentsProprietaires();
 }
 
 /* --------------------------------------------------------------- bon-worker === */
