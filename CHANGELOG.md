@@ -4,6 +4,49 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.35] — 2026-11-27
+
+### Ajouté
+- **Photos « Avant » / « Après » par ligne de marchandise.** Petite icône appareil
+  photo sur chaque ligne : choix Avant / Après puis appareil photo (ou galerie),
+  jusqu'à 4 photos par type et par ligne. Filigrane incrusté sur l'image (date/heure
+  locale, GPS ou « GPS indisponible », n° de lettre, Avant/Après) sur bandeau
+  semi-opaque ; image ramenée à 1600 px (JPEG 0,8), métadonnées EXIF d'origine
+  supprimées (date, GPS et précision conservés en base). Vignettes sous la ligne
+  (URL signées courtes, miniature dédiée, chargement paresseux), compteur sur
+  l'icône et dans le résumé du tour replié, visionneuse plein écran avec balayage,
+  suppression par l'auteur. Hors ligne : la photo est gardée sur le téléphone
+  (IndexedDB), affichée tout de suite avec un petit indicateur « en attente » et
+  envoyée automatiquement au retour du réseau, sans bannière.
+- Photos ajoutables même après signature (la lettre signée n'est pas modifiée).
+  Jamais sur le PDF, dans le mail ni dans le récapitulatif de signature.
+
+### Base de données
+- Migration **0033** (additive, rejouable, down fourni) : table `bon.ligne_photos`
+  + vue `api.ligne_photos` ; RLS alignée sur la lettre (propriétaire + bureau, jamais
+  anon), suppression par l'auteur seulement et refusée sur lettre signée ; plafond
+  4/type/ligne et cohérence ligne/tour/lettre/chemin par trigger ; bucket privé
+  `photos-lignes` + policies storage ; file `bon.storage_purge` alimentée à chaque
+  suppression (y compris en cascade : ligne, tour, lettre purgée de la corbeille) ;
+  `bon.purge_photos_corbeille()` pour les tours en corbeille > 30 j.
+
+### Worker
+- Vidage de la file `bon.storage_purge` toutes les 15 min et après la purge de la
+  corbeille (suppression des objets storage, image + miniature).
+
+### Front / sécurité
+- CSP : `img-src` autorise `blob:` et `https://api.kerlam.fr` (URL signées).
+
+### Tests
+- SQL : isolation chauffeur A / B, bureau, inconnu, anon ; ajout après signature ;
+  suppression refusée sur lettre signée et hors auteur ; plafond ; cohérence ;
+  cascade + file de purge ; purge corbeille ; down.
+- JS : filigrane (texte, format, dimensions, suppression APP1/EXIF), file hors ligne
+  (attente, envoi au retour, erreurs définitives, idempotence).
+- Worker : purge storage (succès, échec conservé en file, sans clé).
+- E2E WebKit iPhone + Chromium : prise simulée, filigrane, 1600 px, EXIF absent,
+  vignettes, visionneuse (balayage), suppression, hors ligne puis envoi, compteur.
+
 ## [0.1.0-beta.34] — 2026-11-24
 
 ### Ajouté

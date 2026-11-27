@@ -60,6 +60,10 @@ import {
   updateTour,
   deleteTour,
   getLignes,
+  listLignePhotos,
+  uploadLignePhoto,
+  deleteLignePhoto,
+  signedUrlsLignePhotos,
   createLigne,
   updateLigne,
   deleteLigne,
@@ -170,6 +174,7 @@ import {
   endpointLabel, endpointLatLon, coordsForText,
 } from "./tour-address.js?v=334";
 import { peutReprendre, lignesReprises, uniteLabel } from "./tour-prefill.js?v=340";
+import { createLinePhotos } from "./line-photos.js?v=350";
 import { strokesBBox, exportLayout } from "./signature-pad.js?v=332";
 // pdf-viewer.js (et pdf.js) chargés en import DYNAMIQUE à la 1re ouverture (g).
 import { enhanceSelect, refreshCombobox, ensureOption, normalizeText as cbNormalizeText } from "./combobox.js?v=17";
@@ -566,6 +571,24 @@ const state = {
   planningSelection: new Set(),
   sitePickerTarget: null, // <select> actuellement ciblé par la feuille de choix de site
 };
+
+/* beta.35 : photos « Avant » / « Après » par ligne de marchandise. */
+const linePhotos = createLinePhotos({
+  api: {
+    list: listLignePhotos,
+    upload: uploadLignePhoto,
+    remove: deleteLignePhoto,
+    signedUrls: signedUrlsLignePhotos,
+  },
+  getContext: () => ({ lv: state.lv, email: state.profil ? state.profil.email : null }),
+  demo: isDemoMode(),
+  onCountChange: (tourId) => {
+    const card = document.querySelector(`#tours-list [data-tour-id="${tourId}"]`);
+    if (card && card.classList.contains("is-collapsed") && typeof card._buildSummary === "function") card._buildSummary();
+  },
+  onError: (msg) => showToast(msg),
+});
+let linePhotosStarted = false;
 
 const ROUTES = [
   "dashboard", "today", "mes-lv", "reglages",
@@ -2264,6 +2287,8 @@ async function loadToursFor(lv) {
   const listEl = document.getElementById("tours-list");
   listEl.innerHTML = "";
   state.tours = [];
+  // beta.35 : métadonnées des photos (1 requête par lettre, en parallèle des tours).
+  const photosReady = linePhotos.loadLv(lv).catch(() => {});
   if (!lv) {
     await renderDraftTour(); // E5 : tour vide dès l'ouverture d'une nouvelle lettre
     await refreshWeightGauge();
@@ -2275,6 +2300,7 @@ async function loadToursFor(lv) {
   } catch (err) {
     reportIfVersionMismatch(err);
   }
+  await photosReady;
   for (const tour of tours) {
     let lignes = [];
     try {
@@ -2321,8 +2347,11 @@ async function renderTourCard(entry) {
       .filter(Boolean).join(" → ") || "Tour vide";
     const q = (entry.lignes || []).reduce((s, l) => s + (parseFloat(String(l.quantite).replace(",", ".")) || 0), 0);
     const unite = (entry.lignes && entry.lignes[0] && entry.lignes[0].unite) || "t";
-    summaryEl.textContent = q > 0 ? `${trajet} · ${frQty(q)} ${uniteLabel(unite, q)}` : trajet;
+    const nPhotos = linePhotos.countForTour(tour.id);
+    const photosTxt = nPhotos ? ` · ${nPhotos} photo${nPhotos > 1 ? "s" : ""}` : "";
+    summaryEl.textContent = (q > 0 ? `${trajet} · ${frQty(q)} ${uniteLabel(unite, q)}` : trajet) + photosTxt;
   };
+  node._buildSummary = buildSummary;
   collapseBtn.addEventListener("click", () => {
     const collapsed = node.classList.toggle("is-collapsed");
     collapseBtn.setAttribute("aria-expanded", String(!collapsed));
@@ -2383,6 +2412,7 @@ function renderLigneRow(lignesList, entry, ligne) {
   node.querySelector(".btn-delete-ligne").addEventListener("click", () => handleDeleteLigne(entry, ligne, node));
 
   lignesList.appendChild(node);
+  linePhotos.mountLine(node, { tour: entry.tour, ligne }); // beta.35
 }
 
 async function handleAddLigne(entry, cardNode) {
@@ -6475,6 +6505,10 @@ async function handleSessionChange(session) {
     document.getElementById("unauthorized-email").textContent = session.user.email || "";
     showScreen("unauthorized");
     return;
+  }
+  if (!linePhotosStarted) {
+    linePhotosStarted = true;
+    linePhotos.init(); // envoi des photos en attente (file hors ligne)
   }
 
   if (hasRole("chauffeur")) {

@@ -9,6 +9,8 @@
  * schéma "bon" (0004_rls.sql) et s'applique via ces vues.
  */
 
+import { photoPaths, rowOf, isDuplicate } from "./photo-queue.js";
+
 const cfg = window.BON_CFG || {};
 
 if (!window.supabase || typeof window.supabase.createClient !== "function") {
@@ -712,6 +714,45 @@ export async function signedUrlChauffeurDoc(path, expiresInSec = 120) {
   const { data, error } = await requireClient().storage.from(DOCS_BUCKET).createSignedUrl(path, expiresInSec);
   if (error) throw error;
   return data && data.signedUrl;
+}
+
+// ------------------------------------------------ Photos de ligne (beta.35) --
+// Bucket PRIVÉ ; lecture par URL signées courtes. L'envoi est idempotent (l'id de
+// la photo est aussi son nom de fichier) : un doublon n'est pas une erreur.
+const PHOTOS_BUCKET = "photos-lignes";
+
+export async function listLignePhotos(lvId) {
+  const { data, error } = await requireClient()
+    .from("ligne_photos").select("*").eq("lv_id", lvId).order("taken_at", { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function uploadLignePhoto(item) {
+  const { path, thumbPath } = photoPaths(item.lvId, item.ligneId, item.id);
+  const bucket = requireClient().storage.from(PHOTOS_BUCKET);
+  for (const [p, blob] of [[path, item.blob], [thumbPath, item.thumb]]) {
+    const { error } = await bucket.upload(p, blob, { contentType: "image/jpeg", upsert: false, cacheControl: "31536000" });
+    if (error && !isDuplicate(error)) throw error;
+  }
+  const { error } = await requireClient().from("ligne_photos").insert(rowOf(item));
+  if (error && !isDuplicate(error)) throw error;
+}
+
+export async function deleteLignePhoto(id) {
+  const { data, error } = await requireClient().from("ligne_photos").delete().eq("id", id).select("id");
+  if (error) throw error;
+  if (!data || !data.length) throw Object.assign(new Error("Suppression refusée."), { code: "42501" });
+}
+
+/** { chemin: URL signée } pour une liste de chemins (une seule requête). */
+export async function signedUrlsLignePhotos(paths, expiresInSec = 600) {
+  if (!paths.length) return {};
+  const { data, error } = await requireClient().storage.from(PHOTOS_BUCKET).createSignedUrls(paths, expiresInSec);
+  if (error) throw error;
+  const out = {};
+  for (const r of data || []) if (r && r.signedUrl && !r.error) out[r.path] = r.signedUrl;
+  return out;
 }
 
 // --------------------------------------------------------------- bon-worker ----

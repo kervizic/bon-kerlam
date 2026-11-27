@@ -13,6 +13,7 @@
 
 import * as live from "./supabase-client.js";
 import * as seed from "./demo-data.js";
+import { rowOf, thumbPathOf } from "./photo-queue.js";
 
 const params = new URLSearchParams(window.location.search);
 const DEMO = params.get("demo") === "1";
@@ -786,6 +787,61 @@ export async function uploadChauffeurDoc(path, file) {
 export async function signedUrlChauffeurDoc(path) {
   if (DEMO) return "about:blank#demo-" + encodeURIComponent(path);
   return live.signedUrlChauffeurDoc(path);
+}
+
+/* ------------------------------------------------ Photos de ligne (beta.35) == */
+// Démo : métadonnées en mémoire + images en Blob local (URL objet). Hors ligne
+// simulé via navigator.onLine (Playwright context.set_offline) : l'envoi échoue
+// comme une coupure réseau réelle et la photo reste en file.
+const demoPhotoBlobs = new Map();
+export async function listLignePhotos(lvId) {
+  if (DEMO) return (demoDb.ligne_photos || []).filter((p) => String(p.lv_id) === String(lvId));
+  return live.listLignePhotos(lvId);
+}
+export async function uploadLignePhoto(item) {
+  if (DEMO) {
+    // Sonde réseau réelle (même origine, non mise en cache) : échoue hors ligne
+    // comme le ferait l'envoi vers Storage.
+    let reachable = typeof navigator === "undefined" || navigator.onLine !== false;
+    if (reachable) {
+      try {
+        const r = await fetch(`version.json?photo-ping=${Date.now()}`, { cache: "no-store" });
+        reachable = r.ok;
+      } catch (e) {
+        reachable = false;
+      }
+    }
+    if (!reachable) throw Object.assign(new Error("TypeError: Failed to fetch"), { code: "" });
+    const row = rowOf(item);
+    demoDb.ligne_photos = demoDb.ligne_photos || [];
+    if (demoDb.ligne_photos.some((p) => p.id === row.id)) return;
+    demoPhotoBlobs.set(row.storage_path, item.blob);
+    demoPhotoBlobs.set(thumbPathOf(row.storage_path), item.thumb);
+    demoDb.ligne_photos.push({ ...row, created_by: seed.DEMO_PROFILE.email, created_at: new Date().toISOString() });
+    return;
+  }
+  return live.uploadLignePhoto(item);
+}
+export async function deleteLignePhoto(id) {
+  if (DEMO) {
+    const row = (demoDb.ligne_photos || []).find((p) => p.id === id);
+    const lv = row && byId(demoDb.lettres_voiture, row.lv_id);
+    if (!row || (lv && lv.statut === "signee")) throw Object.assign(new Error("Suppression refusée."), { code: "42501" });
+    demoDb.ligne_photos = demoDb.ligne_photos.filter((p) => p.id !== id);
+    return;
+  }
+  return live.deleteLignePhoto(id);
+}
+export async function signedUrlsLignePhotos(paths) {
+  if (DEMO) {
+    const out = {};
+    for (const p of paths) {
+      const b = demoPhotoBlobs.get(p);
+      if (b) out[p] = URL.createObjectURL(b);
+    }
+    return out;
+  }
+  return live.signedUrlsLignePhotos(paths);
 }
 
 /* --------------------------------------------------------------- bon-worker === */

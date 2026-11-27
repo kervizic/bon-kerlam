@@ -10,7 +10,7 @@
   <!-- Empreinte de version du shell (cf. assets/app-version.js). Bumper `app-rev`
        à chaque déploiement backend devant forcer un refresh (sinon le bump d'un
        `?v=` d'asset suffit). -->
-  <meta name="app-version" content="0.1.0-beta.34">
+  <meta name="app-version" content="0.1.0-beta.35">
   <meta name="app-rev" content="340">
 
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
@@ -36,7 +36,7 @@
        en police système). crossorigin obligatoire : les polices sont toujours
        récupérées en mode CORS, l'attribut évite un double téléchargement. -->
   <link rel="preload" href="/assets/fonts/sarpanch-900.woff2?v=14" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/assets/styles.css?v=336">
+  <link rel="stylesheet" href="/assets/styles.css?v=350">
   <!-- Garde-fou anti page blanche (beta.25) : si l'appli n'a pas démarré sous 8 s
        (flag window.__bonBooted posé en fin de boot d'app.js), on désenregistre le
        SW, on vide les caches et on recharge UNE fois (anti-boucle sessionStorage).
@@ -626,6 +626,37 @@
     </div>
   </div>
 
+  <!-- beta.35 : photos par ligne de marchandise (choix Avant / Après + visionneuse) -->
+  <div id="photo-type-sheet" class="sheet-overlay" hidden>
+    <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="photo-type-title">
+      <div class="sheet-header">
+        <h2 id="photo-type-title">Photo</h2>
+        <button type="button" class="icon-btn pt-close" aria-label="Fermer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      </div>
+      <div class="pt-choices">
+        <button type="button" class="btn btn-secondary pt-btn" data-photo-type="avant"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg><span>Avant</span><span class="pt-count"></span></button>
+        <button type="button" class="btn btn-secondary pt-btn" data-photo-type="apres"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg><span>Après</span><span class="pt-count"></span></button>
+      </div>
+      <p class="pt-gallery muted"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg><span>Galerie :</span>
+        <button type="button" class="btn-link" data-photo-type="avant" data-gallery>Avant</button>
+        <span aria-hidden="true">·</span>
+        <button type="button" class="btn-link" data-photo-type="apres" data-gallery>Après</button>
+      </p>
+    </div>
+  </div>
+  <input type="file" id="photo-input-camera" class="visually-hidden-input" accept="image/*" capture="environment" tabindex="-1" aria-hidden="true">
+  <input type="file" id="photo-input-gallery" class="visually-hidden-input" accept="image/*" tabindex="-1" aria-hidden="true">
+  <div id="photo-viewer" class="photo-viewer" role="dialog" aria-modal="true" aria-label="Photos de la ligne" hidden>
+    <div class="pv-top">
+      <span class="pv-caption"></span>
+      <button type="button" class="icon-btn pv-delete" aria-label="Supprimer la photo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6M14 11v6"/></svg></button>
+      <button type="button" class="icon-btn pv-close" aria-label="Fermer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div class="pv-stage"><img class="pv-img" alt=""></div>
+    <button type="button" class="pv-nav pv-prev" aria-label="Photo précédente"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
+    <button type="button" class="pv-nav pv-next" aria-label="Photo suivante"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
+  </div>
+
   <!-- beta.32 : confirmation de déconnexion -->
   <div id="logout-confirm-sheet" class="sheet-overlay" hidden>
     <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="logout-confirm-title">
@@ -943,7 +974,9 @@
         <option value="big_bag">big bag</option>
         <option value="benne">benne</option>
       </select>
+      <button type="button" class="icon-btn btn-photo-ligne" aria-label="Photos de la ligne (avant / après)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg><span class="lp-count" hidden></span></button>
       <button type="button" class="icon-btn btn-delete-ligne" aria-label="Supprimer la ligne"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6M14 11v6"/></svg></button>
+      <div class="ligne-photos" hidden></div>
     </div>
   </template>
 
@@ -990,6 +1023,6 @@
   <!-- ================================================================== Scripts -->
   <script src="/assets/config.js?v=21"></script>
   <script src="/assets/vendor/supabase/supabase.js?v=270"></script>
-  <script type="module" src="/assets/app.js?v=340"></script>
+  <script type="module" src="/assets/app.js?v=350"></script>
 </body>
 </html>

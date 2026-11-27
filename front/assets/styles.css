@@ -654,10 +654,11 @@ input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
    écran de 393 px) ; quantité + unité + suppression sur la ligne du dessous. */
 .ligne-row {
   display: grid;
-  grid-template-columns: 1fr auto 44px;
+  grid-template-columns: 1fr auto 44px 44px;
   grid-template-areas:
-    "article article article"
-    "quantite unite delete";
+    "article article article article"
+    "quantite unite photo delete"
+    "photos photos photos photos";
   gap: 6px;
   align-items: center;
 }
@@ -665,6 +666,7 @@ input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
 .ligne-row .f-ligne-quantite { grid-area: quantite; width: 100%; min-width: 0; }
 .ligne-row .f-ligne-unite    { grid-area: unite; }
 .ligne-row .btn-delete-ligne { grid-area: delete; }
+.ligne-row .btn-photo-ligne  { grid-area: photo; }
 .ligne-row select, .ligne-row input { min-height: 48px; padding: 0 10px; }
 
 /* Prestations (H) : bloc à part, AVANT les tours. */
@@ -1663,3 +1665,62 @@ body.qc-lock .bottom-bar, body.qc-lock .selection-bar { display: none !important
 
 /* beta.33.1 : actions empilées des feuilles de confirmation. */
 #signature-progress-sheet .sheet-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+
+/* ------------------------------------------------ beta.35 : photos par ligne -- */
+.btn-photo-ligne { position: relative; }
+.lp-count {
+  position: absolute; top: 4px; right: 2px;
+  min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px;
+  font-size: 11px; line-height: 16px; font-weight: 700; text-align: center;
+  background: var(--text); color: var(--surface);
+}
+.lp-count[hidden] { display: none; }
+.ligne-photos { grid-area: photos; display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.ligne-photos[hidden] { display: none; }
+.lp-group { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.lp-label { font-size: 12px; color: var(--text-muted); }
+.lp-thumbs { display: flex; gap: 4px; }
+.lp-thumb {
+  position: relative; width: 44px; height: 44px; padding: 0; border: 1px solid var(--border);
+  border-radius: 6px; overflow: hidden; background: var(--bg); cursor: pointer;
+}
+.lp-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lp-thumb.is-pending img { opacity: .7; }
+.lp-pending {
+  position: absolute; right: 1px; bottom: 1px; width: 16px; height: 16px; border-radius: 50%;
+  background: rgba(0, 0, 0, .6); color: #fff; display: flex; align-items: center; justify-content: center;
+}
+.lp-pending svg { width: 12px; height: 12px; }
+
+.pt-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.pt-btn { min-height: 64px; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 17px; }
+.pt-btn svg { width: 22px; height: 22px; }
+.pt-count { font-size: 13px; color: var(--text-muted); }
+.pt-gallery { display: flex; align-items: center; gap: 6px; margin: 14px 0 0; font-size: 14px; }
+.pt-gallery svg { width: 18px; height: 18px; }
+.visually-hidden-input { position: fixed; left: -9999px; top: 0; width: 1px; height: 1px; opacity: 0; }
+
+.photo-viewer {
+  position: fixed; inset: 0; z-index: 120; background: #000; color: #fff;
+  display: flex; flex-direction: column;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  touch-action: pan-y;
+}
+.photo-viewer[hidden] { display: none; }
+body.photo-viewer-open { overflow: hidden; }
+.pv-top { display: flex; align-items: center; gap: 4px; padding: 6px 8px; }
+.pv-caption { flex: 1; font-size: 15px; }
+.photo-viewer .icon-btn { color: #fff; }
+.photo-viewer .icon-btn:hover, .photo-viewer .icon-btn:focus-visible { background: rgba(255, 255, 255, .12); }
+.pv-delete[hidden] { display: none; }
+.pv-stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+.pv-img { max-width: 100%; max-height: 100%; object-fit: contain; user-select: none; -webkit-user-select: none; }
+.pv-nav {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 44px; height: 64px; border: 0; border-radius: 8px;
+  background: rgba(0, 0, 0, .35); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.pv-nav svg { width: 28px; height: 28px; }
+.pv-nav[hidden] { display: none; }
+.pv-prev { left: 6px; }
+.pv-next { right: 6px; }

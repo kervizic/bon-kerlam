@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.responses import Response
 
-from . import closing, db, geocode, pdf, signature
+from . import closing, db, geocode, pdf, photos, signature
 from .auth import require_token, require_user
 from .config import settings
 
@@ -37,6 +37,8 @@ async def lifespan(app: FastAPI):
     # beta.31 : re-rend en fond le PDF des lettres modifiées (file lv_pdf_dirty),
     # dé-bounce ~20 s -> « PDF toujours prêt » sans attendre au moment de partager.
     tasks.append(asyncio.create_task(_refresh_loop()))
+    # beta.35 : suppression des objets storage des photos supprimées (file SQL).
+    tasks.append(asyncio.create_task(_photos_purge_loop()))
     try:
         yield
     finally:
@@ -393,7 +395,9 @@ def close_midnight(_=Depends(require_token("write"))):
 
 @router.post("/purge-corbeille")
 def purge_corbeille(_=Depends(require_token("write"))):
-    return closing.purge_corbeille()
+    res = closing.purge_corbeille()
+    # beta.35 : les photos des lettres/tours purgés suivent (objets storage compris).
+    return {**res, "photos": photos.process_storage_purge()}
 
 
 @router.post("/geocode")
@@ -413,9 +417,23 @@ async def _maintenance_loop() -> None:
         await asyncio.sleep(max((nxt - now).total_seconds(), 60))
         with contextlib.suppress(Exception):
             closing.purge_corbeille()
+        # beta.35 : objets storage des photos des lettres purgées.
+        with contextlib.suppress(Exception):
+            photos.process_storage_purge()
         # beta.31 : ménage du cache PDF (lettres signées / supprimées / inactives > 30 j).
         with contextlib.suppress(Exception):
             pdf.cleanup_cache(30)
+
+
+async def _photos_purge_loop() -> None:
+    """beta.35 : toutes les 15 min, purge des photos des tours en corbeille > 30 j
+    et suppression des objets storage en file (bon.storage_purge). Requête légère ;
+    aucun impact sur le rendu PDF."""
+    await asyncio.sleep(60)
+    while True:
+        with contextlib.suppress(Exception):
+            await asyncio.to_thread(photos.process_storage_purge)
+        await asyncio.sleep(900)
 
 
 async def _signature_loop() -> None:
