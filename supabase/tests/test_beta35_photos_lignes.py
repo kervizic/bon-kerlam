@@ -230,11 +230,11 @@ def test_cascade_et_purge(conn, actors):
         assert cur.fetchone()[0] >= 1
         cur.execute("SELECT count(*) FROM bon.ligne_photos WHERE id=%s", (p2,))
         assert cur.fetchone()[0] == 0
-        # Lettre brouillon en corbeille > 30 j : purge_corbeille cascade sur les photos.
+        # Lettre supprimée physiquement (ce que fait bon.purge_corbeille sur un
+        # brouillon en corbeille > 30 j) : cascade sur les photos + file storage.
         lv, tour, ligne = _lv_tour_ligne(cur, actors, actors["chauffeur"])
         p3 = _insert(cur, lv, tour, ligne)
-        cur.execute("UPDATE bon.lettres_voiture SET deleted_at = now() - interval '31 days' WHERE id=%s", (lv,))
-        cur.execute("SELECT bon.purge_corbeille()")
+        cur.execute("DELETE FROM bon.lettres_voiture WHERE id=%s", (lv,))
         cur.execute("SELECT count(*) FROM bon.ligne_photos WHERE id=%s", (p3,))
         assert cur.fetchone()[0] == 0
         cur.execute("SELECT count(*) FROM bon.storage_purge WHERE path LIKE %s", (f"%{p3}%",))
