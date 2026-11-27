@@ -163,7 +163,7 @@ def test_role_admin_reserve_aux_admins(conn, actors, ids):
         cur.execute("SAVEPOINT s")
         with pytest.raises(psycopg.errors.InsufficientPrivilege):
             cur.execute(
-                "UPDATE bon.utilisateurs SET roles = roles || 'admin' WHERE id = %s", (ids["bureau"],)
+                "UPDATE bon.utilisateurs SET roles = array_append(roles, 'admin') WHERE id = %s", (ids["bureau"],)
             )
         cur.execute("ROLLBACK TO s")
         # …ni créer un admin, ni retirer / supprimer l'admin existant.
@@ -183,7 +183,7 @@ def test_role_admin_reserve_aux_admins(conn, actors, ids):
         assert cur.rowcount == 1
     as_user(conn, ADMIN)
     with conn.cursor() as cur:
-        cur.execute("UPDATE bon.utilisateurs SET roles = roles || 'admin' WHERE id = %s", (ids["bureau"],))
+        cur.execute("UPDATE bon.utilisateurs SET roles = array_append(roles, 'admin') WHERE id = %s", (ids["bureau"],))
         assert cur.rowcount == 1
         cur.execute("SELECT bon.is_admin()")
         assert cur.fetchone()[0] is True

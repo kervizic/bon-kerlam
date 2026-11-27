@@ -215,7 +215,7 @@ def run(ctx, name, img, pdf):
         expect(scanner).to_be_visible(timeout=10000)
         page.wait_for_timeout(300)
         st = page.evaluate("() => window.bonDocs._scanner._state()")
-        ok = all(abs(c["x"] - q[0]) < 30 and abs(c["y"] - q[1]) < 30 for c, q in zip(st["corners"], QUAD))
+        ok = all(abs(c["x"] - q[0]) < 30 and abs(c["y"] - q[1]) < 30 for c, q in zip(st["corners"], QUAD, strict=True))
         found = [(round(c["x"]), round(c["y"])) for c in st["corners"]]
         check(ok, f"{name}: 4 coins détectés automatiquement ({found})")
         page.screenshot(path=str(OUT / f"beta36-{name}-scanner-clair.png"))
