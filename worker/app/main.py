@@ -143,10 +143,9 @@ def alertes(_=Depends(require_token("read"))):
         "SELECT id, nom, fco_echeance, carte_echeance FROM bon.chauffeurs "
         "WHERE actif AND (fco_echeance <= CURRENT_DATE + 60 OR carte_echeance <= CURRENT_DATE + 60)"
     )
-    # Documents réglementaires (permis, FCO, carte conducteur, CACES). Le worker
-    # (bon_worker, BYPASSRLS) appelle la fonction métier directement.
-    documents = db.query("SELECT * FROM bon.alertes_documents()")
-    return {"camions": camions, "chauffeurs": chauffeurs, "documents": documents}
+    # beta.36.1 : les tables bureau de documents (0011) sont retirées ; les documents
+    # personnels (« Mes documents ») n'émettent volontairement aucune alerte.
+    return {"camions": camions, "chauffeurs": chauffeurs}
 
 
 @router.post("/signature/envoi-groupe")
@@ -271,15 +270,16 @@ def signature_sync(payload: dict | None = None, user=Depends(require_user)):
 
 @router.post("/chauffeur/{chauffeur_id}/depart")
 def chauffeur_depart(chauffeur_id: int, _=Depends(require_token("write"))):
-    """Départ d'un salarié : purge les scans de documents (base + Storage)."""
-    rows = db.query("SELECT bon.purge_documents_chauffeur(%s) AS keys", (chauffeur_id,))
-    keys = rows[0]["keys"] if rows else []
-    deleted = _delete_storage_objects(keys)
-    db.query(
-        "UPDATE bon.chauffeurs SET date_sortie = COALESCE(date_sortie, CURRENT_DATE) WHERE id = %s",
+    """Départ d'un salarié : date de sortie renseignée (beta.36.1 : plus de scans
+    bureau à purger ; « Mes documents » suit le compte utilisateur)."""
+    rows = db.query(
+        "UPDATE bon.chauffeurs SET date_sortie = COALESCE(date_sortie, CURRENT_DATE) WHERE id = %s "
+        "RETURNING date_sortie",
         (chauffeur_id,),
     )
-    return {"purges": keys, "storage_supprimes": deleted}
+    if not rows:
+        raise HTTPException(status_code=404, detail="Chauffeur introuvable.")
+    return {"date_sortie": str(rows[0]["date_sortie"])}
 
 
 @router.get("/document/signed-url")
@@ -303,27 +303,6 @@ def document_signed_url(key: str, expires: int = 120, _=Depends(require_token("r
         return {"signed_url": f"{settings.storage_url}/storage/v1{signed}" if signed else None}
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"Storage: {exc}") from exc
-
-
-def _delete_storage_objects(keys: list[str]) -> int:
-    if not keys or not settings.service_role_key:
-        return 0
-    import httpx
-
-    deleted = 0
-    for key in keys:
-        path = key.split("/", 1)[1] if key.startswith(settings.docs_bucket + "/") else key
-        try:
-            r = httpx.delete(
-                f"{settings.storage_url}/storage/v1/object/{settings.docs_bucket}/{path}",
-                headers={"Authorization": f"Bearer {settings.service_role_key}"},
-                timeout=10,
-            )
-            if r.status_code < 300:
-                deleted += 1
-        except Exception:  # noqa: BLE001
-            pass
-    return deleted
 
 
 @router.get("/referentiel/{kind}")

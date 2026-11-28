@@ -487,7 +487,7 @@ Un utilisateur peut cumuler **chauffeur ET bureau** (gérants qui conduisent). M
 ### 11.3 Pré-remplissage des tours
 À la création d'un nouveau tour, le **lieu de chargement** est pré-rempli avec le **lieu de déchargement du tour précédent** (modifiable). Le **premier tour** du bon reste vierge.
 
-### 11.4 Documents réglementaires du chauffeur (bureau uniquement)
+### 11.4 Documents réglementaires du chauffeur (bureau uniquement) - RETIRÉ en beta.36.1, remplacé par « Mes documents » (beta.36)
 - Permis (numéro, visite médicale) + **catégories datées** (validité par catégorie) ; carte **FCO / code 95** (numéro, délivrance, expiration) ; **carte conducteur** chronotachygraphe (numéro, expiration, **date du dernier téléchargement**) ; **CACES** (type ex. R490/R482, catégories, expiration ; plusieurs par chauffeur).
 - Scans recto/verso dans un bucket Storage **privé** `chauffeur-docs` ; politiques Storage **bureau uniquement** ; accès par **URL signées courtes**.
 - **Alertes** 60 j avant expiration ; document expiré en **rouge** au tableau de bord ; **retard** de téléchargement de la carte conducteur (> 28 j) signalé.

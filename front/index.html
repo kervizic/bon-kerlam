@@ -10,7 +10,7 @@
   <!-- Empreinte de version du shell (cf. assets/app-version.js). Bumper `app-rev`
        à chaque déploiement backend devant forcer un refresh (sinon le bump d'un
        `?v=` d'asset suffit). -->
-  <meta name="app-version" content="0.1.0-beta.36">
+  <meta name="app-version" content="0.1.0-beta.36.1">
   <meta name="app-rev" content="340">
 
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
@@ -36,7 +36,7 @@
        en police système). crossorigin obligatoire : les polices sont toujours
        récupérées en mode CORS, l'attribut évite un double téléchargement. -->
   <link rel="preload" href="/assets/fonts/sarpanch-900.woff2?v=14" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/assets/styles.css?v=360">
+  <link rel="stylesheet" href="/assets/styles.css?v=361">
   <!-- Garde-fou anti page blanche (beta.25) : si l'appli n'a pas démarré sous 8 s
        (flag window.__bonBooted posé en fin de boot d'app.js), on désenregistre le
        SW, on vide les caches et on recharge UNE fois (anti-boucle sessionStorage).
@@ -404,10 +404,6 @@
             <div class="field">
               <label for="r-alerte-jours">Alerte échéance (jours avant)</label>
               <input type="number" id="r-alerte-jours" min="1" step="1">
-            </div>
-            <div class="field">
-              <label for="r-retard-carte">Retard carte conducteur toléré (jours)</label>
-              <input type="number" id="r-retard-carte" min="1" step="1">
             </div>
           </fieldset>
 
@@ -1136,26 +1132,9 @@
     </div>
   </template>
 
-  <template id="tpl-doc-cat-row">
-    <div class="doc-cat-row">
-      <input type="text" class="f-cat-code" placeholder="Catégorie" maxlength="4">
-      <input type="date" class="f-cat-validite">
-      <button type="button" class="icon-btn btn-delete-cat" aria-label="Supprimer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6M14 11v6"/></svg></button>
-    </div>
-  </template>
-
-  <template id="tpl-caces-row">
-    <div class="doc-cat-row">
-      <input type="text" class="f-caces-type" placeholder="Type (R490…)">
-      <input type="text" class="f-caces-categories" placeholder="Catégories (séparées par une virgule)">
-      <input type="date" class="f-caces-expiration">
-      <button type="button" class="icon-btn btn-delete-caces" aria-label="Supprimer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6M14 11v6"/></svg></button>
-    </div>
-  </template>
-
   <!-- ================================================================== Scripts -->
   <script src="/assets/config.js?v=21"></script>
   <script src="/assets/vendor/supabase/supabase.js?v=270"></script>
-  <script type="module" src="/assets/app.js?v=360"></script>
+  <script type="module" src="/assets/app.js?v=361"></script>
 </body>
 </html>

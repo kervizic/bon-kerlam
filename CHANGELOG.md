@@ -4,6 +4,23 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/). Ce journal ne décrit QUE ce
 qui est réellement livré.
 
+## [0.1.0-beta.36.1] - 2026-11-28
+
+### Retiré
+- Documents réglementaires **bureau** de la migration 0011 (permis + catégories, FCO,
+  carte conducteur, CACES : panneau de la fiche Chauffeur, alertes associées du
+  tableau de bord, réglage « retard carte conducteur »). Jamais utilisés en
+  production (0 ligne, 0 fichier) ; remplacés par « Mes documents » (beta.36).
+- Worker : `/alertes` ne renvoie plus la clé `documents` ; `/chauffeur/{id}/depart`
+  renseigne seulement la date de sortie (plus de scans bureau à purger).
+
+### Base de données
+- Migration **0035** (down fourni : recrée 0011 à l'identique) : suppression des 5
+  tables, 5 vues api, `alertes_documents`, `purge_documents_chauffeur`, policy storage
+  `chauffeur_docs_bureau`. Garde-fou : échec si une table contient une ligne.
+  Conservés : bucket `chauffeur-docs` (PNG de diagnostic des signatures en échec,
+  service_role), `bon.chauffeurs.date_sortie`, réglages.
+
 ## [0.1.0-beta.36] - 2026-11-27
 
 ### Ajouté

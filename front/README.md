@@ -106,8 +106,7 @@ de pseudo-code) :
 - **Contrôle** : rendu depuis le dernier instantané IndexedDB — fonctionne
   réellement sans réseau.
 - **Tableau de bord** : synthèse (compteurs) + alertes d'échéance (camions CT/
-  chrono, chauffeurs FCO/carte, documents réglementaires via
-  `api.alertes_documents()`), expiré en rouge / proche en orange (surface,
+  chrono, chauffeurs FCO/carte), expiré en rouge / proche en orange (surface,
   texte anthracite — jamais de texte orange nu, cf. règle WCAG dans
   `styles.css`).
 - **Planning** : LV préparées par le bureau (`preparee=true`), sélection
@@ -116,10 +115,9 @@ de pseudo-code) :
 - **Projets, Clients + Contacts, Sites, Camions, Chauffeurs, Articles,
   Utilisateurs** : CRUD autosave complet (créer/éditer/désactiver), filtre de
   recherche. Sites : autocomplétion d'adresse (`api-adresse.data.gouv.fr`) +
-  géolocalisation « 📍 ma position » + lat/lon éditables. Chauffeurs : panneau
-  documents réglementaires bureau-only (permis + catégories, FCO, carte
-  conducteur, CACES), upload de scans vers le bucket privé `chauffeur-docs`,
-  URL signée à la consultation, action « Départ du salarié ». Articles :
+  géolocalisation « 📍 ma position » + lat/lon éditables. Chauffeurs : action
+  « Départ du salarié » (date de sortie). Les documents personnels sont dans
+  « Mes documents » (beta.36) ; le panneau bureau de 0011 a été retiré en beta.36.1. Articles :
   `commentaire_interne` visible en appli, action « Fusionner avec… » (stub
   explicite : aucune fonction SQL dédiée n'existe encore côté serveur).
   Utilisateurs : rôles multiples (puces chauffeur/bureau).

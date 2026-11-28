@@ -914,24 +914,6 @@ body.pdf-viewer-open { overflow: hidden; }
 .chip-check input { width: 16px; height: 16px; margin: 0; }
 .chip-check.is-checked { border-color: var(--c-orange); background: var(--status-soon-bg); font-weight: 700; }
 
-/* ------------------------------------------------------- Documents chauffeur */
-.doc-section { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; margin-top: 12px; }
-.doc-section > legend, .doc-section-title { font-weight: 700; margin-bottom: 8px; }
-.doc-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
-.doc-row .field { flex: 1; min-width: 140px; margin-bottom: 0; }
-.doc-cat-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
-.doc-cat-row { display: grid; grid-template-columns: 90px 1fr 44px; gap: 8px; align-items: center; margin-bottom: 8px; }
-.doc-cat-row:has(.f-caces-type) { grid-template-columns: 90px 1fr 140px 44px; }
-.upload-row { display: flex; gap: 6px; flex-wrap: wrap; }
-.upload-row input[type="file"] { display: none; }
-.upload-label {
-  display: inline-flex; align-items: center; justify-content: center;
-  min-height: 44px; padding: 0 14px; border-radius: var(--radius);
-  border: 1px solid var(--border); background: var(--surface); color: var(--text);
-  font-size: 14px; cursor: pointer;
-}
-.upload-label:hover { background: var(--bg); }
-
 /* ----------------------------------------------------------- Adresse autocomplétion */
 .autocomplete-wrap { position: relative; }
 .autocomplete-list {

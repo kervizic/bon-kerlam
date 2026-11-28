@@ -600,122 +600,6 @@ export async function rpcDernieresHeures(chauffeurId) {
   return data || null;
 }
 
-// --------------------------------------------------- Documents réglementaires --
-// Bureau uniquement (RLS serveur, cf. 0011_driver_documents.sql). Ces fonctions
-// renvoient simplement vide/erreur pour un chauffeur — à l'app de ne pas planter.
-
-export async function getPermis(chauffeurId) {
-  const { data, error } = await requireClient().from("permis").select("*").eq("chauffeur_id", chauffeurId).maybeSingle();
-  if (error) throw error;
-  return data;
-}
-export async function upsertPermis(chauffeurId, patch) {
-  const existing = await getPermis(chauffeurId).catch(() => null);
-  if (existing) {
-    const { data, error } = await requireClient().from("permis").update(patch).eq("chauffeur_id", chauffeurId).select().maybeSingle();
-    if (error) throw error;
-    return data;
-  }
-  const { data, error } = await requireClient().from("permis").insert({ chauffeur_id: chauffeurId, ...patch }).select().single();
-  if (error) throw error;
-  return data;
-}
-
-export async function listPermisCategories(chauffeurId) {
-  const { data, error } = await requireClient().from("permis_categories").select("*").eq("chauffeur_id", chauffeurId).order("categorie");
-  if (error) throw error;
-  return data || [];
-}
-export async function createPermisCategorie(chauffeurId, categorie, validite) {
-  const { data, error } = await requireClient().from("permis_categories").insert({ chauffeur_id: chauffeurId, categorie, validite }).select().single();
-  if (error) throw error;
-  return data;
-}
-export async function updatePermisCategorie(id, patch) {
-  const { data, error } = await requireClient().from("permis_categories").update(patch).eq("id", id).select().maybeSingle();
-  if (error) throw error;
-  return data;
-}
-export async function deletePermisCategorie(id) {
-  const { error } = await requireClient().from("permis_categories").delete().eq("id", id);
-  if (error) throw error;
-}
-
-export async function getFco(chauffeurId) {
-  const { data, error } = await requireClient().from("fco").select("*").eq("chauffeur_id", chauffeurId).maybeSingle();
-  if (error) throw error;
-  return data;
-}
-export async function upsertFco(chauffeurId, patch) {
-  const existing = await getFco(chauffeurId).catch(() => null);
-  if (existing) {
-    const { data, error } = await requireClient().from("fco").update(patch).eq("chauffeur_id", chauffeurId).select().maybeSingle();
-    if (error) throw error;
-    return data;
-  }
-  const { data, error } = await requireClient().from("fco").insert({ chauffeur_id: chauffeurId, ...patch }).select().single();
-  if (error) throw error;
-  return data;
-}
-
-export async function getCarteConducteur(chauffeurId) {
-  const { data, error } = await requireClient().from("carte_conducteur").select("*").eq("chauffeur_id", chauffeurId).maybeSingle();
-  if (error) throw error;
-  return data;
-}
-export async function upsertCarteConducteur(chauffeurId, patch) {
-  const existing = await getCarteConducteur(chauffeurId).catch(() => null);
-  if (existing) {
-    const { data, error } = await requireClient().from("carte_conducteur").update(patch).eq("chauffeur_id", chauffeurId).select().maybeSingle();
-    if (error) throw error;
-    return data;
-  }
-  const { data, error } = await requireClient().from("carte_conducteur").insert({ chauffeur_id: chauffeurId, ...patch }).select().single();
-  if (error) throw error;
-  return data;
-}
-
-export async function listCaces(chauffeurId) {
-  const { data, error } = await requireClient().from("caces").select("*").eq("chauffeur_id", chauffeurId).order("id");
-  if (error) throw error;
-  return data || [];
-}
-export async function createCaces(chauffeurId, fields) {
-  const { data, error } = await requireClient().from("caces").insert({ chauffeur_id: chauffeurId, ...fields }).select().single();
-  if (error) throw error;
-  return data;
-}
-export async function updateCaces(id, patch) {
-  const { data, error } = await requireClient().from("caces").update(patch).eq("id", id).select().maybeSingle();
-  if (error) throw error;
-  return data;
-}
-export async function deleteCaces(id) {
-  const { error } = await requireClient().from("caces").delete().eq("id", id);
-  if (error) throw error;
-}
-
-export async function rpcAlertesDocuments() {
-  const { data, error } = await requireClient().rpc("alertes_documents");
-  if (error) throw error;
-  return data || [];
-}
-
-// ------------------------------------------------------------- Storage (scans) --
-const DOCS_BUCKET = "chauffeur-docs";
-
-export async function uploadChauffeurDoc(path, file) {
-  const { data, error } = await requireClient().storage.from(DOCS_BUCKET).upload(path, file, { upsert: true });
-  if (error) throw error;
-  return data && data.path;
-}
-
-export async function signedUrlChauffeurDoc(path, expiresInSec = 120) {
-  const { data, error } = await requireClient().storage.from(DOCS_BUCKET).createSignedUrl(path, expiresInSec);
-  if (error) throw error;
-  return data && data.signedUrl;
-}
-
 // ------------------------------------------------ Photos de ligne (beta.35) --
 // Bucket PRIVÉ ; lecture par URL signées courtes. L'envoi est idempotent (l'id de
 // la photo est aussi son nom de fichier) : un doublon n'est pas une erreur.
@@ -864,9 +748,6 @@ export async function workerSignatureWarm(lvIds) {
 }
 export async function workerChauffeurDepart(chauffeurId) {
   return callWorker(`/chauffeur/${chauffeurId}/depart`, { method: "POST" });
-}
-export async function workerDocumentSignedUrl(key, expires = 120) {
-  return callWorker(`/document/signed-url?key=${encodeURIComponent(key)}&expires=${expires}`);
 }
 
 // PDF officiel de la lettre de voiture, généré par le worker (WeasyPrint) et

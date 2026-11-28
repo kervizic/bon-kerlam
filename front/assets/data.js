@@ -52,11 +52,6 @@ const demoDb = DEMO
       lettres_voiture: seed.cloneSeed(seed.LETTRES_VOITURE),
       tours: seed.cloneSeed(seed.TOURS),
       tour_lignes: seed.cloneSeed(seed.TOUR_LIGNES),
-      permis: seed.cloneSeed(seed.PERMIS),
-      permis_categories: seed.cloneSeed(seed.PERMIS_CATEGORIES),
-      fco: seed.cloneSeed(seed.FCO),
-      carte_conducteur: seed.cloneSeed(seed.CARTE_CONDUCTEUR),
-      caces: seed.cloneSeed(seed.CACES),
       client_adresses: seed.cloneSeed(seed.CLIENT_ADRESSES || []),
       site_societes: seed.cloneSeed(seed.SITE_SOCIETES || []),
       fusions: [],
@@ -655,140 +650,6 @@ export async function rpcFusionnerArticle() {
   return live.rpcFusionnerArticle();
 }
 
-/* --------------------------------------------------------------- Documents === */
-function demoDocGet(table, chauffeurId) {
-  return demoDb[table].find((r) => String(r.chauffeur_id) === String(chauffeurId)) || null;
-}
-function demoDocUpsert(table, chauffeurId, patch) {
-  let row = demoDocGet(table, chauffeurId);
-  if (!row) {
-    row = { id: Date.now(), chauffeur_id: chauffeurId };
-    demoDb[table].push(row);
-  }
-  Object.assign(row, patch);
-  return row;
-}
-
-export async function getPermis(chauffeurId) { return DEMO ? demoDocGet("permis", chauffeurId) : live.getPermis(chauffeurId); }
-export async function upsertPermis(chauffeurId, patch) { return DEMO ? demoDocUpsert("permis", chauffeurId, patch) : live.upsertPermis(chauffeurId, patch); }
-
-export async function listPermisCategories(chauffeurId) {
-  if (DEMO) return demoDb.permis_categories.filter((p) => String(p.chauffeur_id) === String(chauffeurId));
-  return live.listPermisCategories(chauffeurId);
-}
-export async function createPermisCategorie(chauffeurId, categorie, validite) {
-  if (DEMO) {
-    const row = { id: seed.nextId("permisCategorie"), chauffeur_id: chauffeurId, categorie, validite };
-    demoDb.permis_categories.push(row);
-    return row;
-  }
-  return live.createPermisCategorie(chauffeurId, categorie, validite);
-}
-export async function updatePermisCategorie(id, patch) {
-  if (DEMO) {
-    const row = byId(demoDb.permis_categories, id);
-    if (row) Object.assign(row, patch);
-    return row;
-  }
-  return live.updatePermisCategorie(id, patch);
-}
-export async function deletePermisCategorie(id) {
-  if (DEMO) {
-    demoDb.permis_categories = demoDb.permis_categories.filter((p) => String(p.id) !== String(id));
-    return;
-  }
-  return live.deletePermisCategorie(id);
-}
-
-export async function getFco(chauffeurId) { return DEMO ? demoDocGet("fco", chauffeurId) : live.getFco(chauffeurId); }
-export async function upsertFco(chauffeurId, patch) { return DEMO ? demoDocUpsert("fco", chauffeurId, patch) : live.upsertFco(chauffeurId, patch); }
-
-export async function getCarteConducteur(chauffeurId) { return DEMO ? demoDocGet("carte_conducteur", chauffeurId) : live.getCarteConducteur(chauffeurId); }
-export async function upsertCarteConducteur(chauffeurId, patch) { return DEMO ? demoDocUpsert("carte_conducteur", chauffeurId, patch) : live.upsertCarteConducteur(chauffeurId, patch); }
-
-export async function listCaces(chauffeurId) {
-  if (DEMO) return demoDb.caces.filter((c) => String(c.chauffeur_id) === String(chauffeurId));
-  return live.listCaces(chauffeurId);
-}
-export async function createCaces(chauffeurId, fields) {
-  if (DEMO) {
-    const row = { id: seed.nextId("caces"), chauffeur_id: chauffeurId, categories: [], ...fields };
-    demoDb.caces.push(row);
-    return row;
-  }
-  return live.createCaces(chauffeurId, fields);
-}
-export async function updateCaces(id, patch) {
-  if (DEMO) {
-    const row = byId(demoDb.caces, id);
-    if (row) Object.assign(row, patch);
-    return row;
-  }
-  return live.updateCaces(id, patch);
-}
-export async function deleteCaces(id) {
-  if (DEMO) {
-    demoDb.caces = demoDb.caces.filter((c) => String(c.id) !== String(id));
-    return;
-  }
-  return live.deleteCaces(id);
-}
-
-export async function rpcAlertesDocuments() {
-  if (DEMO) {
-    const alerte = parseInt((demoDb.reglages.find((r) => r.cle === "alerte_jours") || {}).valeur || "60", 10);
-    const retard = parseInt((demoDb.reglages.find((r) => r.cle === "carte_conducteur_retard_jours") || {}).valeur || "28", 10);
-    const today = new Date();
-    const rows = [];
-    const pushIfDue = (chauffeurId, nom, typeDoc, detail, echeance) => {
-      if (!echeance) return;
-      const d = new Date(echeance);
-      const joursRestants = Math.round((d - today) / 86400000);
-      if (joursRestants > alerte) return;
-      rows.push({
-        chauffeur_id: chauffeurId, chauffeur: nom, type_document: typeDoc, detail,
-        echeance, jours_restants: joursRestants, statut: joursRestants < 0 ? "expire" : "bientot",
-      });
-    };
-    for (const ch of demoDb.chauffeurs) {
-      if (ch.date_sortie) continue;
-      for (const pc of demoDb.permis_categories.filter((p) => p.chauffeur_id === ch.id)) {
-        pushIfDue(ch.id, ch.nom, "Permis " + pc.categorie, pc.categorie, pc.validite);
-      }
-      const fco = demoDb.fco.find((f) => f.chauffeur_id === ch.id);
-      if (fco) pushIfDue(ch.id, ch.nom, "FCO / code 95", fco.numero, fco.expiration);
-      const cc = demoDb.carte_conducteur.find((c) => c.chauffeur_id === ch.id);
-      if (cc) {
-        pushIfDue(ch.id, ch.nom, "Carte conducteur", cc.numero, cc.expiration);
-        if (cc.dernier_telechargement) {
-          const retardJours = Math.round((today - new Date(cc.dernier_telechargement)) / 86400000);
-          if (retardJours > retard) {
-            rows.push({
-              chauffeur_id: ch.id, chauffeur: ch.nom, type_document: "Carte conducteur",
-              detail: "dernier téléchargement", echeance: cc.dernier_telechargement,
-              jours_restants: -retardJours, statut: "retard",
-            });
-          }
-        }
-      }
-      for (const c of demoDb.caces.filter((c) => c.chauffeur_id === ch.id)) {
-        pushIfDue(ch.id, ch.nom, "CACES " + c.type, (c.categories || []).join(", "), c.expiration);
-      }
-    }
-    return rows;
-  }
-  return live.rpcAlertesDocuments();
-}
-
-export async function uploadChauffeurDoc(path, file) {
-  if (DEMO) return path; // simulateur : pas d'upload réel, juste la clé renvoyée.
-  return live.uploadChauffeurDoc(path, file);
-}
-export async function signedUrlChauffeurDoc(path) {
-  if (DEMO) return "about:blank#demo-" + encodeURIComponent(path);
-  return live.signedUrlChauffeurDoc(path);
-}
-
 /* ------------------------------------------------ Photos de ligne (beta.35) == */
 // Démo : métadonnées en mémoire + images en Blob local (URL objet). Hors ligne
 // simulé via navigator.onLine (Playwright context.set_offline) : l'envoi échoue
@@ -938,7 +799,6 @@ export async function workerAlertes() {
     return {
       camions: demoDb.camions.filter((c) => c.actif),
       chauffeurs: demoDb.chauffeurs.filter((c) => !c.date_sortie),
-      documents: await rpcAlertesDocuments(),
     };
   }
   return live.workerAlertes();
@@ -956,17 +816,9 @@ export async function workerChauffeurDepart(chauffeurId) {
   if (DEMO) {
     const row = byId(demoDb.chauffeurs, chauffeurId);
     if (row) row.date_sortie = todayIso();
-    demoDb.permis = demoDb.permis.filter((p) => String(p.chauffeur_id) !== String(chauffeurId));
-    demoDb.fco = demoDb.fco.filter((p) => String(p.chauffeur_id) !== String(chauffeurId));
-    demoDb.carte_conducteur = demoDb.carte_conducteur.filter((p) => String(p.chauffeur_id) !== String(chauffeurId));
-    demoDb.caces = demoDb.caces.filter((p) => String(p.chauffeur_id) !== String(chauffeurId));
-    return { purges: [], storage_supprimes: 0 };
+    return { date_sortie: row ? row.date_sortie : null };
   }
   return live.workerChauffeurDepart(chauffeurId);
-}
-export async function workerDocumentSignedUrl(key) {
-  if (DEMO) return { signed_url: "about:blank#demo-" + encodeURIComponent(key) };
-  return live.workerDocumentSignedUrl(key);
 }
 export async function workerSignatureWarm(lvIds) {
   // beta.25 : préchauffe LOCALE du cache PDF (aucun document Documenso, aucun mail).

@@ -159,32 +159,6 @@ export const REGLAGES = [
   { cle: "carte_conducteur_retard_jours", valeur: "28", libelle: "Retard max de téléchargement de la carte conducteur" },
 ];
 
-/* ---------------------------------------------- Documents réglementaires (démo) */
-export const PERMIS = [
-  { id: 1, chauffeur_id: 1, numero: "771234567D", visite_medicale: addDays(200), scan_recto: null, scan_verso: null },
-  { id: 2, chauffeur_id: 2, numero: "772345678E", visite_medicale: addDays(10), scan_recto: null, scan_verso: null },
-];
-const nextPermisCatId = makeCounter(4);
-export const PERMIS_CATEGORIES = [
-  { id: 1, chauffeur_id: 1, categorie: "CE", validite: addDays(300) },
-  { id: 2, chauffeur_id: 1, categorie: "B", validite: addDays(1200) },
-  { id: 3, chauffeur_id: 2, categorie: "C", validite: addDays(-15) },
-  { id: 4, chauffeur_id: 3, categorie: "CE", validite: addDays(500) },
-];
-export const FCO = [
-  { id: 1, chauffeur_id: 1, numero: "FCO-99881", delivrance: addDays(-1600), expiration: addDays(40) },
-  { id: 2, chauffeur_id: 2, numero: "FCO-99882", delivrance: addDays(-1900), expiration: addDays(-10) },
-];
-export const CARTE_CONDUCTEUR = [
-  { id: 1, chauffeur_id: 1, numero: "FR0019988001", expiration: addDays(500), dernier_telechargement: addDays(-5) },
-  { id: 2, chauffeur_id: 3, numero: "FR0019988003", expiration: addDays(20), dernier_telechargement: addDays(-40) },
-];
-const nextCacesId = makeCounter(2);
-export const CACES = [
-  { id: 1, chauffeur_id: 2, type: "R482", categories: ["C1", "F"], expiration: addDays(300) },
-  { id: 2, chauffeur_id: 3, type: "R490", categories: ["Grue auxiliaire"], expiration: addDays(-3) },
-];
-
 /* ---------------------------------------------------------- Lettres de voiture */
 function addDays(n) {
   const d = new Date();
@@ -283,8 +257,6 @@ export function nextId(kind) {
     case "lv": return nextLvId();
     case "tour": return nextTourId();
     case "ligne": return nextLigneId();
-    case "permisCategorie": return nextPermisCatId();
-    case "caces": return nextCacesId();
     default: throw new Error("nextId: type inconnu " + kind);
   }
 }

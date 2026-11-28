@@ -116,23 +116,6 @@ import {
   createUtilisateur,
   updateUtilisateur,
   upsertReglage,
-  getPermis,
-  upsertPermis,
-  listPermisCategories,
-  createPermisCategorie,
-  updatePermisCategorie,
-  deletePermisCategorie,
-  getFco,
-  upsertFco,
-  getCarteConducteur,
-  upsertCarteConducteur,
-  listCaces,
-  createCaces,
-  updateCaces,
-  deleteCaces,
-  rpcAlertesDocuments,
-  uploadChauffeurDoc,
-  signedUrlChauffeurDoc,
   workerEnvoiGroupe,
   workerChauffeurDepart,
   workerLvPdf,
@@ -328,11 +311,6 @@ const REMOTE_UPDATERS = {
   chauffeurs: updateChauffeur,
   articles: updateArticle,
   utilisateurs: updateUtilisateur,
-  permis: (id, patch) => upsertPermis(id, patch), // id ici = chauffeur_id (cf. wireDocAutosave)
-  fco: (id, patch) => upsertFco(id, patch),
-  carte_conducteur: (id, patch) => upsertCarteConducteur(id, patch),
-  permis_categories: updatePermisCategorie,
-  caces: updateCaces,
 };
 
 async function applyOp(op) {
@@ -1549,27 +1527,11 @@ async function loadDashboard() {
       if (j != null && j <= alerteJours) rows.push({ sujet: `Camion ${c.immatriculation}`, detail: label, date, j });
     }
   }
-  // Les fiches chauffeur portent des colonnes "rapides" fco_echeance/carte_echeance
-  // (historiques, cf. 0001_schema_bon.sql) ET des tables détaillées bon.fco /
-  // bon.carte_conducteur (cf. 0011_driver_documents.sql) exposées par
-  // api.alertes_documents(). On évite de compter deux fois la même échéance pour
-  // le même chauffeur quand les deux sources existent.
-  const docAlertKeys = new Set();
-  let docs = [];
-  try {
-    docs = await rpcAlertesDocuments();
-  } catch (e) {
-    /* RLS bureau uniquement : ignore silencieusement si vide/erreur */
-  }
-  for (const d of docs) {
-    rows.push({ sujet: d.chauffeur, detail: `${d.type_document}${d.detail ? " — " + d.detail : ""}`, date: d.echeance, j: d.jours_restants });
-    if (/^FCO/.test(d.type_document)) docAlertKeys.add(d.chauffeur_id + "|fco");
-    if (/^Carte conducteur/.test(d.type_document)) docAlertKeys.add(d.chauffeur_id + "|carte");
-  }
+  // Échéances « rapides » des fiches chauffeur (fco_echeance / carte_echeance).
+  // beta.36.1 : les tables détaillées bureau de 0011 (jamais utilisées) sont retirées.
   for (const c of state.refs.chauffeurs) {
     if (c.date_sortie) continue;
-    for (const [label, date, key] of [["FCO / code 95", c.fco_echeance, "fco"], ["Carte conducteur", c.carte_echeance, "carte"]]) {
-      if (docAlertKeys.has(c.id + "|" + key)) continue; // déjà couvert par le document détaillé
+    for (const [label, date] of [["FCO / code 95", c.fco_echeance], ["Carte conducteur", c.carte_echeance]]) {
       const j = daysUntil(date);
       if (j != null && j <= alerteJours) rows.push({ sujet: c.nom, detail: label, date, j });
     }
@@ -3713,7 +3675,6 @@ function loadReglagesBureau() {
   document.getElementById("r-signature-auto").checked = state.reglages.signature_envoi_auto === "true";
   document.getElementById("r-documenso-cc").value = state.reglages.documenso_cc_contact || "";
   document.getElementById("r-alerte-jours").value = state.reglages.alerte_jours || "";
-  document.getElementById("r-retard-carte").value = state.reglages.carte_conducteur_retard_jours || "";
 }
 
 function wireReglagesBureauFields() {
@@ -3730,7 +3691,6 @@ function wireReglagesBureauFields() {
   });
   wireReglageField(document.getElementById("r-documenso-cc"), "documenso_cc_contact");
   wireReglageField(document.getElementById("r-alerte-jours"), "alerte_jours", toIntOrNull);
-  wireReglageField(document.getElementById("r-retard-carte"), "carte_conducteur_retard_jours", toIntOrNull);
 }
 
 /* =========================================================================== LV == */
@@ -4731,287 +4691,20 @@ function renderChauffeurCard(c, startOpen = false) {
         departBtn.className = "btn btn-secondary";
         departBtn.textContent = "Départ du salarié";
         departBtn.addEventListener("click", async () => {
-          if (!confirm(`Confirmer le départ de ${c.nom} ? Les scans de documents seront purgés.`)) return;
+          if (!confirm(`Confirmer le départ de ${c.nom} ?`)) return;
           try {
             await workerChauffeurDepart(c.id);
             c.date_sortie = todayIso();
-            alert("Départ enregistré, documents purgés.");
+            alert("Départ enregistré.");
             await loadChauffeursScreen();
           } catch (e) {
             alert("Le service bon-worker n'a pas répondu (jeton IA requis côté serveur) : " + (e.message || e));
           }
         });
         body.appendChild(departBtn);
-
-        buildChauffeurDocsPanel(body, c);
       }
     },
   });
-}
-
-/* --------------------------------------------- Documents réglementaires (bureau) */
-function buildChauffeurDocsPanel(container, chauffeur) {
-  const wrap = document.createElement("div");
-  wrap.innerHTML = '<div class="sheet-section-title is-spaced">Documents réglementaires (bureau)</div>';
-  container.appendChild(wrap);
-
-  const panel = document.createElement("div");
-  panel.innerHTML = '<p class="muted">Chargement des documents…</p>';
-  container.appendChild(panel);
-
-  (async () => {
-    let permis, fco, carte, cacesList, categories;
-    try {
-      [permis, fco, carte, cacesList, categories] = await Promise.all([
-        getPermis(chauffeur.id).catch(() => null),
-        getFco(chauffeur.id).catch(() => null),
-        getCarteConducteur(chauffeur.id).catch(() => null),
-        listCaces(chauffeur.id).catch(() => []),
-        listPermisCategories(chauffeur.id).catch(() => []),
-      ]);
-    } catch (e) {
-      panel.innerHTML = '<p class="muted">Documents indisponibles.</p>';
-      return;
-    }
-    panel.innerHTML = "";
-    panel.appendChild(buildPermisSection(chauffeur, permis, categories));
-    panel.appendChild(buildFcoSection(chauffeur, fco));
-    panel.appendChild(buildCarteConducteurSection(chauffeur, carte));
-    panel.appendChild(buildCacesSection(chauffeur, cacesList));
-  })();
-}
-
-function docScanUploadRow(chauffeurId, docKind, side, currentPath, onSaved) {
-  const row = document.createElement("span");
-  row.className = "upload-row";
-  const label = document.createElement("label");
-  label.className = "upload-label";
-  label.textContent = currentPath ? `${side} (chargé)` : `Scan ${side}`;
-  const input = document.createElement("input");
-  input.type = "file";
-  input.accept = "image/*,application/pdf";
-  label.appendChild(input);
-  input.addEventListener("change", async () => {
-    const file = input.files[0];
-    if (!file) return;
-    const path = `${chauffeurId}/${docKind}-${side}-${Date.now()}-${file.name}`;
-    try {
-      await uploadChauffeurDoc(path, file);
-      await onSaved(path);
-      label.textContent = `${side} (chargé)`;
-    } catch (e) {
-      alert("Échec de l'envoi du scan : " + (e.message || e));
-    }
-  });
-  row.appendChild(label);
-  if (currentPath) {
-    const viewBtn = document.createElement("button");
-    viewBtn.type = "button";
-    viewBtn.className = "btn btn-secondary btn-sm";
-    viewBtn.textContent = "Voir";
-    viewBtn.addEventListener("click", async () => {
-      try {
-        const url = await signedUrlChauffeurDoc(currentPath);
-        window.open(url, "_blank", "noopener");
-      } catch (e) {
-        alert("Impossible d'ouvrir le scan : " + (e.message || e));
-      }
-    });
-    row.appendChild(viewBtn);
-  }
-  return row;
-}
-
-function buildPermisSection(chauffeur, permis, categories) {
-  const p = permis || {};
-  const section = document.createElement("div");
-  section.className = "doc-section";
-  section.innerHTML = '<div class="doc-section-title">Permis de conduire</div>';
-
-  const row1 = document.createElement("div");
-  row1.className = "doc-row";
-  const numInput = makeTextInput("text", p.numero);
-  wireAutosaveField(numInput, { table: "permis", id: chauffeur.id, field: "numero" });
-  row1.appendChild(fieldBlock("Numéro", numInput));
-  const visiteInput = makeTextInput("date", p.visite_medicale);
-  wireAutosaveField(visiteInput, { table: "permis", id: chauffeur.id, field: "visite_medicale" });
-  row1.appendChild(fieldBlock("Visite médicale", visiteInput));
-  section.appendChild(row1);
-
-  const catsTitle = document.createElement("div");
-  catsTitle.className = "sheet-section-title";
-  catsTitle.textContent = "Catégories";
-  section.appendChild(catsTitle);
-  const catsList = document.createElement("div");
-  catsList.className = "doc-cat-list";
-  section.appendChild(catsList);
-
-  const renderCats = (cats) => {
-    catsList.innerHTML = "";
-    for (const cat of cats) {
-      const tpl = document.getElementById("tpl-doc-cat-row");
-      const node = tpl.content.firstElementChild.cloneNode(true);
-      const codeInput = node.querySelector(".f-cat-code");
-      const validiteInput = node.querySelector(".f-cat-validite");
-      codeInput.value = cat.categorie || "";
-      validiteInput.value = cat.validite || "";
-      wireAutosaveField(codeInput, { table: "permis_categories", id: cat.id, field: "categorie" });
-      wireAutosaveField(validiteInput, { table: "permis_categories", id: cat.id, field: "validite" });
-      node.querySelector(".btn-delete-cat").addEventListener("click", async () => {
-        try {
-          await deletePermisCategorie(cat.id);
-          node.remove();
-        } catch (e) {
-          alert("Échec : " + (e.message || e));
-        }
-      });
-      catsList.appendChild(node);
-    }
-  };
-  renderCats(categories || []);
-
-  const addCatBtn = document.createElement("button");
-  addCatBtn.type = "button";
-  addCatBtn.className = "btn btn-secondary btn-sm";
-  addCatBtn.textContent = "+ Catégorie";
-  addCatBtn.addEventListener("click", async () => {
-    try {
-      const cat = await createPermisCategorie(chauffeur.id, "B", null);
-      const tpl = document.getElementById("tpl-doc-cat-row");
-      const node = tpl.content.firstElementChild.cloneNode(true);
-      node.querySelector(".f-cat-code").value = cat.categorie;
-      wireAutosaveField(node.querySelector(".f-cat-code"), { table: "permis_categories", id: cat.id, field: "categorie" });
-      wireAutosaveField(node.querySelector(".f-cat-validite"), { table: "permis_categories", id: cat.id, field: "validite" });
-      node.querySelector(".btn-delete-cat").addEventListener("click", async () => {
-        await deletePermisCategorie(cat.id).catch(() => {});
-        node.remove();
-      });
-      catsList.appendChild(node);
-    } catch (e) {
-      alert("Échec : " + (e.message || e));
-    }
-  });
-  section.appendChild(addCatBtn);
-
-  const uploadRow = document.createElement("div");
-  uploadRow.className = "doc-row";
-  uploadRow.appendChild(docScanUploadRow(chauffeur.id, "permis", "recto", p.scan_recto, async (path) => {
-    await upsertPermis(chauffeur.id, { scan_recto: path });
-    p.scan_recto = path;
-  }));
-  uploadRow.appendChild(docScanUploadRow(chauffeur.id, "permis", "verso", p.scan_verso, async (path) => {
-    await upsertPermis(chauffeur.id, { scan_verso: path });
-    p.scan_verso = path;
-  }));
-  section.appendChild(uploadRow);
-
-  return section;
-}
-
-function buildFcoSection(chauffeur, fco) {
-  const f = fco || {};
-  const section = document.createElement("div");
-  section.className = "doc-section";
-  section.innerHTML = '<div class="doc-section-title">FCO / code 95</div>';
-
-  const row = document.createElement("div");
-  row.className = "doc-row";
-  const numInput = makeTextInput("text", f.numero);
-  wireAutosaveField(numInput, { table: "fco", id: chauffeur.id, field: "numero" });
-  row.appendChild(fieldBlock("Numéro", numInput));
-  const delivInput = makeTextInput("date", f.delivrance);
-  wireAutosaveField(delivInput, { table: "fco", id: chauffeur.id, field: "delivrance" });
-  row.appendChild(fieldBlock("Délivrance", delivInput));
-  const expInput = makeTextInput("date", f.expiration);
-  wireAutosaveField(expInput, { table: "fco", id: chauffeur.id, field: "expiration" });
-  row.appendChild(fieldBlock("Expiration", expInput));
-  section.appendChild(row);
-
-  const uploadRow = document.createElement("div");
-  uploadRow.className = "doc-row";
-  uploadRow.appendChild(docScanUploadRow(chauffeur.id, "fco", "recto", f.scan_recto, async (path) => upsertFco(chauffeur.id, { scan_recto: path })));
-  uploadRow.appendChild(docScanUploadRow(chauffeur.id, "fco", "verso", f.scan_verso, async (path) => upsertFco(chauffeur.id, { scan_verso: path })));
-  section.appendChild(uploadRow);
-
-  return section;
-}
-
-function buildCarteConducteurSection(chauffeur, carte) {
-  const cc = carte || {};
-  const section = document.createElement("div");
-  section.className = "doc-section";
-  section.innerHTML = '<div class="doc-section-title">Carte conducteur (chronotachygraphe)</div>';
-
-  const row = document.createElement("div");
-  row.className = "doc-row";
-  const numInput = makeTextInput("text", cc.numero);
-  wireAutosaveField(numInput, { table: "carte_conducteur", id: chauffeur.id, field: "numero" });
-  row.appendChild(fieldBlock("Numéro", numInput));
-  const expInput = makeTextInput("date", cc.expiration);
-  wireAutosaveField(expInput, { table: "carte_conducteur", id: chauffeur.id, field: "expiration" });
-  row.appendChild(fieldBlock("Expiration", expInput));
-  const dlInput = makeTextInput("date", cc.dernier_telechargement);
-  wireAutosaveField(dlInput, { table: "carte_conducteur", id: chauffeur.id, field: "dernier_telechargement" });
-  row.appendChild(fieldBlock("Dernier téléchargement", dlInput));
-  section.appendChild(row);
-
-  const uploadRow = document.createElement("div");
-  uploadRow.className = "doc-row";
-  uploadRow.appendChild(docScanUploadRow(chauffeur.id, "carte", "recto", cc.scan_recto, async (path) => upsertCarteConducteur(chauffeur.id, { scan_recto: path })));
-  uploadRow.appendChild(docScanUploadRow(chauffeur.id, "carte", "verso", cc.scan_verso, async (path) => upsertCarteConducteur(chauffeur.id, { scan_verso: path })));
-  section.appendChild(uploadRow);
-
-  return section;
-}
-
-function buildCacesSection(chauffeur, cacesList) {
-  const section = document.createElement("div");
-  section.className = "doc-section";
-  section.innerHTML = '<div class="doc-section-title">CACES</div>';
-
-  const list = document.createElement("div");
-  list.className = "doc-cat-list";
-  section.appendChild(list);
-
-  const renderRow = (c) => {
-    const tpl = document.getElementById("tpl-caces-row");
-    const node = tpl.content.firstElementChild.cloneNode(true);
-    const typeInput = node.querySelector(".f-caces-type");
-    const catInput = node.querySelector(".f-caces-categories");
-    const expInput = node.querySelector(".f-caces-expiration");
-    typeInput.value = c.type || "";
-    catInput.value = (c.categories || []).join(", ");
-    expInput.value = c.expiration || "";
-    wireAutosaveField(typeInput, { table: "caces", id: c.id, field: "type" });
-    wireAutosaveField(catInput, { table: "caces", id: c.id, field: "categories", transform: (v) => (v ? v.split(",").map((s) => s.trim()).filter(Boolean) : []) });
-    wireAutosaveField(expInput, { table: "caces", id: c.id, field: "expiration" });
-    node.querySelector(".btn-delete-caces").addEventListener("click", async () => {
-      try {
-        await deleteCaces(c.id);
-        node.remove();
-      } catch (e) {
-        alert("Échec : " + (e.message || e));
-      }
-    });
-    list.appendChild(node);
-  };
-  for (const c of cacesList || []) renderRow(c);
-
-  const addBtn = document.createElement("button");
-  addBtn.type = "button";
-  addBtn.className = "btn btn-secondary btn-sm";
-  addBtn.textContent = "+ CACES";
-  addBtn.addEventListener("click", async () => {
-    try {
-      const c = await createCaces(chauffeur.id, { type: "R482", categories: [], expiration: null });
-      renderRow(c);
-    } catch (e) {
-      alert("Échec : " + (e.message || e));
-    }
-  });
-  section.appendChild(addBtn);
-
-  return section;
 }
 
 /* =================================================================== Articles == */

@@ -141,7 +141,7 @@ renseigner dans son déploiement `NEXT_PRIVATE_GOOGLE_CLIENT_ID` et
 
 Les scans (permis, FCO, carte conducteur, CACES) vont dans un bucket Storage
 **privé** `chauffeur-docs`. Créé via l'API Storage une fois la pile démarrée
-(la politique RLS « bureau uniquement » est posée par la migration 0011) :
+(depuis beta.36.1 : diagnostics PNG des signatures en échec, accès service_role uniquement) :
 
 ```bash
 source .env
@@ -152,7 +152,7 @@ curl -s -X POST http://127.0.0.1:5000/storage/v1/bucket \
 ```
 
 Le worker génère des **URL signées courtes** (`SERVICE_ROLE_KEY`, `STORAGE_URL`)
-et supprime les scans au **départ d'un salarié** (`POST /worker/chauffeur/{id}/depart`).
+et renseigne la date de sortie au **départ d'un salarié** (`POST /worker/chauffeur/{id}/depart`).
 
 ## 6. Sauvegarde (cron quotidien)
 
