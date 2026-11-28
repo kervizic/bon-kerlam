@@ -111,7 +111,8 @@ check(r.status_code >= 400, f"B ne peut pas déposer dans le dossier de A : {r.s
 r = c.post(f"{API}/rest/v1/rpc/documents_proprietaires", headers=hdr(TBU), json={})
 check(r.status_code == 200 and r.json() == [], f"bureau : RPC admin vide ({r.status_code})")
 r = c.delete(f"{API}/rest/v1/documents_chauffeur?id=eq.{doc}", headers={**hdr(TBU), "Prefer": "return=representation"})
-check(r.status_code in (200, 204) and r.text.strip() in ("", "[]"), f"bureau : suppression sans effet ({r.status_code})")
+check(r.status_code in (200, 204) and r.text.strip() in ("", "[]"),
+      f"bureau : suppression sans effet ({r.status_code})")
 r = listing(None)
 check(r.status_code in (401, 403), f"anonyme : table refusée ({r.status_code})")
 check(read_obj(None, recto).status_code >= 400, "anonyme : objet refusé")
@@ -123,7 +124,8 @@ check(upload(None, f"u/{A_ID}/{doc}/{uuid.uuid4()}.jpg").status_code >= 400, "an
 r = listing(TAD)
 check(r.status_code == 200 and doc in [d["id"] for d in r.json()], f"admin lit le document de A ({r.status_code})")
 r = c.post(f"{API}/rest/v1/rpc/documents_proprietaires", headers=hdr(TAD), json={})
-check(r.status_code == 200 and any(o["owner_id"] == A_ID for o in r.json()), f"admin : RPC propriétaires ({r.status_code})")
+check(r.status_code == 200 and any(o["owner_id"] == A_ID for o in r.json()),
+      f"admin : RPC propriétaires ({r.status_code})")
 r = sign(TAD, recto)
 check(r.status_code == 200, f"admin : URL signée ({r.status_code})")
 r = c.patch(f"{API}/rest/v1/documents_chauffeur?id=eq.{doc}", headers={**hdr(TAD), "Prefer": "return=representation"},
